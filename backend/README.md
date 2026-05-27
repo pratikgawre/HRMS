@@ -1,0 +1,33 @@
+# Kavya HRMS Backend (Spring Boot)
+
+## Run
+1. `cd backend`
+2. `mvn spring-boot:run`
+3. Backend starts at `http://localhost:8080`
+
+## MongoDB (Local + Compass)
+- Backend expects MongoDB at: `mongodb://localhost:27017/hrmsdb`
+- Open MongoDB Compass and connect with: `mongodb://localhost:27017`
+- Database name: `hrmsdb`
+
+## APIs
+- `POST /api/auth/login`
+- `GET/POST/PUT/DELETE /api/employees`
+- `GET/POST /api/attendance`
+- `GET /api/attendance/employee/{employeeId}`
+- `GET/POST/PUT /api/leaves`
+- `GET/POST/PUT/DELETE /api/announcements`
+- `GET /api/dashboard/admin/summary`
+
+## Sample Login
+- Email: `admin@gmail.com`
+- Password: `admin123`
+
+## Next Frontend Integration
+- Replace `localStorage` utility calls with `fetch` calls to above APIs.
+- Start from:
+  - `auth.js`
+  - `employeeStorage.js`
+  - `leaveStorage.js`
+  - `announcementStorage.js`
+  - `attendanceStorage.js`

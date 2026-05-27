@@ -1,0 +1,34 @@
+package com.kavya.hrms.model;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+@Document(collection = "attendance_records")
+public class AttendanceRecord {
+  @Id
+  private String id;
+  private String employeeId;
+  private String employeeName;
+  private String dateLabel;
+  private String checkIn;
+  private String checkOut;
+  private String workedHours;
+  private String status;
+
+  public String getId() { return id; }
+  public void setId(String id) { this.id = id; }
+  public String getEmployeeId() { return employeeId; }
+  public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
+  public String getEmployeeName() { return employeeName; }
+  public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
+  public String getDateLabel() { return dateLabel; }
+  public void setDateLabel(String dateLabel) { this.dateLabel = dateLabel; }
+  public String getCheckIn() { return checkIn; }
+  public void setCheckIn(String checkIn) { this.checkIn = checkIn; }
+  public String getCheckOut() { return checkOut; }
+  public void setCheckOut(String checkOut) { this.checkOut = checkOut; }
+  public String getWorkedHours() { return workedHours; }
+  public void setWorkedHours(String workedHours) { this.workedHours = workedHours; }
+  public String getStatus() { return status; }
+  public void setStatus(String status) { this.status = status; }
+}
