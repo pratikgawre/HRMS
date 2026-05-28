@@ -2551,6 +2551,24 @@ a:focus-visible {
   white-space: nowrap;
 }
 
+.project-name-link {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.project-single-line {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
 .employee-cell {
   display: flex;
   align-items: center;
@@ -3148,6 +3166,119 @@ img.profile-avatar.large {
   outline-color: var(--primary);
 }
 
+.profile-edit-grid,
+.task-form-grid {
+  align-items: start;
+}
+
+.profile-edit-grid label,
+.task-form-grid label {
+  align-self: stretch;
+}
+
+.settings-actions,
+.profile-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  grid-column: 1 / -1;
+  padding: 0.35rem 0 0;
+}
+
+.settings-actions button,
+.profile-form-actions button,
+.secondary-button {
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(201, 221, 221, 0.9);
+  background: var(--light-bg);
+  color: var(--normal-text);
+  font-weight: 800;
+}
+
+.secondary-button {
+  background: rgba(246, 250, 249, 0.95);
+}
+
+.profile-upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0.55rem 0.9rem;
+  border: 1px dashed rgba(15, 159, 154, 0.28);
+  border-radius: var(--radius);
+  background: rgba(15, 159, 154, 0.08);
+  color: var(--primary-dark);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.profile-upload-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.permission-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.permission-control-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid rgba(201, 221, 221, 0.86);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-soft);
+}
+
+.permission-control-card strong {
+  color: var(--dark-text);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.permission-control-card p {
+  margin: 0;
+  color: var(--muted-text);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.permission-toggle-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.permission-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgba(201, 221, 221, 0.82);
+  border-radius: 999px;
+  background: rgba(246, 250, 249, 0.88);
+  color: var(--normal-text);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.permission-toggle input {
+  accent-color: var(--primary);
+}
+
 .support-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
@@ -3535,6 +3666,30 @@ img.profile-avatar.large {
   vertical-align: middle;
 }
 
+.payroll-table-card .employee-cell {
+  min-width: 0;
+}
+
+.payroll-table-card .employee-cell > div {
+  min-width: 0;
+}
+
+.payroll-table-card .employee-cell strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.payroll-table-card .employee-cell small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .payroll-table-card {
   max-width: 100%;
 }
@@ -3884,20 +4039,26 @@ img.profile-avatar.large {
 }
 
 .generated-payslip-net {
-  display: grid;
-  grid-template-columns: 1fr max-content;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   gap: 0.6rem;
   padding: 0.55rem;
   border-top: 2px solid #333;
   font-size: 0.9rem;
 }
 
+.generated-payslip-net strong {
+  flex: 1 1 auto;
+}
+
 .generated-payslip-net span {
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .generated-payslip-net em {
-  grid-column: 1 / -1;
+  flex-basis: 100%;
   font-size: 0.82rem;
 }
 
@@ -3906,6 +4067,37 @@ img.profile-avatar.large {
   border-top: 2px solid #333;
   text-align: center;
   font-size: 0.78rem;
+}
+
+.toast-message {
+  position: fixed;
+  top: 5.5rem;
+  right: 1.25rem;
+  z-index: 110;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: min(92vw, 420px);
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 159, 154, 0.2);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 14px 30px rgba(24, 35, 47, 0.18);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.toast-message i {
+  font-size: 1.05rem;
+}
+
+.toast-success {
+  color: #0b6f56;
+}
+
+.toast-error {
+  color: #b42318;
+  border-color: rgba(180, 35, 24, 0.25);
 }
 
 @media print {

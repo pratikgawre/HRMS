@@ -25,6 +25,7 @@ public class PayrollRecord {
   private double absentDeduction;
   private double halfDayDeduction;
   private double otherDeduction;
+  private double netSalary;
   private double packageAmount;
   private int daysInMonth;
   private double payableDays;
@@ -77,6 +78,8 @@ public class PayrollRecord {
   public void setHalfDayDeduction(double halfDayDeduction) { this.halfDayDeduction = halfDayDeduction; }
   public double getOtherDeduction() { return otherDeduction; }
   public void setOtherDeduction(double otherDeduction) { this.otherDeduction = otherDeduction; }
+  public double getNetSalary() { return netSalary; }
+  public void setNetSalary(double netSalary) { this.netSalary = netSalary; }
   public double getPackageAmount() { return packageAmount; }
   public void setPackageAmount(double packageAmount) { this.packageAmount = packageAmount; }
   public int getDaysInMonth() { return daysInMonth; }
