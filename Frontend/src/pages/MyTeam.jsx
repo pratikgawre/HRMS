@@ -1,16 +1,116 @@
+import { useEffect, useMemo, useState } from 'react';
+import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
-import { Hero, Section, employeeColumns } from './AdminDashboard.jsx';
-import { people } from '../data/dummyData.js';
+import { Hero, Section } from './AdminDashboard.jsx';
+import { apiRequest } from '../utils/api.js';
 
 function MyTeam() {
+  const [employees, setEmployees] = useState([]);
+  const [attendance, setAttendance] = useState([]);
+  const [tasks, setTasks] = useState([]);
+
+  useEffect(() => {
+    Promise.all([
+      apiRequest('/employees').catch(() => []),
+      apiRequest('/attendance').catch(() => []),
+      apiRequest('/tasks').catch(() => []),
+    ]).then(([employeeRows, attendanceRows, taskRows]) => {
+      setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
+      setAttendance(Array.isArray(attendanceRows) ? attendanceRows : []);
+      setTasks(Array.isArray(taskRows) ? taskRows : []);
+    });
+  }, []);
+
+  const rows = useMemo(() => {
+    return employees
+      .filter((employee) => !isAdminEmployee(employee))
+      .map((employee) => {
+        const attendanceSummary = getAttendanceSummary(attendance, employee.employeeId || employee.id);
+        const workload = tasks.filter((task) => String(task.owner || '').toLowerCase() === String(employee.displayName || employee.name || '').toLowerCase()).length;
+
+        return {
+          id: employee.employeeId || employee.id,
+          avatar: getInitials(employee.displayName || employee.name || ''),
+          name: employee.displayName || employee.name || '',
+          role: employee.jobTitle || employee.role || '-',
+          department: employee.department || '-',
+          manager: getReportingManager(employee),
+          attendance: attendanceSummary,
+          workload: `${workload} tasks`,
+        };
+      });
+  }, [attendance, employees, tasks]);
+
+  const cards = [
+    { label: 'Team Members', value: String(rows.length).padStart(2, '0'), delta: 'Live from database', tone: 'blue', icon: 'ri-team-line' },
+    { label: 'Attendance Marked', value: String(attendance.length).padStart(2, '0'), delta: 'Monthly records', tone: 'green', icon: 'ri-time-line' },
+    { label: 'Open Workload', value: String(tasks.filter((task) => task.status !== 'Completed').length).padStart(2, '0'), delta: 'Active tasks', tone: 'orange', icon: 'ri-task-line' },
+    { label: 'Departments', value: String(new Set(employees.map((employee) => employee.department).filter(Boolean)).size).padStart(2, '0'), delta: 'Reporting groups', tone: 'pink', icon: 'ri-building-2-line' },
+  ];
+
+  const columns = [
+    {
+      key: 'name',
+      label: 'Team Member',
+      render: (row) => (
+        <div className="employee-cell">
+          <span>{row.avatar}</span>
+          <div>
+            <strong>{row.name}</strong>
+            <small>{row.id}</small>
+          </div>
+        </div>
+      ),
+    },
+    { key: 'role', label: 'Designation' },
+    { key: 'department', label: 'Department' },
+    { key: 'manager', label: 'Reporting Manager' },
+    { key: 'attendance', label: 'Attendance' },
+    { key: 'workload', label: 'Workload' },
+  ];
+
   return (
     <>
-      <Hero title="My Team" copy="View team members, reporting roles, departments, and current working status." />
-      <Section title="Team Members" action="Message Team">
-        <DataTable columns={employeeColumns} rows={people} />
+      <Hero title="My Team" copy="View team members, reporting hierarchy, attendance, and workload summary from the live database." />
+
+      <section className="dashboard-card-grid">
+        {cards.map((card) => <DashboardCard key={card.label} {...card} />)}
+      </section>
+
+      <Section title="Team Members" action="Team Summary">
+        <DataTable columns={columns} rows={rows} emptyMessage="No team members found." />
       </Section>
     </>
   );
+}
+
+function getAttendanceSummary(attendance, employeeId) {
+  const rows = attendance.filter((row) => String(row.employeeId || '').toLowerCase() === String(employeeId || '').toLowerCase());
+  const present = rows.filter((row) => row.status === 'Present').length;
+  const late = rows.filter((row) => row.status === 'Late').length;
+  const leave = rows.filter((row) => row.status === 'Leave').length;
+  return `${present}P / ${late}L / ${leave}LV`;
+}
+
+function getReportingManager(employee) {
+  const fallback = {
+    'Project Manager': 'Super Admin',
+    'Team Lead': 'Project Manager',
+    Employee: 'Team Lead',
+  };
+
+  return employee.reportingManager || fallback[employee.accessRole || 'Employee'] || 'HR';
+}
+
+function getInitials(name) {
+  return String(name || '').split(' ').filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'TM';
+}
+
+function isAdminEmployee(employee) {
+  const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase();
+  const email = String(employee.email || '').trim().toLowerCase();
+
+  return employeeId === 'admin-001' || email === 'admin@gmail.com';
 }
 
 export default MyTeam;

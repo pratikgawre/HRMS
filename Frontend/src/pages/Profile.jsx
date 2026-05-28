@@ -1,8 +1,11 @@
+import { useState } from 'react';
+import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
-import { getCurrentEmployeeIdentity, getStoredEmployees } from '../utils/employeeStorage.js';
+import { getCurrentEmployeeIdentity, getStoredEmployees, saveStoredEmployees, upsertEmployeeLogin } from '../utils/employeeStorage.js';
+import { getUsers, updateUserAccess } from '../utils/user-management.js';
 import { normalizeAccessRole } from '../utils/role-access.js';
-import { getSessionValue } from '../utils/appSession.js';
+import { getSessionValue, setSessionValue } from '../utils/appSession.js';
 
 const fallbackEmployees = people.map((person) => ({
   ...person,
@@ -25,103 +28,281 @@ function Profile() {
   const accessRole = getSessionValue('kavyaAccessRole') || 'Employee';
   const employees = getProfileEmployees();
   const matchedEmployee = employees.find((item) => isCurrentEmployee(item, identity));
-  const employee = normalizeProfileEmployee(matchedEmployee
-    ? { ...matchedEmployee, accessRole: matchedEmployee.accessRole || accessRole }
-    : {
-    employeeCode: identity.employeeId,
-    employeeId: identity.employeeId,
-    displayName: identity.employee,
-    name: identity.employee,
-    avatar: identity.avatar,
-    email: identity.email,
-    jobTitle: accessRole,
-    department: getDepartmentForRole(accessRole),
-    workingLocation: '-',
-    joiningDate: '-',
-    employmentType: accessRole,
-    accessRole,
-  });
+  const employee = normalizeProfileEmployee(
+    matchedEmployee
+      ? { ...matchedEmployee, accessRole: matchedEmployee.accessRole || accessRole }
+      : {
+          employeeCode: identity.employeeId,
+          employeeId: identity.employeeId,
+          displayName: identity.employee,
+          name: identity.employee,
+          avatar: identity.avatar,
+          email: identity.email,
+          profilePicture: identity.profilePicture,
+          jobTitle: accessRole,
+          department: getDepartmentForRole(accessRole),
+          workingLocation: '-',
+          joiningDate: '-',
+          employmentType: accessRole,
+          accessRole,
+        }
+  );
+
+  const [form, setForm] = useState(() => createProfileForm(employee));
+  const [statusMessage, setStatusMessage] = useState('Update your personal details, contact info, photo, and password here.');
+
+  const profileStats = [
+    { label: 'Employee ID', value: employee.employeeCode || employee.id || '-' },
+    { label: 'Department', value: employee.department || '-' },
+    { label: 'Access Role', value: employee.accessRole || '-' },
+    { label: 'Location', value: employee.workingLocation || '-' },
+  ];
+
+  const updateField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handlePhotoUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateField('profilePicture', String(reader.result || ''));
+      updateField('avatar', getInitials(form.displayName || employee.displayName || employee.name));
+      setStatusMessage('Profile photo selected. Save changes to update your account.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSave = (event) => {
+    event.preventDefault();
+
+    if (form.newPassword && form.newPassword !== form.confirmPassword) {
+      setStatusMessage('Password and confirm password must match.');
+      return;
+    }
+
+    const nextEmployee = {
+      ...employee,
+      displayName: form.displayName.trim(),
+      name: form.displayName.trim(),
+      jobTitle: form.jobTitle.trim(),
+      role: form.jobTitle.trim(),
+      email: form.email.trim().toLowerCase(),
+      mobileNo: form.mobileNo.trim(),
+      gender: form.gender.trim(),
+      dateOfBirth: form.dateOfBirth.trim(),
+      nationality: form.nationality.trim(),
+      presentCityDistrict: form.presentCityDistrict.trim(),
+      presentState: form.presentState.trim(),
+      profilePicture: form.profilePicture,
+      avatar: form.profilePicture ? employee.avatar : getInitials(form.displayName.trim()),
+    };
+
+    const nextEmployees = employees.map((item) => (
+      isCurrentEmployee(item, identity) ? { ...item, ...nextEmployee } : item
+    ));
+
+    saveStoredEmployees(nextEmployees);
+    upsertEmployeeLogin(nextEmployee);
+
+    const currentAccessUser = getUsers().find((user) => {
+      const userEmployeeId = String(user.employeeId || '').trim().toLowerCase();
+      const userEmail = String(user.email || '').trim().toLowerCase();
+      return userEmployeeId === String(nextEmployee.employeeCode || '').trim().toLowerCase()
+        || userEmail === String(nextEmployee.email || '').trim().toLowerCase();
+    });
+
+    if (currentAccessUser) {
+      updateUserAccess(currentAccessUser.userId, {
+        email: nextEmployee.email,
+        employeeName: nextEmployee.displayName,
+        designation: nextEmployee.jobTitle,
+        profilePicture: nextEmployee.profilePicture,
+        role: nextEmployee.accessRole,
+        password: form.newPassword || currentAccessUser.password,
+      });
+    }
+
+    setSessionValue('kavyaEmployeeName', nextEmployee.displayName);
+    setSessionValue('kavyaEmployeeAvatar', nextEmployee.avatar || getInitials(nextEmployee.displayName));
+    setSessionValue('kavyaEmployeePhoto', nextEmployee.profilePicture || '');
+    setSessionValue('kavyaUserEmail', nextEmployee.email);
+
+    setForm((current) => ({
+      ...current,
+      newPassword: '',
+      confirmPassword: '',
+    }));
+    setStatusMessage('Profile saved successfully.');
+  };
 
   return (
     <>
-      <Hero title="My Profile" copy="View your personal, employment, contact, and payroll identity details in one place." />
+      <Hero title="Profile Management" copy="Edit your personal details, contact information, profile photo, and password in one place." />
+
+      <section className="dashboard-card-grid">
+        {profileStats.map((item) => (
+          <DashboardCard
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            delta="Editable profile data"
+            tone={item.label === 'Access Role' ? 'pink' : 'blue'}
+            icon={item.label === 'Employee ID' ? 'ri-id-card-line' : item.label === 'Department' ? 'ri-building-line' : item.label === 'Access Role' ? 'ri-shield-user-line' : 'ri-map-pin-line'}
+          />
+        ))}
+      </section>
 
       <section className="profile-hero-card">
-        {employee.profilePicture ? (
-          <img className="profile-avatar large profile-photo" src={employee.profilePicture} alt={`${employee.displayName || employee.name} profile`} />
+        {form.profilePicture ? (
+          <img className="profile-avatar large profile-photo" src={form.profilePicture} alt={`${form.displayName || employee.name} profile`} />
         ) : (
-          <div className="profile-avatar large">{employee.avatar}</div>
+          <div className="profile-avatar large">{form.avatar || employee.avatar}</div>
         )}
         <div className="profile-hero-copy">
-          <p className="eyebrow">Employee Profile</p>
-          <h3>{employee.displayName || employee.name}</h3>
-          <span>{employee.jobTitle || employee.role}</span>
+          <p className="eyebrow">Profile Overview</p>
+          <h3>{form.displayName || employee.displayName || employee.name}</h3>
+          <span>{form.jobTitle || employee.jobTitle}</span>
           <div className="profile-tags">
             <strong>{employee.employeeCode || employee.id}</strong>
             <strong>{employee.department || 'General'}</strong>
-            <strong>{employee.employmentType || 'Employee'}</strong>
+            <strong>{employee.accessRole || 'Employee'}</strong>
           </div>
         </div>
         <div className="profile-contact-card">
-          <span>Primary Contact</span>
-          <strong>{employee.email || '-'}</strong>
-          <small>{employee.mobileNo || employee.phone || '-'}</small>
+          <span>Photo Upload</span>
+          <strong>{form.profilePicture ? 'Photo selected' : 'No photo selected'}</strong>
+          <small>PNG, JPG, or WEBP works best.</small>
+          <label className="profile-upload-button">
+            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePhotoUpload} />
+            <span>Choose Photo</span>
+          </label>
         </div>
       </section>
 
       <div className="profile-detail-layout">
-        <ProfileGroup
-          title="Personal Details"
-          icon="ri-user-3-line"
-          items={[
-            ['Display Name', employee.displayName || employee.name],
-            ['Gender', employee.gender],
-            ['Date of Birth', employee.dateOfBirth],
-            ['Blood Group', employee.bloodGroup],
-            ['Marital Status', employee.maritalStatus],
-            ['Nationality', employee.nationality],
-          ]}
-        />
-        <ProfileGroup
-          title="Employment Details"
-          icon="ri-briefcase-4-line"
-          items={[
-            ['Employee ID', employee.employeeCode || employee.id],
-            ['Department', employee.department],
-            ['Job Title', employee.jobTitle || employee.role],
-            ['Access Role', employee.accessRole],
-            ['Grade', employee.grade],
-            ['Joining Date', employee.joiningDate],
-            ['Working Location', employee.workingLocation],
-          ]}
-        />
-        <ProfileGroup
-          title="Contact & Address"
-          icon="ri-map-pin-user-line"
-          items={[
-            ['Email', employee.email],
-            ['Mobile No.', employee.mobileNo || employee.phone],
-            ['Present City', employee.presentCityDistrict || employee.workingLocation],
-            ['Present State', employee.presentState],
-            ['Permanent City', employee.permanentCityDistrict],
-            ['Permanent State', employee.permanentState],
-          ]}
-        />
-        <ProfileGroup
-          title="Bank & Statutory"
-          icon="ri-bank-card-line"
-          items={[
-            ['Bank Name', employee.bankName],
-            ['Account Type', employee.accountType],
-            ['Account No.', employee.accountNo],
-            ['IFSC Code', employee.ifscCode],
-            ['PAN Card No.', employee.panCardNo],
-            ['UAN No.', employee.pfUanNo],
-          ]}
-        />
+        <Section title="Personal Details">
+          <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
+            <label>
+              <span>Display Name</span>
+              <input value={form.displayName} onChange={(event) => updateField('displayName', event.target.value)} />
+            </label>
+            <label>
+              <span>Job Title</span>
+              <input value={form.jobTitle} onChange={(event) => updateField('jobTitle', event.target.value)} />
+            </label>
+            <label>
+              <span>Gender</span>
+              <input value={form.gender} onChange={(event) => updateField('gender', event.target.value)} placeholder="Male / Female / Other" />
+            </label>
+            <label>
+              <span>Date of Birth</span>
+              <input value={form.dateOfBirth} onChange={(event) => updateField('dateOfBirth', event.target.value)} placeholder="DD MMM YYYY" />
+            </label>
+            <label>
+              <span>Nationality</span>
+              <input value={form.nationality} onChange={(event) => updateField('nationality', event.target.value)} />
+            </label>
+            <label>
+              <span>Working Location</span>
+              <input value={form.workingLocation} onChange={(event) => updateField('workingLocation', event.target.value)} />
+            </label>
+          </form>
+        </Section>
+
+        <Section title="Contact Info">
+          <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
+            <label>
+              <span>Email</span>
+              <input type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} />
+            </label>
+            <label>
+              <span>Mobile No.</span>
+              <input value={form.mobileNo} onChange={(event) => updateField('mobileNo', event.target.value)} />
+            </label>
+            <label>
+              <span>Present City</span>
+              <input value={form.presentCityDistrict} onChange={(event) => updateField('presentCityDistrict', event.target.value)} />
+            </label>
+            <label>
+              <span>Present State</span>
+              <input value={form.presentState} onChange={(event) => updateField('presentState', event.target.value)} />
+            </label>
+            <label>
+              <span>Profile Photo URL</span>
+              <input value={form.profilePicture} onChange={(event) => updateField('profilePicture', event.target.value)} placeholder="Paste an image URL or upload a file" />
+            </label>
+            <label>
+              <span>Avatar Initials</span>
+              <input value={form.avatar} onChange={(event) => updateField('avatar', event.target.value)} />
+            </label>
+          </form>
+        </Section>
+
+        <Section title="Password Update">
+          <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
+            <label>
+              <span>New Password</span>
+              <input type="password" value={form.newPassword} onChange={(event) => updateField('newPassword', event.target.value)} placeholder="Leave blank to keep current password" />
+            </label>
+            <label>
+              <span>Confirm Password</span>
+              <input type="password" value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} placeholder="Repeat the new password" />
+            </label>
+            <div className="notification-actions profile-form-actions">
+              <button type="button" onClick={() => setForm(createProfileForm(employee))}>Reset</button>
+              <button type="submit">Save Profile</button>
+            </div>
+          </form>
+          {statusMessage && <p className="notification-empty">{statusMessage}</p>}
+        </Section>
+
+        <Section title="Employment Snapshot">
+          <div className="profile-group">
+            <i className="ri-briefcase-4-line" aria-hidden="true" />
+            <dl>
+              {[
+                ['Employee ID', employee.employeeCode || employee.id],
+                ['Department', employee.department],
+                ['Access Role', employee.accessRole],
+                ['Joining Date', employee.joiningDate],
+                ['Employment Type', employee.employmentType],
+                ['Email', employee.email],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value || '-'}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </Section>
       </div>
     </>
   );
+}
+
+function createProfileForm(employee) {
+  return {
+    displayName: employee.displayName || employee.name || '',
+    jobTitle: employee.jobTitle || employee.role || '',
+    gender: employee.gender || '',
+    dateOfBirth: employee.dateOfBirth || '',
+    nationality: employee.nationality || '',
+    workingLocation: employee.workingLocation || '',
+    email: employee.email || '',
+    mobileNo: employee.mobileNo || employee.phone || '',
+    presentCityDistrict: employee.presentCityDistrict || employee.workingLocation || '',
+    presentState: employee.presentState || '',
+    profilePicture: employee.profilePicture || '',
+    avatar: employee.avatar || getInitials(employee.displayName || employee.name || ''),
+    newPassword: '',
+    confirmPassword: '',
+  };
 }
 
 function getProfileEmployees() {
@@ -204,24 +385,6 @@ function getInitials(name) {
     .join('')
     .slice(0, 2)
     .toUpperCase() || 'EM';
-}
-
-function ProfileGroup({ title, icon, items }) {
-  return (
-    <Section title={title}>
-      <div className="profile-group">
-        <i className={icon} aria-hidden="true" />
-        <dl>
-          {items.map(([label, value]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd>{value || '-'}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    </Section>
-  );
 }
 
 export default Profile;

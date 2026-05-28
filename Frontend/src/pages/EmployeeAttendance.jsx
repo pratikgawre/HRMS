@@ -9,6 +9,7 @@ import {
   getDurationLabel,
   getInitialAttendanceRows,
   getTodayLabel,
+  refreshStoredAttendanceRows,
   saveAttendanceRows,
 } from '../utils/attendanceStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
@@ -46,11 +47,21 @@ function EmployeeAttendance() {
   const canCheckOut = isEmployeeView && Boolean(todayRecord?.checkInAt && !todayRecord?.checkOutAt);
 
   useEffect(() => {
+    let mounted = true;
+    refreshStoredAttendanceRows()
+      .then((rows) => {
+        if (mounted && Array.isArray(rows)) {
+          setAttendance(rows);
+        }
+      })
+      .catch(() => {});
+
     const refreshAttendance = () => setAttendance(getInitialAttendanceRows());
     window.addEventListener('storage', refreshAttendance);
     window.addEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
 
     return () => {
+      mounted = false;
       window.removeEventListener('storage', refreshAttendance);
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
     };

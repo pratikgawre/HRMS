@@ -8,6 +8,7 @@ public class LoginResponse {
   private String employeeName;
   private String userId;
   private String lastLogin;
+  private String token;
   private String message;
 
   public boolean isOk() { return ok; }
@@ -24,6 +25,8 @@ public class LoginResponse {
   public void setUserId(String userId) { this.userId = userId; }
   public String getLastLogin() { return lastLogin; }
   public void setLastLogin(String lastLogin) { this.lastLogin = lastLogin; }
+  public String getToken() { return token; }
+  public void setToken(String token) { this.token = token; }
   public String getMessage() { return message; }
   public void setMessage(String message) { this.message = message; }
 }

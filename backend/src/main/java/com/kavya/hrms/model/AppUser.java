@@ -10,7 +10,9 @@ public class AppUser {
   private String userId;
   private String email;
   private String password;
+  private String passwordHash;
   private String role;
+  private Boolean isActive;
   private String employeeId;
   private String employeeName;
   private String status;
@@ -24,8 +26,12 @@ public class AppUser {
   public void setEmail(String email) { this.email = email; }
   public String getPassword() { return password; }
   public void setPassword(String password) { this.password = password; }
+  public String getPasswordHash() { return passwordHash; }
+  public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
   public String getRole() { return role; }
   public void setRole(String role) { this.role = role; }
+  public Boolean getIsActive() { return isActive; }
+  public void setIsActive(Boolean isActive) { this.isActive = isActive; }
   public String getEmployeeId() { return employeeId; }
   public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
   public String getEmployeeName() { return employeeName; }

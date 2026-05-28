@@ -10,9 +10,12 @@ public class Announcement {
   private String title;
   private String body;
   private String category;
+  private String priority;
   private String dateLabel;
+  private String postedAt;
   private String postedBy;
   private String ownerRole;
+  private String status;
 
   public String getId() { return id; }
   public void setId(String id) { this.id = id; }
@@ -22,10 +25,16 @@ public class Announcement {
   public void setBody(String body) { this.body = body; }
   public String getCategory() { return category; }
   public void setCategory(String category) { this.category = category; }
+  public String getPriority() { return priority; }
+  public void setPriority(String priority) { this.priority = priority; }
   public String getDateLabel() { return dateLabel; }
   public void setDateLabel(String dateLabel) { this.dateLabel = dateLabel; }
+  public String getPostedAt() { return postedAt; }
+  public void setPostedAt(String postedAt) { this.postedAt = postedAt; }
   public String getPostedBy() { return postedBy; }
   public void setPostedBy(String postedBy) { this.postedBy = postedBy; }
   public String getOwnerRole() { return ownerRole; }
   public void setOwnerRole(String ownerRole) { this.ownerRole = ownerRole; }
+  public String getStatus() { return status; }
+  public void setStatus(String status) { this.status = status; }
 }
