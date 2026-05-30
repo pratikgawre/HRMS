@@ -225,7 +225,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
                 {records.map((record) => (
                   <tr key={record.id}>
                     <td data-label="Employee">
-                      <div className="employee-cell">
+                      <div className="employee-cell payroll-employee-cell">
                         <span>{getInitials(record.employeeName)}</span>
                         <div>
                           <strong>{record.employeeName}</strong>
@@ -237,7 +237,6 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
                     <td data-label="Earnings">{formatCurrency(getEarnings(record))}</td>
                     <td data-label="Deductions">
                       <strong>{formatCurrency(getDeductions(record))}</strong>
-                      <small>{record.deductionSummary}</small>
                     </td>
                     <td data-label="Net Salary"><strong>{formatCurrency(getNetSalary(record))}</strong></td>
                     <td data-label="Status"><span className={`status status-${record.status.toLowerCase()}`}>{record.status}</span></td>

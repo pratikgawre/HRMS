@@ -7,7 +7,7 @@ export const ACCESS_ROLES = {
   'HR Manager': {
     appRole: 'hr',
     dashboardPath: '/hr/dashboard',
-    permissions: ['employees.manage', 'attendance.manage', 'leave.manage', 'payroll.manage', 'announcements.manage'],
+    permissions: ['employees.manage', 'attendance.manage', 'leave.manage', 'payroll.manage', 'announcements.manage', 'assets.manage', 'projects.view', 'tasks.view', 'settings.view'],
   },
   'Project Manager': {
     appRole: 'projectManager',

@@ -1,6 +1,7 @@
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { tasks } from '../data/dummyData.js';
+import { getSessionValue } from '../utils/appSession.js';
 
 export const taskColumns = [
   { key: 'id', label: 'Task ID' },
@@ -12,10 +13,18 @@ export const taskColumns = [
 ];
 
 function Tasks() {
+  const role = getSessionValue('kavyaRole') || 'employee';
+  const isHr = role === 'hr';
+
   return (
     <>
-      <Hero title="Task Assignment" copy="Assign, monitor, and review team tasks with ownership, priority, due date, and current status." />
-      <Section title="Assigned Tasks" action="Assign Task">
+      <Hero
+        title={isHr ? 'Task Status Update' : 'Task Assignment'}
+        copy={isHr
+          ? 'View and monitor task ownership, priority, due date, and current status updates.'
+          : 'Assign, monitor, and review team tasks with ownership, priority, due date, and current status.'}
+      />
+      <Section title="Assigned Tasks" action={isHr ? undefined : 'Assign Task'}>
         <DataTable columns={taskColumns} rows={tasks} />
       </Section>
     </>

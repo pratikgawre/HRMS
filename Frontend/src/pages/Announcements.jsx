@@ -116,6 +116,12 @@ function Announcements() {
   };
 
   const deleteAnnouncement = (announcementId) => {
+    const shouldDelete = window.confirm('Do you really want to delete this announcement?');
+
+    if (!shouldDelete) {
+      return;
+    }
+
     setAnnouncements((current) => {
       const next = current.filter((item) => item.id !== announcementId);
       saveStoredAnnouncements(next);

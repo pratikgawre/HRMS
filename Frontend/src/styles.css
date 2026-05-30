@@ -1810,6 +1810,26 @@ a:focus-visible {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
 }
 
+.hr-dashboard-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.hr-dashboard-stack .section-card {
+  width: 100%;
+}
+
+.assets-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.assets-stack .section-card {
+  width: 100%;
+}
+
 .section-card {
   min-width: 0;
   overflow: hidden;
@@ -2032,48 +2052,17 @@ a:focus-visible {
   background: rgba(15, 159, 154, 0.08);
 }
 
-.user-permission-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 1rem;
-}
-
-.user-permission-grid article {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.8rem;
-  padding: 1rem;
-  border: 1px solid rgba(201, 221, 221, 0.86);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: var(--shadow-soft), var(--shadow-line);
-}
-
-.user-permission-grid i {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  flex: 0 0 auto;
-  place-items: center;
-  color: #fff;
-  border-radius: var(--radius);
-  background: linear-gradient(135deg, var(--secondary), var(--info));
-  font-size: 1.15rem;
-}
-
-.user-permission-grid strong {
-  display: block;
-  color: var(--dark-text);
-  font-weight: 900;
-}
-
-.user-permission-grid span {
-  display: block;
-  margin-top: 0.2rem;
+.role-permission-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
   color: var(--muted-text);
   font-size: 0.86rem;
   font-weight: 700;
-  line-height: 1.45;
+  line-height: 1.5;
+}
+
+.role-permission-list li + li {
+  margin-top: 0.35rem;
 }
 
 .user-modal {
@@ -2968,6 +2957,86 @@ img.profile-avatar {
   margin: 0;
 }
 
+.settings-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.settings-grid--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.settings-info-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid rgba(201, 221, 221, 0.86);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-soft);
+}
+
+.settings-info-card strong {
+  color: var(--dark-text);
+  font-size: 0.98rem;
+  font-weight: 900;
+}
+
+.settings-info-card p {
+  margin: 0;
+  color: var(--normal-text);
+  line-height: 1.55;
+}
+
+.settings-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.settings-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0.45rem 0.85rem;
+  color: var(--primary-dark);
+  border: 1px solid rgba(15, 159, 154, 0.18);
+  border-radius: 999px;
+  background: rgba(15, 159, 154, 0.08);
+  font-weight: 800;
+}
+
+.settings-table {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.settings-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 1rem;
+  align-items: center;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(201, 221, 221, 0.86);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-soft);
+}
+
+.settings-table-head {
+  color: var(--muted-text);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, rgba(15, 159, 154, 0.06), rgba(90, 111, 255, 0.05));
+}
+
 .profile-card dt,
 .settings-grid span {
   color: var(--muted-text);
@@ -3533,6 +3602,16 @@ img.profile-avatar.large {
 
 .payroll-table-card .table td {
   vertical-align: middle;
+}
+
+.payroll-employee-cell > div {
+  min-width: 0;
+}
+
+.payroll-employee-cell strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .payroll-table-card {

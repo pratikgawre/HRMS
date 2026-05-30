@@ -12,6 +12,7 @@ import Profile from './pages/Profile.jsx';
 import Employees from './pages/Employees.jsx';
 import UserManagement from './pages/UserManagement.jsx';
 import Settings from './pages/Settings.jsx';
+import Assets from './pages/Assets.jsx';
 import TeamLeadDashboard from './pages/TeamLeadDashboard.jsx';
 import ProjectManagerDashboard from './pages/ProjectManagerDashboard.jsx';
 import Tasks from './pages/Tasks.jsx';
@@ -49,21 +50,30 @@ function App() {
             <Route path="/admin/attendance" element={<EmployeeAttendance />} />
             <Route path="/admin/leave-management" element={<LeaveRequests />} />
             <Route path="/admin/payroll" element={<Payroll />} />
+            <Route path="/admin/assets" element={<Assets />} />
             <Route path="/admin/announcements" element={<Announcements />} />
             <Route path="/admin/support" element={<SupportTickets />} />
             <Route path="/admin/settings" element={<Settings />} />
+            <Route path="/admin/profile" element={<Profile />} />
           </Route>
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['hr']} />}>
           <Route element={<DashboardLayout />}>
             <Route path="/hr/dashboard" element={<HRDashboard />} />
+            <Route path="/hr/users" element={<UserManagement />} />
+            <Route path="/hr/projects" element={<Projects />} />
+            <Route path="/hr/tasks" element={<Tasks />} />
+            <Route path="/hr/task-status" element={<Tasks />} />
+            <Route path="/hr/assets" element={<Assets />} />
             <Route path="/hr/employees" element={<Employees />} />
             <Route path="/hr/attendance" element={<EmployeeAttendance />} />
             <Route path="/hr/leave-approval" element={<LeaveRequests />} />
             <Route path="/hr/payroll" element={<Payroll />} />
             <Route path="/hr/announcements" element={<Announcements />} />
             <Route path="/hr/support" element={<SupportTickets />} />
+            <Route path="/hr/settings" element={<Settings />} />
+            <Route path="/hr/profile" element={<Profile />} />
           </Route>
         </Route>
 
