@@ -1,8 +1,17 @@
+import { getSessionValue } from './appSession.js';
+
 const API_BASE = 'http://localhost:8080/api';
 
 export async function apiRequest(path, options = {}) {
+  const token = getSessionValue('kavyaAuthToken');
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {}),
+  };
+
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers,
     ...options,
   });
 

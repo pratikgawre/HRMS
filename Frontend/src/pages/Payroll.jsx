@@ -345,9 +345,9 @@ function MyPayslip({ records, role, month, year, setMonth, setYear }) {
 function PayslipModal({ record, onClose }) {
   const earningsRows = getPayslipEarnings(record);
   const deductionRows = getPayslipDeductions(record);
-  const totalEarnings = earningsRows.reduce((sum, item) => sum + item.actual, 0);
-  const totalDeductions = deductionRows.reduce((sum, item) => sum + item.actual, 0);
-  const netPay = Math.max(0, roundMoney(totalEarnings - totalDeductions));
+  const totalEarnings = getEarnings(record);
+  const totalDeductions = getDeductions(record);
+  const netPay = getNetSalary(record);
 
   return (
     <div className="payroll-modal-backdrop payslip-modal-backdrop" role="presentation">
@@ -490,9 +490,9 @@ function getPayslipPrintHtml(record) {
   const filename = getPayslipFileName(record);
   const earningsRows = getPayslipEarnings(record);
   const deductionRows = getPayslipDeductions(record);
-  const totalEarnings = earningsRows.reduce((sum, item) => sum + item.actual, 0);
-  const totalDeductions = deductionRows.reduce((sum, item) => sum + item.actual, 0);
-  const netPay = Math.max(0, roundMoney(totalEarnings - totalDeductions));
+  const totalEarnings = getEarnings(record);
+  const totalDeductions = getDeductions(record);
+  const netPay = getNetSalary(record);
 
   return `<!doctype html>
 <html>
@@ -530,9 +530,10 @@ function getPayslipPrintHtml(record) {
       .generated-payslip-table th:first-child, .generated-payslip-table td:first-child { text-align: left; }
       .generated-payslip-table thead th { border-bottom: 2px solid #333; font-weight: 900; }
       .generated-payslip-table tfoot td { border-top: 2px solid #333; font-weight: 900; }
-      .generated-payslip-net { display: grid; grid-template-columns: 1fr max-content; gap: 3mm; padding: 2mm 3mm; border-top: 2px solid #333; font-size: 12px; }
-      .generated-payslip-net span { font-weight: 900; }
-      .generated-payslip-net em { grid-column: 1 / -1; font-size: 11px; }
+      .generated-payslip-net { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3mm; padding: 2mm 3mm; border-top: 2px solid #333; font-size: 12px; }
+      .generated-payslip-net strong { flex: 1 1 auto; }
+      .generated-payslip-net span { font-weight: 900; white-space: nowrap; }
+      .generated-payslip-net em { flex-basis: 100%; font-size: 11px; }
       .generated-payslip footer { padding: 2mm; border-top: 2px solid #333; text-align: center; font-size: 10px; }
     </style>
   </head>
@@ -934,6 +935,8 @@ function getPayslipDeductions(record) {
     { label: 'PF', actual: record.providentFund },
     { label: 'GRATUITY', actual: record.gratuity },
     { label: 'PROF TAX', actual: record.professionalTax },
+    { label: 'ABSENT DAYS', actual: record.absentDeduction },
+    { label: 'HALF DAYS', actual: record.halfDayDeduction },
     { label: 'OTHER DEDUCTION', actual: record.otherDeduction },
   ].filter((item) => item.actual > 0);
 }
@@ -1010,8 +1013,12 @@ function numberToWords(value) {
 function isAdminEmployee(employee) {
   const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase();
   const email = String(employee.email || '').trim().toLowerCase();
+  const accessRole = String(employee.accessRole || employee.role || employee.designation || '').trim().toLowerCase();
 
-  return employeeId === 'admin-001' || email === 'admin@gmail.com';
+  return employeeId === 'admin-001'
+    || email === 'admin@gmail.com'
+    || accessRole === 'super admin'
+    || accessRole === 'admin';
 }
 
 export default Payroll;

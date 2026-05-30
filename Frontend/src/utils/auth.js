@@ -73,6 +73,7 @@ export async function authenticateUser(email, password) {
       role: accessRole,
       status: 'Active',
       permissions: getPermissions(accessRole),
+      token: result.token || '',
       password,
       avatar: (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
       profilePicture: '',
@@ -115,6 +116,7 @@ function findLocalUser(email, password) {
     role: accessRole,
     status: user.status || 'Active',
     permissions: getPermissions(accessRole),
+    token: user.token || `local-${Date.now()}`,
     avatar: user.avatar || (user.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
     profilePicture: user.profilePicture || '',
   };
@@ -136,13 +138,14 @@ export function startSession(user) {
   setSessionValue('kavyaEmployeeName', user.employeeName || '');
   setSessionValue('kavyaEmployeeAvatar', user.avatar || '');
   setSessionValue('kavyaEmployeePhoto', user.profilePicture || '');
+  setSessionValue('kavyaAuthToken', user.token || '');
   setSessionValue('kavyaLoginSuccess', 'true');
 
   return getDashboardPath(user.role);
 }
 
 export function clearSession() {
-  clearSessionValues(['kavyaRole', 'kavyaAccessRole', 'kavyaUserEmail', 'kavyaUserStatus', 'kavyaEmployeeId', 'kavyaEmployeeName', 'kavyaEmployeeAvatar', 'kavyaEmployeePhoto', 'kavyaLoginSuccess']);
+  clearSessionValues(['kavyaRole', 'kavyaAccessRole', 'kavyaUserEmail', 'kavyaUserStatus', 'kavyaEmployeeId', 'kavyaEmployeeName', 'kavyaEmployeeAvatar', 'kavyaEmployeePhoto', 'kavyaAuthToken', 'kavyaLoginSuccess']);
 }
 
 export function syncSessionFromAccessUser() {
@@ -187,6 +190,7 @@ export function syncSessionFromAccessUser() {
   setSessionValue('kavyaEmployeeName', accessUser.employeeName || '');
   setSessionValue('kavyaEmployeeAvatar', accessUser.avatar || '');
   setSessionValue('kavyaEmployeePhoto', accessUser.profilePicture || '');
+  setSessionValue('kavyaAuthToken', accessUser.token || '');
 
   return {
     ok: true,

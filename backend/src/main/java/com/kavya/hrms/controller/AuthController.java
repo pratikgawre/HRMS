@@ -4,6 +4,7 @@ import com.kavya.hrms.dto.LoginRequest;
 import com.kavya.hrms.dto.LoginResponse;
 import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.repository.AppUserRepository;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,6 +39,7 @@ public class AuthController {
     response.setEmail(user.getEmail());
     response.setEmployeeId(user.getEmployeeId());
     response.setEmployeeName(user.getEmployeeName());
+    response.setToken(UUID.randomUUID().toString());
     response.setMessage("Login successful");
     return response;
   }

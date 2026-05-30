@@ -9,6 +9,7 @@ public class SupportTicket {
   private String id;
   private String ticketId;
   private String employeeId;
+  private String raisedBy;
   private String employeeName;
   private String employeeEmail;
   private String title;
@@ -16,7 +17,11 @@ public class SupportTicket {
   private String priority;
   private String status;
   private String description;
+  private String screenshotDataUrl;
+  private String screenshot;
   private String createdDate;
+  private String assignedTo;
+  private String resolution;
 
   public String getId() { return id; }
   public void setId(String id) { this.id = id; }
@@ -24,6 +29,8 @@ public class SupportTicket {
   public void setTicketId(String ticketId) { this.ticketId = ticketId; }
   public String getEmployeeId() { return employeeId; }
   public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
+  public String getRaisedBy() { return raisedBy; }
+  public void setRaisedBy(String raisedBy) { this.raisedBy = raisedBy; }
   public String getEmployeeName() { return employeeName; }
   public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
   public String getEmployeeEmail() { return employeeEmail; }
@@ -38,6 +45,14 @@ public class SupportTicket {
   public void setStatus(String status) { this.status = status; }
   public String getDescription() { return description; }
   public void setDescription(String description) { this.description = description; }
+  public String getScreenshotDataUrl() { return screenshotDataUrl; }
+  public void setScreenshotDataUrl(String screenshotDataUrl) { this.screenshotDataUrl = screenshotDataUrl; }
+  public String getScreenshot() { return screenshot; }
+  public void setScreenshot(String screenshot) { this.screenshot = screenshot; }
   public String getCreatedDate() { return createdDate; }
   public void setCreatedDate(String createdDate) { this.createdDate = createdDate; }
+  public String getAssignedTo() { return assignedTo; }
+  public void setAssignedTo(String assignedTo) { this.assignedTo = assignedTo; }
+  public String getResolution() { return resolution; }
+  public void setResolution(String resolution) { this.resolution = resolution; }
 }

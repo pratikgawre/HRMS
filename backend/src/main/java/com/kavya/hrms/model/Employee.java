@@ -8,6 +8,7 @@ public class Employee {
   @Id
   private String employeeId;
   private String id;
+  private String userId;
   private String employeeCode;
   private String profilePicture;
   private String firstName;
@@ -27,6 +28,7 @@ public class Employee {
   private String highestQualification;
   private String physicallyChallenged;
   private String joiningDate;
+  private String managerId;
   private String workingLocation;
   private String employmentType;
   private String department;
@@ -70,6 +72,8 @@ public class Employee {
   public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
   public String getId() { return id; }
   public void setId(String id) { this.id = id; }
+  public String getUserId() { return userId; }
+  public void setUserId(String userId) { this.userId = userId; }
   public String getEmployeeCode() { return employeeCode; }
   public void setEmployeeCode(String employeeCode) { this.employeeCode = employeeCode; }
   public String getProfilePicture() { return profilePicture; }
@@ -108,6 +112,8 @@ public class Employee {
   public void setPhysicallyChallenged(String physicallyChallenged) { this.physicallyChallenged = physicallyChallenged; }
   public String getJoiningDate() { return joiningDate; }
   public void setJoiningDate(String joiningDate) { this.joiningDate = joiningDate; }
+  public String getManagerId() { return managerId; }
+  public void setManagerId(String managerId) { this.managerId = managerId; }
   public String getWorkingLocation() { return workingLocation; }
   public void setWorkingLocation(String workingLocation) { this.workingLocation = workingLocation; }
   public String getEmploymentType() { return employmentType; }
