@@ -180,19 +180,16 @@ function Announcements() {
     setErrors({});
   };
 
-  const deleteAnnouncement = async (announcementId) => {
-    if (!canCreate) return;
-    if (!window.confirm("Delete this announcement?")) return;
-    try {
-      await apiRequest(`/announcements/${announcementId}`, { method: "DELETE" });
-      setMessage("Announcement deleted successfully");
-      if (editingId === announcementId) {
-        resetForm();
-      }
-      await loadAnnouncements();
-    } catch (error) {
-      setMessage(error.message || "Failed to delete announcement");
+  const deleteAnnouncement = (announcementId) => {
+    setAnnouncements((current) => {
+      const next = current.filter((item) => item.id !== announcementId);
+      saveStoredAnnouncements(next);
+      return next;
+    });
+    if (editingId === announcementId) {
+      resetForm();
     }
+    setMessage('Announcement deleted successfully');
   };
 
   const canManageAnnouncement = () => canCreate;

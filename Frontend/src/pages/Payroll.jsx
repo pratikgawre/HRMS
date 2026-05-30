@@ -225,7 +225,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
                 {records.map((record) => (
                   <tr key={record.id}>
                     <td data-label="Employee">
-                      <div className="employee-cell">
+                      <div className="employee-cell payroll-employee-cell">
                         <span>{getInitials(record.employeeName)}</span>
                         <div>
                           <strong>{record.employeeName}</strong>

@@ -182,6 +182,12 @@ function UserManagement() {
   };
 
   const deleteUser = (user) => {
+    const shouldDelete = window.confirm('Do you really want to delete this user?');
+
+    if (!shouldDelete) {
+      return;
+    }
+
     const nextUsers = deleteUserAccess(user.userId);
     setUsers(nextUsers);
     setMessage(`${user.employeeName} access deleted successfully.`);
@@ -224,18 +230,6 @@ function UserManagement() {
 
         <DataTable columns={columns} rows={filteredUsers} emptyMessage="No access users found. Invite an existing employee to create access." />
       </Section>
-
-      <section className="user-permission-grid" aria-label="Role permissions">
-        {ACCESS_ROLE_OPTIONS.map((role) => (
-          <article key={role}>
-            <i className={role === 'Super Admin' ? 'ri-admin-line' : 'ri-shield-user-line'} aria-hidden="true" />
-            <div>
-              <strong>{role}</strong>
-              <span>{getPermissionText(role)}</span>
-            </div>
-          </article>
-        ))}
-      </section>
 
       {isModalOpen && (
         <UserModal
@@ -397,13 +391,35 @@ function formatLastLogin(value) {
 function getPermissionText(role) {
   const permissions = {
     'Super Admin': 'Full access to users, employees, attendance, leave, payroll, announcements, and settings.',
-    'HR Manager': 'Manage employees, attendance, leave, payroll, and announcements.',
+    'HR Manager': [
+      'Add and maintain employee data.',
+      'Review attendance and leave requests.',
+      'Approve or reject employee leave requests.',
+      'Prepare payroll and salary records.',
+      'Assign and track company assets.',
+      'Create company announcements.',
+      'Manage and resolve support tickets.',
+    ],
     'Project Manager': 'View project teams, projects, tasks, and attendance.',
     'Team Lead': 'Manage team members, team attendance, leave review, and tasks.',
     Employee: 'Access personal dashboard, attendance, leave, payslip, and profile.',
   };
 
   return permissions[role];
+}
+
+function renderPermissionText(role) {
+  const text = getPermissionText(role);
+
+  if (Array.isArray(text)) {
+    return (
+      <ul className="role-permission-list">
+        {text.map((item) => <li key={item}>{item}</li>)}
+      </ul>
+    );
+  }
+
+  return <span>{text}</span>;
 }
 
 export default UserManagement;
