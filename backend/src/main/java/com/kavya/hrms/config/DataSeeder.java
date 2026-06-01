@@ -90,6 +90,32 @@ public class DataSeeder {
         settings.setWorkingHours("09:00 AM - 06:00 PM");
         settings.setWeekOff("Sunday");
         settings.setPayrollCutoff("25th of every month");
+        settings.setDepartments(java.util.List.of("HR", "Engineering", "Finance", "Operations", "Sales", "Support"));
+        settings.setDesignations(java.util.List.of("HR Manager", "Software Engineer", "Product Designer", "Accountant", "Sales Executive", "Support Executive"));
+        SystemSettings.LeaveTypeSetting casual = new SystemSettings.LeaveTypeSetting();
+        casual.setName("Casual Leave");
+        casual.setDays(12);
+        SystemSettings.LeaveTypeSetting sick = new SystemSettings.LeaveTypeSetting();
+        sick.setName("Sick Leave");
+        sick.setDays(10);
+        SystemSettings.LeaveTypeSetting earned = new SystemSettings.LeaveTypeSetting();
+        earned.setName("Earned Leave");
+        earned.setDays(18);
+        SystemSettings.LeaveTypeSetting wfh = new SystemSettings.LeaveTypeSetting();
+        wfh.setName("Work From Home");
+        wfh.setDays(0);
+        settings.setLeaveTypes(java.util.List.of(casual, sick, earned, wfh));
+        settings.setPermissionMatrix(java.util.Map.of(
+            "Super Admin", java.util.List.of("company", "departments", "designations", "leaveTypes", "rolePermissions", "payroll"),
+            "HR Manager", java.util.List.of("company", "departments", "designations", "leaveTypes", "payroll"),
+            "Project Manager", java.util.List.of(),
+            "Team Lead", java.util.List.of(),
+            "Employee", java.util.List.of()));
+        settings.setPayrollSettings(java.util.Map.of(
+            "Pay Cycle", "Monthly",
+            "Salary Credit Day", "30th of every month",
+            "PF Deduction", "Enabled",
+            "Tax Policy", "Configured by payroll slab"));
         settingsRepository.save(settings);
       }
     };

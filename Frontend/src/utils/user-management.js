@@ -27,8 +27,8 @@ export function saveUsers(users) {
     status: user.status,
     lastLogin: user.lastLogin,
   }));
-  apiRequest('/users/bulk', { method: 'POST', body: JSON.stringify(payload) }).catch(() => {});
   window.dispatchEvent(new Event('kavyaUsersChanged'));
+  return apiRequest('/users/bulk', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export function buildUserAccess({ employee, accessRole, status = 'Active', existingUser }) {

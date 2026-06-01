@@ -45,11 +45,11 @@ export function saveStoredEmployees(employees) {
     mobileNo: employee.mobileNo || '',
     packageAmount: employee.packageAmount || '',
   }));
-  apiRequest('/employees/bulk', { method: 'POST', body: JSON.stringify(payload) }).catch(() => {});
   window.dispatchEvent(new Event('kavyaEmployeesChanged'));
+  return apiRequest('/employees/bulk', { method: 'POST', body: JSON.stringify(payload) });
 }
 
-export function upsertEmployeeLogin(employee) {
+export function upsertEmployeeLogin(employee, options = {}) {
   const email = String(employee.email || '').trim().toLowerCase();
   if (!email) {
     return;
@@ -78,13 +78,18 @@ export function upsertEmployeeLogin(employee) {
   const nextUsers = existing
     ? accessUsers.map((user) => (user.employeeId === employeeId ? nextUser : user))
     : [nextUser, ...accessUsers];
-  saveUsers(nextUsers);
 
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
   const currentEmail = getSessionValue('kavyaUserEmail');
   if (currentEmployeeId === employeeId || String(currentEmail || '').trim().toLowerCase() === email) {
     setSessionValue('kavyaAccessRole', accessRole);
   }
+
+  if (options.persist === false) {
+    return nextUsers;
+  }
+
+  return saveUsers(nextUsers);
 }
 
 export function getCurrentEmployeeIdentity() {

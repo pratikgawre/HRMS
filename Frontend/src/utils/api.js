@@ -4,9 +4,11 @@ const API_BASE = 'http://localhost:8080/api';
 
 export async function apiRequest(path, options = {}) {
   const token = getSessionValue('kavyaAuthToken');
+  const accessRole = getSessionValue('kavyaAccessRole') || getSessionValue('kavyaRole');
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(accessRole ? { 'X-Kavya-Access-Role': accessRole } : {}),
     ...(options.headers || {}),
   };
 
