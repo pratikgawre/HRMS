@@ -11,6 +11,8 @@ public class AppUser {
   private String email;
   private String password;
   private String passwordHash;
+  private Boolean twoFactorEnabled;
+  private String twoFactorSecret;
   private String role;
   private Boolean isActive;
   private String employeeId;
@@ -28,6 +30,10 @@ public class AppUser {
   public void setPassword(String password) { this.password = password; }
   public String getPasswordHash() { return passwordHash; }
   public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+  public Boolean getTwoFactorEnabled() { return twoFactorEnabled; }
+  public void setTwoFactorEnabled(Boolean twoFactorEnabled) { this.twoFactorEnabled = twoFactorEnabled; }
+  public String getTwoFactorSecret() { return twoFactorSecret; }
+  public void setTwoFactorSecret(String twoFactorSecret) { this.twoFactorSecret = twoFactorSecret; }
   public String getRole() { return role; }
   public void setRole(String role) { this.role = role; }
   public Boolean getIsActive() { return isActive; }

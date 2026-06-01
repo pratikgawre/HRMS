@@ -1,8 +1,9 @@
 import { getAppRole, getDashboardPath, getPermissions, normalizeAccessRole } from './role-access.js';
 import { getUsers, saveUsers } from './user-management.js';
 import { getStoredEmployees } from './employeeStorage.js';
-import { apiRequest } from './api.js';
 import { clearSessionValues, getSessionValue, setSessionValue } from './appSession.js';
+
+const API_BASE = 'http://localhost:8080/api';
 
 const legacyUsers = {
   'admin@gmail.com': { password: 'admin123', role: 'Super Admin', employeeId: 'ADMIN-001', employeeName: 'Admin Kavya', avatar: 'AK', department: 'Platform', designation: 'System Admin' },
@@ -46,6 +47,8 @@ export function ensureSeedUsers() {
       designation: user.designation,
       createdAt: new Date().toISOString(),
       lastLogin: '-',
+      twoFactorEnabled: false,
+      twoFactorSecret: '',
     });
   });
 
@@ -56,37 +59,58 @@ export function ensureSeedUsers() {
   return getUsers();
 }
 
-export async function authenticateUser(email, password) {
+export async function authenticateUser(email, password, twoFactorCode = '') {
   const normalizedEmail = String(email).trim().toLowerCase();
-  try {
-    const result = await apiRequest('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email: normalizedEmail, password }),
-    });
+  const response = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: normalizedEmail, password, twoFactorCode }),
+  }).catch(() => null);
 
-    const accessRole = normalizeAccessRole(result.role);
-    const user = {
-      userId: result.userId || `USR-${result.employeeId || normalizedEmail}`,
-      employeeId: result.employeeId,
-      employeeName: result.employeeName,
-      email: result.email || normalizedEmail,
-      role: accessRole,
-      status: 'Active',
-      permissions: getPermissions(accessRole),
-      token: result.token || '',
-      password,
-      avatar: (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
-      profilePicture: '',
-    };
-    return { ok: true, user };
-  } catch {
-    const fallbackUser = findLocalUser(normalizedEmail, password);
-    if (fallbackUser) {
-      return { ok: true, user: fallbackUser };
+  if (response) {
+    const text = await response.text();
+    let result = null;
+    try {
+      result = text ? JSON.parse(text) : null;
+    } catch {
+      result = text ? { message: text } : null;
     }
 
-    return { ok: false, message: 'Please enter a valid email and password.' };
+    if (response.ok && result?.ok) {
+      const accessRole = normalizeAccessRole(result.role);
+      const user = {
+        userId: result.userId || `USR-${result.employeeId || normalizedEmail}`,
+        employeeId: result.employeeId,
+        employeeName: result.employeeName,
+        email: result.email || normalizedEmail,
+        role: accessRole,
+        status: 'Active',
+        permissions: getPermissions(accessRole),
+        token: result.token || '',
+        password,
+        avatar: (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
+        profilePicture: '',
+        twoFactorEnabled: Boolean(result.twoFactorEnabled),
+        twoFactorSecret: result.twoFactorSecret || '',
+      };
+      return { ok: true, user };
+    }
+
+    if (result?.twoFactorRequired) {
+      return { ok: false, twoFactorRequired: true, message: result.message || 'Two-factor verification code required.' };
+    }
+
+    if (result?.message) {
+      return { ok: false, message: result.message };
+    }
   }
+
+  const fallbackUser = findLocalUser(normalizedEmail, password);
+  if (fallbackUser) {
+    return { ok: true, user: fallbackUser };
+  }
+
+  return { ok: false, message: 'Please enter a valid email and password.' };
 }
 
 function findLocalUser(email, password) {
@@ -119,6 +143,8 @@ function findLocalUser(email, password) {
     token: user.token || `local-${Date.now()}`,
     avatar: user.avatar || (user.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
     profilePicture: user.profilePicture || '',
+    twoFactorEnabled: Boolean(user.twoFactorEnabled),
+    twoFactorSecret: user.twoFactorSecret || '',
   };
 }
 

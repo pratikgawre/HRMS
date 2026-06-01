@@ -26,6 +26,8 @@ export function saveUsers(users) {
     employeeName: user.employeeName,
     status: user.status,
     lastLogin: user.lastLogin,
+    twoFactorEnabled: Boolean(user.twoFactorEnabled),
+    twoFactorSecret: user.twoFactorSecret || '',
   }));
   window.dispatchEvent(new Event('kavyaUsersChanged'));
   return apiRequest('/users/bulk', { method: 'POST', body: JSON.stringify(payload) });
@@ -50,6 +52,8 @@ export function buildUserAccess({ employee, accessRole, status = 'Active', exist
     designation: employee.jobTitle || employee.role || existingUser?.designation || '',
     createdAt: existingUser?.createdAt || new Date().toISOString(),
     lastLogin: existingUser?.lastLogin || 'Invite pending',
+    twoFactorEnabled: existingUser?.twoFactorEnabled || false,
+    twoFactorSecret: existingUser?.twoFactorSecret || '',
   };
 }
 
@@ -102,6 +106,8 @@ function normalizeUser(user) {
     role,
     status: user.status || 'Active',
     permissions: user.permissions || getPermissions(role),
+    twoFactorEnabled: Boolean(user.twoFactorEnabled),
+    twoFactorSecret: user.twoFactorSecret || '',
   };
 }
 

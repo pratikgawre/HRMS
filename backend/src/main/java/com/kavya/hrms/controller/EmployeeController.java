@@ -33,7 +33,6 @@ public class EmployeeController {
 
   @PostMapping("/bulk")
   public List<Employee> bulkSave(@RequestBody List<Employee> employees) {
-    employeeRepository.deleteAll();
     return employeeRepository.saveAll(employees);
   }
 

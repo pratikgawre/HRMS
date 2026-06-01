@@ -585,10 +585,11 @@ export function Section({
   actionTo,
   actionOnClick,
   actionDisabled = false,
+  className = '',
   children,
 }) {
   return (
-    <section className="section-card" id={id}>
+    <section className={`section-card ${className}`.trim()} id={id}>
       <div className="section-heading">
         <h3>{title}</h3>
         {action && actionTo && <Link className="section-action" to={actionTo}>{action}</Link>}
