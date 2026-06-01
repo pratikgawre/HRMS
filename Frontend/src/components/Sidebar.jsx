@@ -59,6 +59,7 @@ const menus = {
     { label: 'My Payslip', to: '/employee/payroll', icon: 'ri-money-rupee-circle-line' },
     { label: 'Announcements', to: '/employee/announcements', icon: 'ri-megaphone-line' },
     { label: 'Support', to: '/employee/support', icon: 'ri-customer-service-2-line' },
+    { label: 'Settings', to: '/employee/settings', icon: 'ri-settings-3-line' },
     { label: 'My Profile', to: '/employee/profile', icon: 'ri-user-line' },
   ],
 };

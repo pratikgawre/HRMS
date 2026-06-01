@@ -10,12 +10,23 @@ import {
   getTodayLabel,
   saveAttendanceRows,
 } from '../utils/attendanceStorage.js';
+import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
+import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
+import { safeApiRequest } from '../utils/api.js';
+import { getEmployeeLeaveSummary, normalizeLeaveTypes, DEFAULT_LEAVE_TYPES } from '../utils/leaveBalance.js';
 
 function EmployeeDashboard() {
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
+  const [leaveRequests, setLeaveRequests] = useState(getInitialLeaveRequests);
+  const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [message, setMessage] = useState('');
   const attendanceEmployee = getAttendanceEmployee();
+  const employeeIdentity = getCurrentEmployeeIdentity();
   const todayLabel = getTodayLabel();
+  const leaveSummary = useMemo(
+    () => getEmployeeLeaveSummary(leaveTypes, leaveRequests, employeeIdentity),
+    [leaveRequests, leaveTypes, employeeIdentity],
+  );
 
   const myRows = useMemo(() => attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId), [attendance, attendanceEmployee.employeeId]);
   const todayRecord = myRows.find((row) => row.date === todayLabel);
@@ -28,16 +39,40 @@ function EmployeeDashboard() {
   const attendanceRate = totalConsideredDays ? Math.round((weightedPresence / totalConsideredDays) * 100) : 0;
   const employeeStats = dashboardStats.employee.map((stat, index) => (index === 0
     ? { ...stat, value: `${attendanceRate}%`, delta: `${presentDays} present days` }
+    : index === 1
+      ? {
+        ...stat,
+        value: String(leaveSummary.totalRemaining),
+        delta: `${leaveSummary.totalUsed} used`,
+      }
     : stat));
 
   useEffect(() => {
     const refreshAttendance = () => setAttendance(getInitialAttendanceRows());
+    const refreshLeaves = () => {
+      refreshStoredLeaveRequests()
+        .then(setLeaveRequests)
+        .catch(() => setLeaveRequests(getInitialLeaveRequests()));
+    };
+    const refreshLeaveTypes = () => {
+      safeApiRequest('/settings', { leaveTypes: DEFAULT_LEAVE_TYPES })
+        .then((payload) => setLeaveTypes(normalizeLeaveTypes(payload?.leaveTypes, DEFAULT_LEAVE_TYPES)))
+        .catch(() => setLeaveTypes(DEFAULT_LEAVE_TYPES));
+    };
+
     window.addEventListener('storage', refreshAttendance);
     window.addEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
+    window.addEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
+    window.addEventListener('kavyaSettingsChanged', refreshLeaveTypes);
+
+    refreshLeaves();
+    refreshLeaveTypes();
 
     return () => {
       window.removeEventListener('storage', refreshAttendance);
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
+      window.removeEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
+      window.removeEventListener('kavyaSettingsChanged', refreshLeaveTypes);
     };
   }, []);
 

@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
-import { getCurrentEmployeeIdentity, getStoredEmployees, saveStoredEmployees, upsertEmployeeLogin } from '../utils/employeeStorage.js';
-import { getUsers, updateUserAccess } from '../utils/user-management.js';
+import { getCurrentEmployeeIdentity, getStoredEmployees, saveStoredEmployees, setEmployeesCache, upsertEmployeeLogin } from '../utils/employeeStorage.js';
+import { getUsers, saveUsers, setUsersCache } from '../utils/user-management.js';
 import { normalizeAccessRole } from '../utils/role-access.js';
 import { getSessionValue, setSessionValue } from '../utils/appSession.js';
+import { safeApiRequest } from '../utils/api.js';
 
 const fallbackEmployees = people.map((person) => ({
   ...person,
@@ -23,12 +24,42 @@ const fallbackEmployees = people.map((person) => ({
   accountType: 'Salary',
 }));
 
+const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Prefer not to say'];
+const MARITAL_STATUS_OPTIONS = ['Single', 'Married', 'Divorced', 'Separated', 'Widowed'];
+const BLOOD_GROUP_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+const EMPLOYMENT_TYPE_OPTIONS = ['Full Time', 'Part Time', 'Contract', 'Intern', 'Consultant'];
+const ACCOUNT_TYPE_OPTIONS = ['Salary', 'Savings', 'Current'];
+const BANK_OPTIONS = [
+  'HDFC Bank',
+  'ICICI Bank',
+  'State Bank of India',
+  'Axis Bank',
+  'Punjab National Bank',
+  'Bank of Baroda',
+  'Kotak Mahindra Bank',
+  'Canara Bank',
+  'Union Bank of India',
+  'Other',
+];
+
+const PRESENT_TO_PERMANENT_ADDRESS_MAP = {
+  presentAddressLine1: 'permanentAddressLine1',
+  presentAddressLine2: 'permanentAddressLine2',
+  presentCityDistrict: 'permanentCityDistrict',
+  presentState: 'permanentState',
+  presentPinCode: 'permanentPinCode',
+  presentCountry: 'permanentCountry',
+};
+
 function Profile() {
   const identity = getCurrentEmployeeIdentity();
   const accessRole = getSessionValue('kavyaAccessRole') || 'Employee';
-  const employees = getProfileEmployees();
-  const matchedEmployee = employees.find((item) => isCurrentEmployee(item, identity));
-  const employee = normalizeProfileEmployee(
+  const normalizedAccessRole = normalizeAccessRole(accessRole);
+  const canManagePackageAmount = normalizedAccessRole === 'Super Admin' || normalizedAccessRole === 'HR Manager';
+  const [employees, setEmployees] = useState(() => getProfileEmployees());
+  const [users, setUsers] = useState(() => getUsers());
+  const matchedEmployee = useMemo(() => employees.find((item) => isCurrentEmployee(item, identity)), [employees, identity]);
+  const employee = useMemo(() => normalizeProfileEmployee(
     matchedEmployee
       ? { ...matchedEmployee, accessRole: matchedEmployee.accessRole || accessRole }
       : {
@@ -46,10 +77,50 @@ function Profile() {
           employmentType: accessRole,
           accessRole,
         }
-  );
+  ), [accessRole, identity.avatar, identity.email, identity.employee, identity.employeeId, identity.profilePicture, matchedEmployee]);
 
   const [form, setForm] = useState(() => createProfileForm(employee));
   const [statusMessage, setStatusMessage] = useState('Update your personal details, contact info, photo, and password here.');
+  const [popup, setPopup] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const toastTimerRef = useRef(null);
+
+  useEffect(() => {
+    setForm(createProfileForm(employee));
+  }, [employee]);
+
+  useEffect(() => {
+    let active = true;
+
+    Promise.all([
+      safeApiRequest('/employees', []),
+      safeApiRequest('/users', []),
+    ]).then(([employeeRows, userRows]) => {
+      if (!active) {
+        return;
+      }
+
+      if (Array.isArray(employeeRows)) {
+        setEmployeesCache(employeeRows);
+        setEmployees(getProfileEmployees());
+      }
+
+      if (Array.isArray(userRows)) {
+        setUsersCache(userRows);
+        setUsers(getUsers());
+      }
+    }).catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+  }, []);
 
   const profileStats = [
     { label: 'Employee ID', value: employee.employeeCode || employee.id || '-' },
@@ -58,8 +129,83 @@ function Profile() {
     { label: 'Location', value: employee.workingLocation || '-' },
   ];
 
+  const storedProfileDetails = [
+    ['Display Name', employee.displayName],
+    ['Job Title', employee.jobTitle],
+    ['Department', employee.department],
+    ['Access Role', employee.accessRole],
+    ['Gender', employee.gender],
+    ['Date of Birth', employee.dateOfBirth],
+    ['Nationality', employee.nationality],
+    ['Working Location', employee.workingLocation],
+    ['Employment Type', employee.employmentType],
+    ['Joining Date', employee.joiningDate],
+    ['Employee ID', employee.managerId],
+    ['Grade', employee.grade],
+    ['Email', employee.email],
+    ['Mobile No.', employee.mobileNo],
+    ['Profile Photo URL', employee.profilePicture],
+    ['Avatar Initials', employee.avatar],
+    ['Blood Group', employee.bloodGroup],
+    ['Marital Status', employee.maritalStatus],
+    ['Highest Qualification', employee.highestQualification],
+    ['Bank Name', employee.bankName],
+    ['Account Type', employee.accountType],
+    ['Account No.', employee.accountNo],
+    ['IFSC Code', employee.ifscCode],
+    ['Present Address 1', employee.presentAddressLine1],
+    ['Present Address 2', employee.presentAddressLine2],
+    ['Present City', employee.presentCityDistrict],
+    ['Present State', employee.presentState],
+    ['Present PIN Code', employee.presentPinCode],
+    ['Present Country', employee.presentCountry],
+    ['Permanent Address 1', employee.permanentAddressLine1],
+    ['Permanent Address 2', employee.permanentAddressLine2],
+    ['Permanent City', employee.permanentCityDistrict],
+    ['Permanent State', employee.permanentState],
+    ['Permanent PIN Code', employee.permanentPinCode],
+    ['Permanent Country', employee.permanentCountry],
+    ['Aadhaar No.', employee.aadhaarCardNo],
+    ['PAN No.', employee.panCardNo],
+    ['PF UAN', employee.pfUanNo],
+    ['ESI No.', employee.esiNo],
+    ...(canManagePackageAmount ? [['Package Amount', employee.packageAmount]] : []),
+  ];
+
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateAddressField = (field, value) => {
+    setForm((current) => {
+      const next = { ...current, [field]: value };
+      if (current.sameAsAbove && PRESENT_TO_PERMANENT_ADDRESS_MAP[field]) {
+        next[PRESENT_TO_PERMANENT_ADDRESS_MAP[field]] = value;
+      }
+      return next;
+    });
+  };
+
+  const handleSameAsAboveChange = (checked) => {
+    setForm((current) => {
+      const next = { ...current, sameAsAbove: checked };
+      if (checked) {
+        Object.entries(PRESENT_TO_PERMANENT_ADDRESS_MAP).forEach(([presentField, permanentField]) => {
+          next[permanentField] = current[presentField] || '';
+        });
+      }
+      return next;
+    });
+  };
+
+  const showPopup = (message, type = 'success') => {
+    setPopup({ message, type });
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setPopup(null);
+    }, 2600);
   };
 
   const handlePhotoUpload = (event) => {
@@ -77,11 +223,40 @@ function Profile() {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = (event) => {
+  const refreshProfileData = async () => {
+    const [employeeRows, userRows] = await Promise.all([
+      safeApiRequest('/employees', []),
+      safeApiRequest('/users', []),
+    ]);
+
+    if (Array.isArray(employeeRows)) {
+      setEmployeesCache(employeeRows);
+      setEmployees(getProfileEmployees());
+    }
+
+    if (Array.isArray(userRows)) {
+      setUsersCache(userRows);
+      setUsers(getUsers());
+    }
+  };
+
+  const handleSave = async (event) => {
     event.preventDefault();
+    if (isSaving) {
+      return;
+    }
+
+    const section = event.nativeEvent?.submitter?.dataset?.section || 'all';
+    const validationError = validateProfileSection(form, section, canManagePackageAmount);
+    if (validationError) {
+      setStatusMessage(validationError);
+      showPopup(validationError, 'error');
+      return;
+    }
 
     if (form.newPassword && form.newPassword !== form.confirmPassword) {
       setStatusMessage('Password and confirm password must match.');
+      showPopup('Password and confirm password must match.', 'error');
       return;
     }
 
@@ -89,55 +264,92 @@ function Profile() {
       ...employee,
       displayName: form.displayName.trim(),
       name: form.displayName.trim(),
+      firstName: splitName(form.displayName.trim()).firstName,
+      middleName: splitName(form.displayName.trim()).middleName,
+      lastName: splitName(form.displayName.trim()).lastName,
       jobTitle: form.jobTitle.trim(),
       role: form.jobTitle.trim(),
+      employmentType: form.employmentType.trim(),
+      joiningDate: form.joiningDate.trim(),
+      managerId: form.managerId.trim(),
+      grade: form.grade.trim(),
       email: form.email.trim().toLowerCase(),
       mobileNo: form.mobileNo.trim(),
+      phone: form.mobileNo.trim(),
       gender: form.gender.trim(),
       dateOfBirth: form.dateOfBirth.trim(),
+      bloodGroup: form.bloodGroup.trim(),
+      maritalStatus: form.maritalStatus.trim(),
       nationality: form.nationality.trim(),
+      highestQualification: form.highestQualification.trim(),
       presentCityDistrict: form.presentCityDistrict.trim(),
       presentState: form.presentState.trim(),
+      presentAddressLine1: form.presentAddressLine1.trim(),
+      presentAddressLine2: form.presentAddressLine2.trim(),
+      presentPinCode: form.presentPinCode.trim(),
+      presentCountry: form.presentCountry.trim(),
+      permanentAddressLine1: form.sameAsAbove ? form.presentAddressLine1.trim() : form.permanentAddressLine1.trim(),
+      permanentAddressLine2: form.sameAsAbove ? form.presentAddressLine2.trim() : form.permanentAddressLine2.trim(),
+      permanentCityDistrict: form.sameAsAbove ? form.presentCityDistrict.trim() : form.permanentCityDistrict.trim(),
+      permanentState: form.sameAsAbove ? form.presentState.trim() : form.permanentState.trim(),
+      permanentPinCode: form.sameAsAbove ? form.presentPinCode.trim() : form.permanentPinCode.trim(),
+      permanentCountry: form.sameAsAbove ? form.presentCountry.trim() : form.permanentCountry.trim(),
+      department: form.department.trim() || employee.department || getDepartmentForRole(accessRole),
+      accessRole: employee.accessRole || accessRole,
+      workingLocation: form.workingLocation.trim(),
       profilePicture: form.profilePicture,
       avatar: form.profilePicture ? employee.avatar : getInitials(form.displayName.trim()),
+      bankName: form.bankName.trim(),
+      accountType: form.accountType.trim(),
+      accountNo: form.accountNo.trim(),
+      ifscCode: form.ifscCode.trim(),
+      packageAmount: canManagePackageAmount ? form.packageAmount.trim() : String(employee.packageAmount || '').trim(),
+      aadhaarCardNo: form.aadhaarCardNo.trim(),
+      panCardNo: form.panCardNo.trim(),
+      pfUanNo: form.pfUanNo.trim(),
+      esiNo: form.esiNo.trim(),
     };
 
-    const nextEmployees = employees.map((item) => (
-      isCurrentEmployee(item, identity) ? { ...item, ...nextEmployee } : item
-    ));
-
-    saveStoredEmployees(nextEmployees);
-    upsertEmployeeLogin(nextEmployee);
-
-    const currentAccessUser = getUsers().find((user) => {
+    const nextEmployees = upsertCurrentEmployee(employees, identity, nextEmployee);
+    const currentAccessUser = users.find((user) => {
       const userEmployeeId = String(user.employeeId || '').trim().toLowerCase();
       const userEmail = String(user.email || '').trim().toLowerCase();
       return userEmployeeId === String(nextEmployee.employeeCode || '').trim().toLowerCase()
         || userEmail === String(nextEmployee.email || '').trim().toLowerCase();
     });
 
-    if (currentAccessUser) {
-      updateUserAccess(currentAccessUser.userId, {
-        email: nextEmployee.email,
-        employeeName: nextEmployee.displayName,
-        designation: nextEmployee.jobTitle,
-        profilePicture: nextEmployee.profilePicture,
-        role: nextEmployee.accessRole,
-        password: form.newPassword || currentAccessUser.password,
-      });
+    const nextUsers = upsertCurrentUser(users, currentAccessUser, nextEmployee, form.newPassword);
+
+    setIsSaving(true);
+    try {
+      await saveStoredEmployees(nextEmployees);
+      await saveUsers(nextUsers);
+      upsertEmployeeLogin(nextEmployee, { persist: false });
+
+      setEmployees(nextEmployees);
+      setUsers(nextUsers);
+
+      setSessionValue('kavyaEmployeeName', nextEmployee.displayName);
+      setSessionValue('kavyaEmployeeAvatar', nextEmployee.avatar || getInitials(nextEmployee.displayName));
+      setSessionValue('kavyaEmployeePhoto', nextEmployee.profilePicture || '');
+      setSessionValue('kavyaUserEmail', nextEmployee.email);
+      setSessionValue('kavyaAccessRole', nextEmployee.accessRole || accessRole);
+
+      setForm((current) => ({
+        ...current,
+        newPassword: '',
+        confirmPassword: '',
+      }));
+      setStatusMessage('Profile saved successfully.');
+      showPopup('Profile saved successfully.', 'success');
+      refreshProfileData().catch(() => {});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to save profile right now.';
+      setStatusMessage(message);
+      showPopup(message, 'error');
+    } finally {
+      setIsSaving(false);
     }
-
-    setSessionValue('kavyaEmployeeName', nextEmployee.displayName);
-    setSessionValue('kavyaEmployeeAvatar', nextEmployee.avatar || getInitials(nextEmployee.displayName));
-    setSessionValue('kavyaEmployeePhoto', nextEmployee.profilePicture || '');
-    setSessionValue('kavyaUserEmail', nextEmployee.email);
-
-    setForm((current) => ({
-      ...current,
-      newPassword: '',
-      confirmPassword: '',
-    }));
-    setStatusMessage('Profile saved successfully.');
   };
 
   return (
@@ -156,6 +368,23 @@ function Profile() {
           />
         ))}
       </section>
+
+      {popup && (
+        <div className="settings-modal-backdrop" role="presentation" onClick={() => setPopup(null)}>
+          <section className={`settings-modal settings-modal--${popup.type}`} role="dialog" aria-modal="true" aria-label="Profile notification" onClick={(event) => event.stopPropagation()}>
+            <div className="settings-modal-icon">
+              <i className={popup.type === 'success' ? 'ri-checkbox-circle-line' : popup.type === 'error' ? 'ri-close-circle-line' : 'ri-information-line'} aria-hidden="true" />
+            </div>
+            <div className="settings-modal-copy">
+              <strong>{popup.type === 'success' ? 'Saved' : popup.type === 'error' ? 'Save failed' : 'Info'}</strong>
+              <span>{popup.message}</span>
+            </div>
+            <button type="button" className="settings-modal-close" onClick={() => setPopup(null)} aria-label="Dismiss notification">
+              <i className="ri-close-line" aria-hidden="true" />
+            </button>
+          </section>
+        </div>
+      )}
 
       <section className="profile-hero-card">
         {form.profilePicture ? (
@@ -196,12 +425,21 @@ function Profile() {
               <input value={form.jobTitle} onChange={(event) => updateField('jobTitle', event.target.value)} />
             </label>
             <label>
+              <span>Department</span>
+              <input value={form.department} onChange={(event) => updateField('department', event.target.value)} />
+            </label>
+            <label>
               <span>Gender</span>
-              <input value={form.gender} onChange={(event) => updateField('gender', event.target.value)} placeholder="Male / Female / Other" />
+              <select className="profile-select" value={form.gender} onChange={(event) => updateField('gender', event.target.value)}>
+                <option value="">Select gender</option>
+                {GENDER_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
             </label>
             <label>
               <span>Date of Birth</span>
-              <input value={form.dateOfBirth} onChange={(event) => updateField('dateOfBirth', event.target.value)} placeholder="DD MMM YYYY" />
+              <input type="date" value={form.dateOfBirth} onChange={(event) => updateField('dateOfBirth', event.target.value)} />
             </label>
             <label>
               <span>Nationality</span>
@@ -211,6 +449,53 @@ function Profile() {
               <span>Working Location</span>
               <input value={form.workingLocation} onChange={(event) => updateField('workingLocation', event.target.value)} />
             </label>
+            <label>
+              <span>Marital Status</span>
+              <select className="profile-select" value={form.maritalStatus} onChange={(event) => updateField('maritalStatus', event.target.value)}>
+                <option value="">Select marital status</option>
+                {MARITAL_STATUS_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Blood Group</span>
+              <select className="profile-select" value={form.bloodGroup} onChange={(event) => updateField('bloodGroup', event.target.value)}>
+                <option value="">Select blood group</option>
+                {BLOOD_GROUP_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Highest Qualification</span>
+              <input value={form.highestQualification} onChange={(event) => updateField('highestQualification', event.target.value)} />
+            </label>
+            <label>
+              <span>Employment Type</span>
+              <select className="profile-select" value={form.employmentType} onChange={(event) => updateField('employmentType', event.target.value)}>
+                <option value="">Select employment type</option>
+                {EMPLOYMENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Joining Date</span>
+              <input type="date" value={form.joiningDate} onChange={(event) => updateField('joiningDate', event.target.value)} />
+            </label>
+            <label>
+              <span>Employee ID</span>
+              <input inputMode="numeric" pattern="[0-9]*" value={form.managerId} onChange={(event) => updateField('managerId', digitsOnly(event.target.value))} />
+            </label>
+            <label>
+              <span>Grade</span>
+              <input value={form.grade} onChange={(event) => updateField('grade', event.target.value)} />
+            </label>
+            <div className="notification-actions profile-form-actions">
+              <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
+              <button type="submit" data-section="personal" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Personal Details'}</button>
+            </div>
           </form>
         </Section>
 
@@ -222,7 +507,7 @@ function Profile() {
             </label>
             <label>
               <span>Mobile No.</span>
-              <input value={form.mobileNo} onChange={(event) => updateField('mobileNo', event.target.value)} />
+              <input inputMode="numeric" pattern="[0-9]*" value={form.mobileNo} onChange={(event) => updateField('mobileNo', digitsOnly(event.target.value))} />
             </label>
             <label>
               <span>Present City</span>
@@ -240,6 +525,123 @@ function Profile() {
               <span>Avatar Initials</span>
               <input value={form.avatar} onChange={(event) => updateField('avatar', event.target.value)} />
             </label>
+            <label>
+              <span>Bank Name</span>
+              <select className="profile-select" value={form.bankName} onChange={(event) => updateField('bankName', event.target.value)}>
+                <option value="">Select bank</option>
+                {BANK_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Account Type</span>
+              <select className="profile-select" value={form.accountType} onChange={(event) => updateField('accountType', event.target.value)}>
+                <option value="">Select account type</option>
+                {ACCOUNT_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Account No.</span>
+              <input inputMode="numeric" pattern="[0-9]*" value={form.accountNo} onChange={(event) => updateField('accountNo', digitsOnly(event.target.value))} />
+            </label>
+            <label>
+              <span>IFSC Code</span>
+              <input value={form.ifscCode} onChange={(event) => updateField('ifscCode', event.target.value)} />
+            </label>
+            {canManagePackageAmount && (
+              <label>
+                <span>Package Amount</span>
+                <input inputMode="decimal" value={form.packageAmount} onChange={(event) => updateField('packageAmount', decimalOnly(event.target.value))} />
+              </label>
+            )}
+            <div className="notification-actions profile-form-actions">
+              <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
+              <button type="submit" data-section="contact" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Contact Info'}</button>
+            </div>
+          </form>
+        </Section>
+
+        <Section title="Address & Statutory">
+          <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
+            <label>
+              <span>Present Address 1</span>
+              <input value={form.presentAddressLine1} onChange={(event) => updateAddressField('presentAddressLine1', event.target.value)} />
+            </label>
+            <label>
+              <span>Present Address 2</span>
+              <input value={form.presentAddressLine2} onChange={(event) => updateAddressField('presentAddressLine2', event.target.value)} />
+            </label>
+            <label>
+              <span>Present City</span>
+              <input value={form.presentCityDistrict} onChange={(event) => updateAddressField('presentCityDistrict', event.target.value)} />
+            </label>
+            <label>
+              <span>Present State</span>
+              <input value={form.presentState} onChange={(event) => updateAddressField('presentState', event.target.value)} />
+            </label>
+            <label>
+              <span>Present PIN Code</span>
+              <input inputMode="numeric" pattern="[0-9]*" value={form.presentPinCode} onChange={(event) => updateAddressField('presentPinCode', digitsOnly(event.target.value))} />
+            </label>
+            <label>
+              <span>Present Country</span>
+              <input value={form.presentCountry} onChange={(event) => updateAddressField('presentCountry', event.target.value)} />
+            </label>
+            <label className="profile-checkbox-field profile-checkbox-field--wide">
+              <input
+                type="checkbox"
+                checked={form.sameAsAbove}
+                onChange={(event) => handleSameAsAboveChange(event.target.checked)}
+              />
+              <span>Permanent address same as above</span>
+            </label>
+            <label>
+              <span>Permanent Address 1</span>
+              <input value={form.permanentAddressLine1} onChange={(event) => updateField('permanentAddressLine1', event.target.value)} disabled={form.sameAsAbove} />
+            </label>
+            <label>
+              <span>Permanent Address 2</span>
+              <input value={form.permanentAddressLine2} onChange={(event) => updateField('permanentAddressLine2', event.target.value)} disabled={form.sameAsAbove} />
+            </label>
+            <label>
+              <span>Permanent City</span>
+              <input value={form.permanentCityDistrict} onChange={(event) => updateField('permanentCityDistrict', event.target.value)} disabled={form.sameAsAbove} />
+            </label>
+            <label>
+              <span>Permanent State</span>
+              <input value={form.permanentState} onChange={(event) => updateField('permanentState', event.target.value)} disabled={form.sameAsAbove} />
+            </label>
+            <label>
+              <span>Permanent PIN Code</span>
+              <input inputMode="numeric" pattern="[0-9]*" value={form.permanentPinCode} onChange={(event) => updateField('permanentPinCode', digitsOnly(event.target.value))} disabled={form.sameAsAbove} />
+            </label>
+            <label>
+              <span>Permanent Country</span>
+              <input value={form.permanentCountry} onChange={(event) => updateField('permanentCountry', event.target.value)} disabled={form.sameAsAbove} />
+            </label>
+            <label>
+              <span>Aadhaar No.</span>
+              <input inputMode="numeric" pattern="[0-9]*" value={form.aadhaarCardNo} onChange={(event) => updateField('aadhaarCardNo', digitsOnly(event.target.value))} />
+            </label>
+            <label>
+              <span>PAN No.</span>
+              <input value={form.panCardNo} onChange={(event) => updateField('panCardNo', event.target.value.toUpperCase())} />
+            </label>
+            <label>
+              <span>PF UAN</span>
+              <input inputMode="numeric" pattern="[0-9]*" value={form.pfUanNo} onChange={(event) => updateField('pfUanNo', digitsOnly(event.target.value))} />
+            </label>
+            <label>
+              <span>ESI No.</span>
+              <input inputMode="numeric" pattern="[0-9]*" value={form.esiNo} onChange={(event) => updateField('esiNo', digitsOnly(event.target.value))} />
+            </label>
+            <div className="notification-actions profile-form-actions">
+              <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
+              <button type="submit" data-section="address" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Address & Statutory'}</button>
+            </div>
           </form>
         </Section>
 
@@ -255,24 +657,17 @@ function Profile() {
             </label>
             <div className="notification-actions profile-form-actions">
               <button type="button" onClick={() => setForm(createProfileForm(employee))}>Reset</button>
-              <button type="submit">Save Profile</button>
+              <button type="submit" data-section="password">Save Profile</button>
             </div>
           </form>
           {statusMessage && <p className="notification-empty">{statusMessage}</p>}
         </Section>
 
-        <Section title="Employment Snapshot">
+        <Section title="Stored Profile Data">
           <div className="profile-group">
             <i className="ri-briefcase-4-line" aria-hidden="true" />
             <dl>
-              {[
-                ['Employee ID', employee.employeeCode || employee.id],
-                ['Department', employee.department],
-                ['Access Role', employee.accessRole],
-                ['Joining Date', employee.joiningDate],
-                ['Employment Type', employee.employmentType],
-                ['Email', employee.email],
-              ].map(([label, value]) => (
+              {storedProfileDetails.map(([label, value]) => (
                 <div key={label}>
                   <dt>{label}</dt>
                   <dd>{value || '-'}</dd>
@@ -287,21 +682,234 @@ function Profile() {
 }
 
 function createProfileForm(employee) {
+  const presentAddressLine1 = employee.presentAddressLine1 || '';
+  const presentAddressLine2 = employee.presentAddressLine2 || '';
+  const presentCityDistrict = employee.presentCityDistrict || employee.workingLocation || '';
+  const presentState = employee.presentState || '';
+  const presentPinCode = employee.presentPinCode || '';
+  const presentCountry = employee.presentCountry || '';
+  const permanentAddressLine1 = employee.permanentAddressLine1 || '';
+  const permanentAddressLine2 = employee.permanentAddressLine2 || '';
+  const permanentCityDistrict = employee.permanentCityDistrict || '';
+  const permanentState = employee.permanentState || '';
+  const permanentPinCode = employee.permanentPinCode || '';
+  const permanentCountry = employee.permanentCountry || '';
   return {
     displayName: employee.displayName || employee.name || '',
     jobTitle: employee.jobTitle || employee.role || '',
+    department: employee.department || getDepartmentForRole(employee.accessRole || 'Employee'),
     gender: employee.gender || '',
     dateOfBirth: employee.dateOfBirth || '',
     nationality: employee.nationality || '',
     workingLocation: employee.workingLocation || '',
+    employmentType: employee.employmentType || employee.role || '',
+    joiningDate: employee.joiningDate || '',
+    managerId: employee.managerId || '',
+    grade: employee.grade || '',
     email: employee.email || '',
     mobileNo: employee.mobileNo || employee.phone || '',
-    presentCityDistrict: employee.presentCityDistrict || employee.workingLocation || '',
-    presentState: employee.presentState || '',
+    presentCityDistrict,
+    presentState,
+    presentAddressLine1,
+    presentAddressLine2,
+    presentPinCode,
+    presentCountry,
+    permanentAddressLine1,
+    permanentAddressLine2,
+    permanentCityDistrict,
+    permanentState,
+    permanentPinCode,
+    permanentCountry,
+    sameAsAbove: Boolean(presentAddressLine1 || presentAddressLine2 || presentCityDistrict || presentState || presentPinCode || presentCountry)
+      && presentAddressLine1 === permanentAddressLine1
+      && presentAddressLine2 === permanentAddressLine2
+      && presentCityDistrict === permanentCityDistrict
+      && presentState === permanentState
+      && presentPinCode === permanentPinCode
+      && presentCountry === permanentCountry,
     profilePicture: employee.profilePicture || '',
     avatar: employee.avatar || getInitials(employee.displayName || employee.name || ''),
+    bloodGroup: employee.bloodGroup || '',
+    maritalStatus: employee.maritalStatus || '',
+    highestQualification: employee.highestQualification || '',
+    bankName: employee.bankName || '',
+    accountType: employee.accountType || '',
+    accountNo: employee.accountNo || '',
+    ifscCode: employee.ifscCode || '',
+    packageAmount: employee.packageAmount || '',
+    aadhaarCardNo: employee.aadhaarCardNo || '',
+    panCardNo: employee.panCardNo || '',
+    pfUanNo: employee.pfUanNo || '',
+    esiNo: employee.esiNo || '',
     newPassword: '',
     confirmPassword: '',
+  };
+}
+
+function validateProfileSection(form, section, canManagePackageAmount) {
+  const displayName = String(form.displayName || '').trim();
+  const jobTitle = String(form.jobTitle || '').trim();
+  const department = String(form.department || '').trim();
+  const gender = String(form.gender || '').trim();
+  const dateOfBirth = String(form.dateOfBirth || '').trim();
+  const employmentType = String(form.employmentType || '').trim();
+  const email = String(form.email || '').trim();
+  const mobileNo = String(form.mobileNo || '').trim();
+  const bankName = String(form.bankName || '').trim();
+  const accountType = String(form.accountType || '').trim();
+  const accountNo = String(form.accountNo || '').trim();
+  const ifscCode = String(form.ifscCode || '').trim().toUpperCase();
+  const packageAmount = String(form.packageAmount || '').trim();
+  const aadhaarCardNo = String(form.aadhaarCardNo || '').trim();
+  const panCardNo = String(form.panCardNo || '').trim().toUpperCase();
+  const pfUanNo = String(form.pfUanNo || '').trim();
+  const esiNo = String(form.esiNo || '').trim();
+  const presentPinCode = String(form.presentPinCode || '').trim();
+  const permanentPinCode = String(form.permanentPinCode || '').trim();
+  const newPassword = String(form.newPassword || '').trim();
+  const confirmPassword = String(form.confirmPassword || '').trim();
+
+  const errors = [];
+  const requireValue = (condition, message) => {
+    if (!condition) {
+      errors.push(message);
+    }
+  };
+
+  if (section === 'personal' || section === 'all') {
+    requireValue(displayName, 'Display name is required.');
+    requireValue(jobTitle, 'Job title is required.');
+    requireValue(department, 'Department is required.');
+    requireValue(gender, 'Gender is required.');
+    requireValue(dateOfBirth, 'Date of birth is required.');
+    requireValue(employmentType, 'Employment type is required.');
+  }
+
+  if (section === 'contact' || section === 'all') {
+    requireValue(email, 'Email is required.');
+    requireValue(isValidEmail(email), 'Enter a valid email address.');
+    requireValue(mobileNo, 'Mobile number is required.');
+    requireValue(isValidMobileNumber(mobileNo), 'Enter a valid mobile number.');
+    requireValue(bankName, 'Bank name is required.');
+    requireValue(accountType, 'Account type is required.');
+    requireValue(accountNo, 'Account number is required.');
+    requireValue(/^\d{9,18}$/.test(accountNo), 'Account number must be 9 to 18 digits.');
+    requireValue(ifscCode, 'IFSC code is required.');
+    requireValue(isValidIfscCode(ifscCode), 'Enter a valid IFSC code.');
+    if (canManagePackageAmount) {
+      requireValue(packageAmount, 'Package amount is required.');
+      requireValue(!Number.isNaN(Number(packageAmount)) && Number(packageAmount) >= 0, 'Package amount must be a valid number.');
+    }
+  }
+
+  if (section === 'address' || section === 'all') {
+    if (presentPinCode) {
+      requireValue(/^\d{6}$/.test(presentPinCode), 'Present PIN code must be 6 digits.');
+    }
+    if (permanentPinCode) {
+      requireValue(/^\d{6}$/.test(permanentPinCode), 'Permanent PIN code must be 6 digits.');
+    }
+    if (aadhaarCardNo) {
+      requireValue(/^\d{12}$/.test(aadhaarCardNo), 'Aadhaar number must be 12 digits.');
+    }
+    if (panCardNo) {
+      requireValue(/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panCardNo), 'PAN number must follow the format AAAAA9999A.');
+    }
+    if (pfUanNo) {
+      requireValue(/^\d{12}$/.test(pfUanNo), 'PF UAN must be 12 digits.');
+    }
+    if (esiNo) {
+      requireValue(/^\d{17}$/.test(esiNo), 'ESI number must be 17 digits.');
+    }
+  }
+
+  if (section === 'password' || section === 'all') {
+    if (newPassword || confirmPassword) {
+      requireValue(newPassword.length >= 8, 'Password must be at least 8 characters long.');
+      requireValue(newPassword === confirmPassword, 'Password and confirm password must match.');
+    }
+  }
+
+  return errors[0] || '';
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
+function isValidMobileNumber(value) {
+  return /^(?:\+?91[-\s]?)?[6-9]\d{9}$/.test(String(value || '').trim());
+}
+
+function isValidIfscCode(value) {
+  return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(String(value || '').trim().toUpperCase());
+}
+
+function digitsOnly(value) {
+  return String(value || '').replace(/\D+/g, '');
+}
+
+function decimalOnly(value) {
+  const raw = String(value || '').replace(/[^\d.]/g, '');
+  const [whole = '', ...fractionParts] = raw.split('.');
+  const fraction = fractionParts.length ? `.${fractionParts.join('').slice(0, 2)}` : '';
+  return `${whole}${fraction}`;
+}
+
+function upsertCurrentEmployee(employees, identity, nextEmployee) {
+  const nextEmployees = employees.map((item) => (
+    isCurrentEmployee(item, identity) ? { ...item, ...nextEmployee } : item
+  ));
+  const exists = nextEmployees.some((item) => isCurrentEmployee(item, identity));
+
+  if (!exists) {
+    nextEmployees.unshift(nextEmployee);
+  }
+
+  return nextEmployees;
+}
+
+function upsertCurrentUser(users, currentAccessUser, nextEmployee, newPassword) {
+  const nextUser = {
+    ...currentAccessUser,
+    userId: currentAccessUser?.userId || `USR-${nextEmployee.employeeCode || nextEmployee.employeeId || Date.now()}`,
+    email: nextEmployee.email,
+    password: newPassword || currentAccessUser?.password || 'employee123',
+    role: normalizeAccessRole(nextEmployee.accessRole || currentAccessUser?.role || 'Employee'),
+    employeeId: nextEmployee.employeeCode || nextEmployee.employeeId || currentAccessUser?.employeeId,
+    employeeName: nextEmployee.displayName,
+    status: currentAccessUser?.status || 'Active',
+    avatar: nextEmployee.avatar,
+    profilePicture: nextEmployee.profilePicture || '',
+    department: nextEmployee.department || currentAccessUser?.department || '',
+    designation: nextEmployee.jobTitle || currentAccessUser?.designation || '',
+    lastLogin: currentAccessUser?.lastLogin || 'Invite pending',
+    permissions: currentAccessUser?.permissions || [],
+  };
+
+  const nextUsers = users.map((user) => (
+    user.userId === nextUser.userId || user.employeeId === nextUser.employeeId || user.email === nextUser.email
+      ? nextUser
+      : user
+  ));
+
+  if (!nextUsers.some((user) => user.userId === nextUser.userId || user.employeeId === nextUser.employeeId || user.email === nextUser.email)) {
+    nextUsers.unshift(nextUser);
+  }
+
+  return nextUsers;
+}
+
+function splitName(name) {
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  return {
+    firstName: parts[0] || '',
+    middleName: parts.length > 2 ? parts.slice(1, -1).join(' ') : '',
+    lastName: parts.length > 1 ? parts[parts.length - 1] : '',
   };
 }
 

@@ -1,12 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
-import { getInitialLeaveRequests, saveLeaveRequests } from '../utils/leaveStorage.js';
+import { getInitialLeaveRequests, refreshStoredLeaveRequests, saveLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
+import { safeApiRequest } from '../utils/api.js';
+import {
+  DEFAULT_LEAVE_TYPES,
+  getEmployeeLeaveSummary,
+  getLeaveTypeOptions,
+  normalizeLeaveTypes,
+} from '../utils/leaveBalance.js';
 
-const leaveTypes = ['Sick Leave', 'Casual Leave', 'Earned Leave', 'Work From Home', 'Maternity Leave', 'Paternity Leave'];
 const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 
 function LeaveRequests() {
@@ -15,11 +21,29 @@ function LeaveRequests() {
   const canCreateRequest = role === 'employee' || role === 'hr';
   const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead';
   const [requests, setRequests] = useState(getInitialLeaveRequests);
+  const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
-  const [form, setForm] = useState(() => getEmptyLeaveForm(role, currentEmployee));
+  const [form, setForm] = useState(() => getEmptyLeaveForm(role, currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
+  const leaveSummary = useMemo(
+    () => getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee),
+    [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
+  );
+  const leaveTypeOptions = useMemo(() => getLeaveTypeOptions(leaveTypes), [leaveTypes]);
+
+  useEffect(() => {
+    if (leaveTypeOptions.length === 0) {
+      return;
+    }
+
+    setForm((current) => (
+      leaveTypeOptions.includes(current.type)
+        ? current
+        : { ...current, type: leaveTypeOptions[0] }
+    ));
+  }, [leaveTypeOptions]);
 
   const visibleRequests = useMemo(() => requests.filter((request) => {
     if (role === 'teamLead') {
@@ -34,6 +58,30 @@ function LeaveRequests() {
   }), [requests, role, currentEmployee.employeeId]);
 
   const rows = useMemo(() => visibleRequests.filter((request) => status === 'All' || request.status === status), [visibleRequests, status]);
+
+  useEffect(() => {
+    const refreshRequests = () => {
+      refreshStoredLeaveRequests()
+        .then(setRequests)
+        .catch(() => setRequests(getInitialLeaveRequests()));
+    };
+    const refreshLeaveTypes = () => {
+      safeApiRequest('/settings', { leaveTypes: DEFAULT_LEAVE_TYPES })
+        .then((payload) => setLeaveTypes(normalizeLeaveTypes(payload?.leaveTypes, DEFAULT_LEAVE_TYPES)))
+        .catch(() => setLeaveTypes(DEFAULT_LEAVE_TYPES));
+    };
+
+    window.addEventListener('kavyaLeaveRequestsChanged', refreshRequests);
+    window.addEventListener('kavyaSettingsChanged', refreshLeaveTypes);
+
+    refreshRequests();
+    refreshLeaveTypes();
+
+    return () => {
+      window.removeEventListener('kavyaLeaveRequestsChanged', refreshRequests);
+      window.removeEventListener('kavyaSettingsChanged', refreshLeaveTypes);
+    };
+  }, []);
 
   const columns = [
     ...leaveColumns,
@@ -142,7 +190,7 @@ function LeaveRequests() {
       saveLeaveRequests(next);
       return next;
     });
-    setForm(getEmptyLeaveForm(role, currentEmployee));
+    setForm(getEmptyLeaveForm(role, currentEmployee, leaveTypes));
     setFileErrors({});
     setShowForm(false);
     setMessage('Leave request created successfully.');
@@ -171,6 +219,21 @@ function LeaveRequests() {
       )}
 
       <Section title="Leave Request Queue">
+        {(role === 'employee' || role === 'hr') && (
+          <div className="leave-balance-strip" aria-label="Leave balances">
+            {leaveSummary.balances.map((item) => (
+              <article key={item.name} className="leave-balance-card">
+                <span>Leave balance</span>
+                <strong>{item.name}</strong>
+                <div className="leave-balance-card-value">
+                  <b>{item.remaining}</b>
+                  <small>of {item.days} days</small>
+                </div>
+                <p>{item.used > 0 ? `${item.used} days used` : 'Unused so far'}</p>
+              </article>
+            ))}
+          </div>
+        )}
         <div className="page-toolbar">
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>
@@ -195,6 +258,7 @@ function LeaveRequests() {
         <LeaveRequestModal
           role={role}
           currentEmployee={currentEmployee}
+          leaveTypeOptions={leaveTypeOptions}
           form={form}
           fileErrors={fileErrors}
           updateField={updateField}
@@ -210,7 +274,7 @@ function LeaveRequests() {
   );
 }
 
-function LeaveRequestModal({ role, currentEmployee, form, fileErrors, updateField, updateMedicalReport, onSubmit, onClose }) {
+function LeaveRequestModal({ role, currentEmployee, leaveTypeOptions, form, fileErrors, updateField, updateMedicalReport, onSubmit, onClose }) {
   const employeeOptions = role === 'employee' || role === 'hr' ? [] : people;
   const needsMedicalReport = form.type === 'Sick Leave' && Number(form.days) > 2;
 
@@ -240,7 +304,7 @@ function LeaveRequestModal({ role, currentEmployee, form, fileErrors, updateFiel
           <label className="field">
             <span>Leave Type</span>
             <select value={form.type} onChange={(event) => updateField('type', event.target.value)}>
-              {leaveTypes.map((type) => <option key={type}>{type}</option>)}
+              {leaveTypeOptions.map((type) => <option key={type}>{type}</option>)}
             </select>
           </label>
           <label className="field">
@@ -287,12 +351,13 @@ function LeaveRequestModal({ role, currentEmployee, form, fileErrors, updateFiel
   );
 }
 
-function getEmptyLeaveForm(role = 'employee', currentEmployee = getCurrentEmployeeIdentity()) {
+function getEmptyLeaveForm(role = 'employee', currentEmployee = getCurrentEmployeeIdentity(), leaveTypes = DEFAULT_LEAVE_TYPES) {
   const today = new Date().toISOString().slice(0, 10);
   const employee = role === 'employee' || role === 'hr' ? currentEmployee.employee : people[0].name;
+  const availableLeaveTypes = getLeaveTypeOptions(leaveTypes);
   return {
     employee,
-    type: leaveTypes[0],
+    type: availableLeaveTypes[0] || 'Casual Leave',
     from: today,
     to: today,
     days: 1,

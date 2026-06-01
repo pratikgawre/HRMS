@@ -1,0 +1,38 @@
+package com.kavya.hrms.websocket;
+
+import java.io.IOException;
+import org.springframework.stereotype.Component;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+
+@Component
+public class SettingsWebSocketHandler extends TextWebSocketHandler {
+  private final SettingsBroadcastService broadcastService;
+
+  public SettingsWebSocketHandler(SettingsBroadcastService broadcastService) {
+    this.broadcastService = broadcastService;
+  }
+
+  @Override
+  public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+    broadcastService.register(session);
+    session.sendMessage(new TextMessage("{\"type\":\"settings-connected\"}"));
+  }
+
+  @Override
+  public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+    broadcastService.unregister(session);
+  }
+
+  @Override
+  public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+    broadcastService.unregister(session);
+    try {
+      session.close();
+    } catch (IOException ignored) {
+      // Ignore close errors on transport failure.
+    }
+  }
+}

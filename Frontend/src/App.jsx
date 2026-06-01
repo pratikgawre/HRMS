@@ -113,6 +113,7 @@ function App() {
             <Route path="/employee/payroll" element={<Payroll />} />
             <Route path="/employee/announcements" element={<Announcements />} />
             <Route path="/employee/support" element={<SupportTickets />} />
+            <Route path="/employee/settings" element={<Settings />} />
             <Route path="/employee/profile" element={<Profile />} />
           </Route>
         </Route>
