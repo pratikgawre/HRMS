@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
@@ -58,10 +59,16 @@ function Profile() {
   const canManagePackageAmount = normalizedAccessRole === 'Super Admin' || normalizedAccessRole === 'HR Manager';
   const [employees, setEmployees] = useState(() => getProfileEmployees());
   const [users, setUsers] = useState(() => getUsers());
+  const currentAccessUser = useMemo(() => users.find((item) => isCurrentAccessUser(item, identity)), [identity, users]);
   const matchedEmployee = useMemo(() => employees.find((item) => isCurrentEmployee(item, identity)), [employees, identity]);
   const employee = useMemo(() => normalizeProfileEmployee(
     matchedEmployee
-      ? { ...matchedEmployee, accessRole: matchedEmployee.accessRole || accessRole }
+      ? {
+          ...matchedEmployee,
+          accessRole: matchedEmployee.accessRole || accessRole,
+          twoFactorEnabled: currentAccessUser?.twoFactorEnabled ?? matchedEmployee.twoFactorEnabled ?? false,
+          twoFactorSecret: currentAccessUser?.twoFactorSecret ?? matchedEmployee.twoFactorSecret ?? '',
+        }
       : {
           employeeCode: identity.employeeId,
           employeeId: identity.employeeId,
@@ -76,18 +83,69 @@ function Profile() {
           joiningDate: '-',
           employmentType: accessRole,
           accessRole,
+          twoFactorEnabled: currentAccessUser?.twoFactorEnabled ?? false,
+          twoFactorSecret: currentAccessUser?.twoFactorSecret ?? '',
         }
-  ), [accessRole, identity.avatar, identity.email, identity.employee, identity.employeeId, identity.profilePicture, matchedEmployee]);
-
+  ), [accessRole, currentAccessUser, identity.avatar, identity.email, identity.employee, identity.employeeId, identity.profilePicture, matchedEmployee]);
   const [form, setForm] = useState(() => createProfileForm(employee));
   const [statusMessage, setStatusMessage] = useState('Update your personal details, contact info, photo, and password here.');
   const [popup, setPopup] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [twoFactorQr, setTwoFactorQr] = useState('');
   const toastTimerRef = useRef(null);
+  const twoFactorIssuer = 'Kavya HRMS';
+  const twoFactorAccount = employee.email || identity.email || '';
+  const twoFactorOtpUri = useMemo(() => {
+    const secret = String(form.twoFactorSecret || '').trim().toUpperCase();
+    if (!secret || !twoFactorAccount) {
+      return '';
+    }
+
+    const label = encodeURIComponent(`${twoFactorIssuer}:${twoFactorAccount}`);
+    const issuer = encodeURIComponent(twoFactorIssuer);
+    return `otpauth://totp/${label}?secret=${encodeURIComponent(secret)}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
+  }, [form.twoFactorSecret, twoFactorAccount]);
 
   useEffect(() => {
     setForm(createProfileForm(employee));
   }, [employee]);
+
+  useEffect(() => {
+    let active = true;
+    const secret = String(form.twoFactorSecret || '').trim();
+    if (!form.twoFactorEnabled || !secret || !twoFactorOtpUri) {
+      setTwoFactorQr('');
+      return () => {
+        active = false;
+      };
+    }
+
+    QRCode.toDataURL(twoFactorOtpUri, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 220,
+      color: {
+        dark: '#143a3a',
+        light: '#ffffff',
+      },
+    })
+      .then((dataUrl) => {
+        if (active) {
+          setTwoFactorQr(dataUrl);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setTwoFactorQr('');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [form.twoFactorEnabled, form.twoFactorSecret, twoFactorOtpUri]);
 
   useEffect(() => {
     let active = true;
@@ -167,8 +225,9 @@ function Profile() {
     ['Permanent Country', employee.permanentCountry],
     ['Aadhaar No.', employee.aadhaarCardNo],
     ['PAN No.', employee.panCardNo],
-    ['PF UAN', employee.pfUanNo],
-    ['ESI No.', employee.esiNo],
+    ['UAN No.', employee.pfUanNo],
+    ['ESIC No.', employee.esiNo],
+    ['Two-Factor Auth', employee.twoFactorEnabled ? 'Enabled' : 'Disabled'],
     ...(canManagePackageAmount ? [['Package Amount', employee.packageAmount]] : []),
   ];
 
@@ -308,6 +367,8 @@ function Profile() {
       panCardNo: form.panCardNo.trim(),
       pfUanNo: form.pfUanNo.trim(),
       esiNo: form.esiNo.trim(),
+      twoFactorEnabled: Boolean(form.twoFactorEnabled),
+      twoFactorSecret: String(form.twoFactorSecret || '').trim(),
     };
 
     const nextEmployees = upsertCurrentEmployee(employees, identity, nextEmployee);
@@ -414,263 +475,410 @@ function Profile() {
       </section>
 
       <div className="profile-detail-layout">
-        <Section title="Personal Details">
-          <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
-            <label>
-              <span>Display Name</span>
-              <input value={form.displayName} onChange={(event) => updateField('displayName', event.target.value)} />
-            </label>
-            <label>
-              <span>Job Title</span>
-              <input value={form.jobTitle} onChange={(event) => updateField('jobTitle', event.target.value)} />
-            </label>
-            <label>
-              <span>Department</span>
-              <input value={form.department} onChange={(event) => updateField('department', event.target.value)} />
-            </label>
-            <label>
-              <span>Gender</span>
-              <select className="profile-select" value={form.gender} onChange={(event) => updateField('gender', event.target.value)}>
-                <option value="">Select gender</option>
-                {GENDER_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Date of Birth</span>
-              <input type="date" value={form.dateOfBirth} onChange={(event) => updateField('dateOfBirth', event.target.value)} />
-            </label>
-            <label>
-              <span>Nationality</span>
-              <input value={form.nationality} onChange={(event) => updateField('nationality', event.target.value)} />
-            </label>
-            <label>
-              <span>Working Location</span>
-              <input value={form.workingLocation} onChange={(event) => updateField('workingLocation', event.target.value)} />
-            </label>
-            <label>
-              <span>Marital Status</span>
-              <select className="profile-select" value={form.maritalStatus} onChange={(event) => updateField('maritalStatus', event.target.value)}>
-                <option value="">Select marital status</option>
-                {MARITAL_STATUS_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Blood Group</span>
-              <select className="profile-select" value={form.bloodGroup} onChange={(event) => updateField('bloodGroup', event.target.value)}>
-                <option value="">Select blood group</option>
-                {BLOOD_GROUP_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Highest Qualification</span>
-              <input value={form.highestQualification} onChange={(event) => updateField('highestQualification', event.target.value)} />
-            </label>
-            <label>
-              <span>Employment Type</span>
-              <select className="profile-select" value={form.employmentType} onChange={(event) => updateField('employmentType', event.target.value)}>
-                <option value="">Select employment type</option>
-                {EMPLOYMENT_TYPE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Joining Date</span>
-              <input type="date" value={form.joiningDate} onChange={(event) => updateField('joiningDate', event.target.value)} />
-            </label>
-            <label>
-              <span>Employee ID</span>
-              <input inputMode="numeric" pattern="[0-9]*" value={form.managerId} onChange={(event) => updateField('managerId', digitsOnly(event.target.value))} />
-            </label>
-            <label>
-              <span>Grade</span>
-              <input value={form.grade} onChange={(event) => updateField('grade', event.target.value)} />
-            </label>
-            <div className="notification-actions profile-form-actions">
-              <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
-              <button type="submit" data-section="personal" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Personal Details'}</button>
-            </div>
-          </form>
-        </Section>
-
-        <Section title="Contact Info">
-          <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
-            <label>
-              <span>Email</span>
-              <input type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} />
-            </label>
-            <label>
-              <span>Mobile No.</span>
-              <input inputMode="numeric" pattern="[0-9]*" value={form.mobileNo} onChange={(event) => updateField('mobileNo', digitsOnly(event.target.value))} />
-            </label>
-            <label>
-              <span>Present City</span>
-              <input value={form.presentCityDistrict} onChange={(event) => updateField('presentCityDistrict', event.target.value)} />
-            </label>
-            <label>
-              <span>Present State</span>
-              <input value={form.presentState} onChange={(event) => updateField('presentState', event.target.value)} />
-            </label>
-            <label>
-              <span>Profile Photo URL</span>
-              <input value={form.profilePicture} onChange={(event) => updateField('profilePicture', event.target.value)} placeholder="Paste an image URL or upload a file" />
-            </label>
-            <label>
-              <span>Avatar Initials</span>
-              <input value={form.avatar} onChange={(event) => updateField('avatar', event.target.value)} />
-            </label>
-            <label>
-              <span>Bank Name</span>
-              <select className="profile-select" value={form.bankName} onChange={(event) => updateField('bankName', event.target.value)}>
-                <option value="">Select bank</option>
-                {BANK_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Account Type</span>
-              <select className="profile-select" value={form.accountType} onChange={(event) => updateField('accountType', event.target.value)}>
-                <option value="">Select account type</option>
-                {ACCOUNT_TYPE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Account No.</span>
-              <input inputMode="numeric" pattern="[0-9]*" value={form.accountNo} onChange={(event) => updateField('accountNo', digitsOnly(event.target.value))} />
-            </label>
-            <label>
-              <span>IFSC Code</span>
-              <input value={form.ifscCode} onChange={(event) => updateField('ifscCode', event.target.value)} />
-            </label>
-            {canManagePackageAmount && (
+        <div className="profile-detail-column">
+          <Section title="Personal Details">
+            <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
               <label>
-                <span>Package Amount</span>
-                <input inputMode="decimal" value={form.packageAmount} onChange={(event) => updateField('packageAmount', decimalOnly(event.target.value))} />
+                <span>Display Name</span>
+                <input value={form.displayName} onChange={(event) => updateField('displayName', event.target.value)} />
               </label>
-            )}
-            <div className="notification-actions profile-form-actions">
-              <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
-              <button type="submit" data-section="contact" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Contact Info'}</button>
-            </div>
-          </form>
-        </Section>
+              <label>
+                <span>Job Title</span>
+                <input value={form.jobTitle} onChange={(event) => updateField('jobTitle', event.target.value)} />
+              </label>
+              <label>
+                <span>Department</span>
+                <input value={form.department} onChange={(event) => updateField('department', event.target.value)} />
+              </label>
+              <label>
+                <span>Gender</span>
+                <select className="profile-select" value={form.gender} onChange={(event) => updateField('gender', event.target.value)}>
+                  <option value="">Select gender</option>
+                  {GENDER_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Date of Birth</span>
+                <input type="date" value={form.dateOfBirth} onChange={(event) => updateField('dateOfBirth', event.target.value)} />
+              </label>
+              <label>
+                <span>Nationality</span>
+                <input value={form.nationality} onChange={(event) => updateField('nationality', event.target.value)} />
+              </label>
+              <label>
+                <span>Working Location</span>
+                <input value={form.workingLocation} onChange={(event) => updateField('workingLocation', event.target.value)} />
+              </label>
+              <label>
+                <span>Marital Status</span>
+                <select className="profile-select" value={form.maritalStatus} onChange={(event) => updateField('maritalStatus', event.target.value)}>
+                  <option value="">Select marital status</option>
+                  {MARITAL_STATUS_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Blood Group</span>
+                <select className="profile-select" value={form.bloodGroup} onChange={(event) => updateField('bloodGroup', event.target.value)}>
+                  <option value="">Select blood group</option>
+                  {BLOOD_GROUP_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Highest Qualification</span>
+                <input value={form.highestQualification} onChange={(event) => updateField('highestQualification', event.target.value)} />
+              </label>
+              <label>
+                <span>Employment Type</span>
+                <select className="profile-select" value={form.employmentType} onChange={(event) => updateField('employmentType', event.target.value)}>
+                  <option value="">Select employment type</option>
+                  {EMPLOYMENT_TYPE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Joining Date</span>
+                <input type="date" value={form.joiningDate} onChange={(event) => updateField('joiningDate', event.target.value)} />
+              </label>
+              <label>
+                <span>Employee ID</span>
+                <input inputMode="numeric" pattern="[0-9]*" value={form.managerId} onChange={(event) => updateField('managerId', digitsOnly(event.target.value))} />
+              </label>
+              <label>
+                <span>Grade</span>
+                <input value={form.grade} onChange={(event) => updateField('grade', event.target.value)} />
+              </label>
+              <div className="notification-actions profile-form-actions">
+                <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
+                <button type="submit" data-section="personal" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Personal Details'}</button>
+              </div>
+            </form>
+          </Section>
 
-        <Section title="Address & Statutory">
-          <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
-            <label>
-              <span>Present Address 1</span>
-              <input value={form.presentAddressLine1} onChange={(event) => updateAddressField('presentAddressLine1', event.target.value)} />
-            </label>
-            <label>
-              <span>Present Address 2</span>
-              <input value={form.presentAddressLine2} onChange={(event) => updateAddressField('presentAddressLine2', event.target.value)} />
-            </label>
-            <label>
-              <span>Present City</span>
-              <input value={form.presentCityDistrict} onChange={(event) => updateAddressField('presentCityDistrict', event.target.value)} />
-            </label>
-            <label>
-              <span>Present State</span>
-              <input value={form.presentState} onChange={(event) => updateAddressField('presentState', event.target.value)} />
-            </label>
-            <label>
-              <span>Present PIN Code</span>
-              <input inputMode="numeric" pattern="[0-9]*" value={form.presentPinCode} onChange={(event) => updateAddressField('presentPinCode', digitsOnly(event.target.value))} />
-            </label>
-            <label>
-              <span>Present Country</span>
-              <input value={form.presentCountry} onChange={(event) => updateAddressField('presentCountry', event.target.value)} />
-            </label>
-            <label className="profile-checkbox-field profile-checkbox-field--wide">
-              <input
-                type="checkbox"
-                checked={form.sameAsAbove}
-                onChange={(event) => handleSameAsAboveChange(event.target.checked)}
-              />
-              <span>Permanent address same as above</span>
-            </label>
-            <label>
-              <span>Permanent Address 1</span>
-              <input value={form.permanentAddressLine1} onChange={(event) => updateField('permanentAddressLine1', event.target.value)} disabled={form.sameAsAbove} />
-            </label>
-            <label>
-              <span>Permanent Address 2</span>
-              <input value={form.permanentAddressLine2} onChange={(event) => updateField('permanentAddressLine2', event.target.value)} disabled={form.sameAsAbove} />
-            </label>
-            <label>
-              <span>Permanent City</span>
-              <input value={form.permanentCityDistrict} onChange={(event) => updateField('permanentCityDistrict', event.target.value)} disabled={form.sameAsAbove} />
-            </label>
-            <label>
-              <span>Permanent State</span>
-              <input value={form.permanentState} onChange={(event) => updateField('permanentState', event.target.value)} disabled={form.sameAsAbove} />
-            </label>
-            <label>
-              <span>Permanent PIN Code</span>
-              <input inputMode="numeric" pattern="[0-9]*" value={form.permanentPinCode} onChange={(event) => updateField('permanentPinCode', digitsOnly(event.target.value))} disabled={form.sameAsAbove} />
-            </label>
-            <label>
-              <span>Permanent Country</span>
-              <input value={form.permanentCountry} onChange={(event) => updateField('permanentCountry', event.target.value)} disabled={form.sameAsAbove} />
-            </label>
-            <label>
-              <span>Aadhaar No.</span>
-              <input inputMode="numeric" pattern="[0-9]*" value={form.aadhaarCardNo} onChange={(event) => updateField('aadhaarCardNo', digitsOnly(event.target.value))} />
-            </label>
-            <label>
-              <span>PAN No.</span>
-              <input value={form.panCardNo} onChange={(event) => updateField('panCardNo', event.target.value.toUpperCase())} />
-            </label>
-            <label>
-              <span>PF UAN</span>
-              <input inputMode="numeric" pattern="[0-9]*" value={form.pfUanNo} onChange={(event) => updateField('pfUanNo', digitsOnly(event.target.value))} />
-            </label>
-            <label>
-              <span>ESI No.</span>
-              <input inputMode="numeric" pattern="[0-9]*" value={form.esiNo} onChange={(event) => updateField('esiNo', digitsOnly(event.target.value))} />
-            </label>
-            <div className="notification-actions profile-form-actions">
-              <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
-              <button type="submit" data-section="address" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Address & Statutory'}</button>
-            </div>
-          </form>
-        </Section>
+          <Section title="Address Details">
+            <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
+              <label>
+                <span>Present Address 1</span>
+                <input value={form.presentAddressLine1} onChange={(event) => updateAddressField('presentAddressLine1', event.target.value)} />
+              </label>
+              <label>
+                <span>Present Address 2</span>
+                <input value={form.presentAddressLine2} onChange={(event) => updateAddressField('presentAddressLine2', event.target.value)} />
+              </label>
+              <label>
+                <span>Present City</span>
+                <input value={form.presentCityDistrict} onChange={(event) => updateAddressField('presentCityDistrict', event.target.value)} />
+              </label>
+              <label>
+                <span>Present State</span>
+                <input value={form.presentState} onChange={(event) => updateAddressField('presentState', event.target.value)} />
+              </label>
+              <label>
+                <span>Present PIN Code</span>
+                <input inputMode="numeric" pattern="[0-9]*" value={form.presentPinCode} onChange={(event) => updateAddressField('presentPinCode', digitsOnly(event.target.value))} />
+              </label>
+              <label>
+                <span>Present Country</span>
+                <input value={form.presentCountry} onChange={(event) => updateAddressField('presentCountry', event.target.value)} />
+              </label>
+              <label className="profile-checkbox-field profile-checkbox-field--wide">
+                <input
+                  type="checkbox"
+                  checked={form.sameAsAbove}
+                  onChange={(event) => handleSameAsAboveChange(event.target.checked)}
+                />
+                <span>Permanent address same as above</span>
+              </label>
+              <label>
+                <span>Permanent Address 1</span>
+                <input value={form.permanentAddressLine1} onChange={(event) => updateField('permanentAddressLine1', event.target.value)} disabled={form.sameAsAbove} />
+              </label>
+              <label>
+                <span>Permanent Address 2</span>
+                <input value={form.permanentAddressLine2} onChange={(event) => updateField('permanentAddressLine2', event.target.value)} disabled={form.sameAsAbove} />
+              </label>
+              <label>
+                <span>Permanent City</span>
+                <input value={form.permanentCityDistrict} onChange={(event) => updateField('permanentCityDistrict', event.target.value)} disabled={form.sameAsAbove} />
+              </label>
+              <label>
+                <span>Permanent State</span>
+                <input value={form.permanentState} onChange={(event) => updateField('permanentState', event.target.value)} disabled={form.sameAsAbove} />
+              </label>
+              <label>
+                <span>Permanent PIN Code</span>
+                <input inputMode="numeric" pattern="[0-9]*" value={form.permanentPinCode} onChange={(event) => updateField('permanentPinCode', digitsOnly(event.target.value))} disabled={form.sameAsAbove} />
+              </label>
+              <label>
+                <span>Permanent Country</span>
+                <input value={form.permanentCountry} onChange={(event) => updateField('permanentCountry', event.target.value)} disabled={form.sameAsAbove} />
+              </label>
+              <div className="notification-actions profile-form-actions">
+                <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
+                <button type="submit" data-section="address" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Address Details'}</button>
+              </div>
+            </form>
+          </Section>
 
-        <Section title="Password Update">
-          <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
-            <label>
-              <span>New Password</span>
-              <input type="password" value={form.newPassword} onChange={(event) => updateField('newPassword', event.target.value)} placeholder="Leave blank to keep current password" />
-            </label>
-            <label>
-              <span>Confirm Password</span>
-              <input type="password" value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} placeholder="Repeat the new password" />
-            </label>
-            <div className="notification-actions profile-form-actions">
-              <button type="button" onClick={() => setForm(createProfileForm(employee))}>Reset</button>
-              <button type="submit" data-section="password">Save Profile</button>
-            </div>
-          </form>
-          {statusMessage && <p className="notification-empty">{statusMessage}</p>}
-        </Section>
+          <Section title="Password Update">
+            <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
+              <label className="profile-password-field">
+                <span>New Password</span>
+                <div className="profile-password-input">
+                  <input type={showNewPassword ? 'text' : 'password'} value={form.newPassword} onChange={(event) => updateField('newPassword', event.target.value)} placeholder="Leave blank to keep current password" />
+                  <button type="button" className="profile-password-toggle" onClick={() => setShowNewPassword((current) => !current)} aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}>
+                    <i className={showNewPassword ? 'ri-eye-off-line' : 'ri-eye-line'} aria-hidden="true" />
+                  </button>
+                </div>
+              </label>
+              <label className="profile-password-field">
+                <span>Confirm Password</span>
+                <div className="profile-password-input">
+                  <input type={showConfirmPassword ? 'text' : 'password'} value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} placeholder="Repeat the new password" />
+                  <button type="button" className="profile-password-toggle" onClick={() => setShowConfirmPassword((current) => !current)} aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}>
+                    <i className={showConfirmPassword ? 'ri-eye-off-line' : 'ri-eye-line'} aria-hidden="true" />
+                  </button>
+                </div>
+              </label>
+              <div className="notification-actions profile-form-actions">
+                <button type="button" onClick={() => setForm(createProfileForm(employee))}>Reset</button>
+                <button type="submit" data-section="password">Save Profile</button>
+              </div>
+            </form>
+            {statusMessage && <p className="notification-empty">{statusMessage}</p>}
+          </Section>
+        </div>
 
-        <Section title="Stored Profile Data">
+        <div className="profile-detail-column">
+          <Section title="Contact Info">
+            <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
+              <label>
+                <span>Email</span>
+                <input type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} />
+              </label>
+              <label>
+                <span>Mobile No.</span>
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={10}
+                  value={form.mobileNo}
+                  onChange={(event) => updateField('mobileNo', digitsOnly(event.target.value).slice(0, 10))}
+                />
+              </label>
+              <label>
+                <span>Profile Photo URL</span>
+                <input value={form.profilePicture} onChange={(event) => updateField('profilePicture', event.target.value)} placeholder="Paste an image URL or upload a file" />
+              </label>
+              <label>
+                <span>Avatar Initials</span>
+                <input value={form.avatar} onChange={(event) => updateField('avatar', event.target.value)} />
+              </label>
+              <div className="notification-actions profile-form-actions">
+                <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
+                <button type="submit" data-section="contact" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Contact Info'}</button>
+              </div>
+            </form>
+          </Section>
+
+          <Section title="Bank Details">
+            <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
+              <label>
+                <span>Bank Name</span>
+                <select className="profile-select" value={form.bankName} onChange={(event) => updateField('bankName', event.target.value)}>
+                  <option value="">Select bank</option>
+                  {BANK_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Account Type</span>
+                <select className="profile-select" value={form.accountType} onChange={(event) => updateField('accountType', event.target.value)}>
+                  <option value="">Select account type</option>
+                  {ACCOUNT_TYPE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Account No.</span>
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={18}
+                  value={form.accountNo}
+                  onChange={(event) => updateField('accountNo', digitsOnly(event.target.value).slice(0, 18))}
+                />
+              </label>
+              <label>
+                <span>IFSC Code</span>
+                <input
+                  value={form.ifscCode}
+                  maxLength={11}
+                  onChange={(event) => updateField('ifscCode', alphanumericUpperOnly(event.target.value).slice(0, 11))}
+                />
+              </label>
+              {canManagePackageAmount && (
+                <label>
+                  <span>Package Amount</span>
+                  <input inputMode="decimal" value={form.packageAmount} onChange={(event) => updateField('packageAmount', decimalOnly(event.target.value))} />
+                </label>
+              )}
+              <div className="notification-actions profile-form-actions">
+                <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
+                <button type="submit" data-section="bank" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Bank Details'}</button>
+              </div>
+            </form>
+          </Section>
+
+          <Section title="Government & Statutory Details">
+            <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
+              <label>
+                <span>Aadhaar No.</span>
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={12}
+                  value={form.aadhaarCardNo}
+                  onChange={(event) => updateField('aadhaarCardNo', digitsOnly(event.target.value).slice(0, 12))}
+                />
+              </label>
+              <label>
+                <span>PAN No.</span>
+                <input
+                  value={form.panCardNo}
+                  maxLength={10}
+                  onChange={(event) => updateField('panCardNo', alphanumericUpperOnly(event.target.value).slice(0, 10))}
+                />
+              </label>
+              <label>
+                <span>UAN No.</span>
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={12}
+                  value={form.pfUanNo}
+                  onChange={(event) => updateField('pfUanNo', digitsOnly(event.target.value).slice(0, 12))}
+                />
+              </label>
+              <label>
+                <span>ESIC No.</span>
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={10}
+                  value={form.esiNo}
+                  onChange={(event) => updateField('esiNo', digitsOnly(event.target.value).slice(0, 10))}
+                />
+              </label>
+              <div className="notification-actions profile-form-actions">
+                <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
+                <button type="submit" data-section="statutory" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Statutory Details'}</button>
+              </div>
+            </form>
+          </Section>
+
+          <Section title="Security & 2FA">
+            <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
+              <div className="profile-twofactor-toggle-row profile-secret-field--wide">
+                <label className="profile-checkbox-field profile-checkbox-field--inline profile-twofactor-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.twoFactorEnabled)}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      updateField('twoFactorEnabled', enabled);
+                      if (enabled && !form.twoFactorSecret) {
+                        updateField('twoFactorSecret', generateTwoFactorSecret());
+                      }
+                    }}
+                  />
+                  <span>Enable two-factor authentication</span>
+                </label>
+                <small>Protects sign-in with an authenticator code.</small>
+              </div>
+              <div className="profile-twofactor-panel profile-secret-field profile-secret-field--wide">
+                <div className="profile-twofactor-grid">
+                  <div className="profile-twofactor-qr">
+                    <span className="profile-twofactor-qr-title">Scan to enroll</span>
+                    {twoFactorQr ? (
+                      <img src={twoFactorQr} alt="Two-factor QR code" />
+                    ) : (
+                      <div className="profile-twofactor-qr-placeholder">
+                        <i className="ri-qr-code-line" aria-hidden="true" />
+                        <span>QR appears here after a secret is generated</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="profile-twofactor-copy">
+                    <label>
+                      <span>Authenticator Secret</span>
+                      <div className="profile-secret-row">
+                        <input
+                          value={form.twoFactorSecret}
+                          onChange={(event) => updateField('twoFactorSecret', event.target.value.trim().toUpperCase())}
+                          placeholder="Generate a secret for authenticator apps"
+                        />
+                        <button
+                          type="button"
+                          className="profile-secret-button"
+                          onClick={() => {
+                            const nextSecret = generateTwoFactorSecret();
+                            updateField('twoFactorSecret', nextSecret);
+                            updateField('twoFactorEnabled', true);
+                          }}
+                        >
+                          Generate
+                        </button>
+                      </div>
+                    </label>
+                    <small>Scan the QR in Google Authenticator, Microsoft Authenticator, or Authy.</small>
+                    <div className="profile-twofactor-actions">
+                      <button
+                        type="button"
+                        className="profile-secondary-action"
+                        onClick={async () => {
+                          if (twoFactorOtpUri) {
+                            await navigator.clipboard.writeText(twoFactorOtpUri);
+                            setStatusMessage('2FA setup URI copied to clipboard.');
+                          }
+                        }}
+                        disabled={!twoFactorOtpUri}
+                      >
+                        Copy Setup URI
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="notification-actions profile-form-actions">
+                <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
+                <button type="submit" data-section="security" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save 2FA Settings'}</button>
+              </div>
+            </form>
+          </Section>
+        </div>
+
+        <Section title="Stored Profile Data" className="section-card--full profile-storage-section">
           <div className="profile-group">
             <i className="ri-briefcase-4-line" aria-hidden="true" />
             <dl>
               {storedProfileDetails.map(([label, value]) => (
                 <div key={label}>
                   <dt>{label}</dt>
-                  <dd>{value || '-'}</dd>
+                  <dd
+                    className={label === 'Profile Photo URL' ? 'profile-url-value' : undefined}
+                    title={typeof value === 'string' ? value : undefined}
+                  >
+                    {value || '-'}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -741,6 +949,8 @@ function createProfileForm(employee) {
     panCardNo: employee.panCardNo || '',
     pfUanNo: employee.pfUanNo || '',
     esiNo: employee.esiNo || '',
+    twoFactorEnabled: Boolean(employee.twoFactorEnabled),
+    twoFactorSecret: employee.twoFactorSecret || '',
     newPassword: '',
     confirmPassword: '',
   };
@@ -764,6 +974,8 @@ function validateProfileSection(form, section, canManagePackageAmount) {
   const panCardNo = String(form.panCardNo || '').trim().toUpperCase();
   const pfUanNo = String(form.pfUanNo || '').trim();
   const esiNo = String(form.esiNo || '').trim();
+  const twoFactorEnabled = Boolean(form.twoFactorEnabled);
+  const twoFactorSecret = String(form.twoFactorSecret || '').trim().toUpperCase();
   const presentPinCode = String(form.presentPinCode || '').trim();
   const permanentPinCode = String(form.permanentPinCode || '').trim();
   const newPassword = String(form.newPassword || '').trim();
@@ -789,7 +1001,10 @@ function validateProfileSection(form, section, canManagePackageAmount) {
     requireValue(email, 'Email is required.');
     requireValue(isValidEmail(email), 'Enter a valid email address.');
     requireValue(mobileNo, 'Mobile number is required.');
-    requireValue(isValidMobileNumber(mobileNo), 'Enter a valid mobile number.');
+    requireValue(/^\d{10}$/.test(mobileNo), 'Mobile number must be exactly 10 digits.');
+  }
+
+  if (section === 'bank' || section === 'all') {
     requireValue(bankName, 'Bank name is required.');
     requireValue(accountType, 'Account type is required.');
     requireValue(accountNo, 'Account number is required.');
@@ -809,17 +1024,27 @@ function validateProfileSection(form, section, canManagePackageAmount) {
     if (permanentPinCode) {
       requireValue(/^\d{6}$/.test(permanentPinCode), 'Permanent PIN code must be 6 digits.');
     }
+  }
+
+  if (section === 'statutory' || section === 'all') {
     if (aadhaarCardNo) {
       requireValue(/^\d{12}$/.test(aadhaarCardNo), 'Aadhaar number must be 12 digits.');
     }
     if (panCardNo) {
-      requireValue(/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panCardNo), 'PAN number must follow the format AAAAA9999A.');
+      requireValue(/^[A-Z0-9]{10}$/.test(panCardNo), 'PAN number must be 10 alphanumeric characters.');
     }
     if (pfUanNo) {
       requireValue(/^\d{12}$/.test(pfUanNo), 'PF UAN must be 12 digits.');
     }
     if (esiNo) {
-      requireValue(/^\d{17}$/.test(esiNo), 'ESI number must be 17 digits.');
+      requireValue(/^\d{10}$/.test(esiNo), 'ESIC number must be 10 digits.');
+    }
+  }
+
+  if (section === 'security' || section === 'all') {
+    if (twoFactorEnabled) {
+      requireValue(twoFactorSecret, 'Two-factor secret is required when 2FA is enabled.');
+      requireValue(/^[A-Z2-7]{16,32}$/.test(twoFactorSecret), 'Two-factor secret must be a valid Base32 code.');
     }
   }
 
@@ -838,7 +1063,7 @@ function isValidEmail(value) {
 }
 
 function isValidMobileNumber(value) {
-  return /^(?:\+?91[-\s]?)?[6-9]\d{9}$/.test(String(value || '').trim());
+  return /^\d{10}$/.test(String(value || '').trim());
 }
 
 function isValidIfscCode(value) {
@@ -847,6 +1072,25 @@ function isValidIfscCode(value) {
 
 function digitsOnly(value) {
   return String(value || '').replace(/\D+/g, '');
+}
+
+function alphanumericUpperOnly(value) {
+  return String(value || '').replace(/[^a-zA-Z0-9]+/g, '').toUpperCase();
+}
+
+function generateTwoFactorSecret(length = 16) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const bytes = new Uint8Array(length);
+
+  if (window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  return Array.from(bytes, (value) => alphabet[value % alphabet.length]).join('');
 }
 
 function decimalOnly(value) {
@@ -885,6 +1129,8 @@ function upsertCurrentUser(users, currentAccessUser, nextEmployee, newPassword) 
     designation: nextEmployee.jobTitle || currentAccessUser?.designation || '',
     lastLogin: currentAccessUser?.lastLogin || 'Invite pending',
     permissions: currentAccessUser?.permissions || [],
+    twoFactorEnabled: Boolean(nextEmployee.twoFactorEnabled ?? currentAccessUser?.twoFactorEnabled),
+    twoFactorSecret: nextEmployee.twoFactorSecret || currentAccessUser?.twoFactorSecret || '',
   };
 
   const nextUsers = users.map((user) => (
@@ -948,7 +1194,19 @@ function normalizeProfileEmployee(employee) {
     role: jobTitle,
     accessRole,
     avatar: employee.avatar || getInitials(displayName),
+    twoFactorEnabled: Boolean(employee.twoFactorEnabled),
+    twoFactorSecret: employee.twoFactorSecret || '',
   };
+}
+
+function isCurrentAccessUser(user, identity) {
+  const identityId = normalizeLookupValue(identity.employeeId);
+  const identityEmail = normalizeLookupValue(identity.email);
+  const userId = normalizeLookupValue(user.employeeId || user.employeeCode || user.id);
+  const userEmail = normalizeLookupValue(user.email);
+
+  return (identityId && userId === identityId)
+    || (identityEmail && userEmail === identityEmail);
 }
 
 function isCurrentEmployee(employee, identity) {

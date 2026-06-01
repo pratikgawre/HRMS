@@ -15,6 +15,9 @@ public class Asset {
   private String serialNo;
   private String purchaseDate;
   private String status;
+  private String assignedTo;
+  private String condition;
+  private String location;
 
   public String getId() { return id; }
   public void setId(String id) { this.id = id; }
@@ -34,4 +37,10 @@ public class Asset {
   public void setPurchaseDate(String purchaseDate) { this.purchaseDate = purchaseDate; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
+  public String getAssignedTo() { return assignedTo; }
+  public void setAssignedTo(String assignedTo) { this.assignedTo = assignedTo; }
+  public String getCondition() { return condition; }
+  public void setCondition(String condition) { this.condition = condition; }
+  public String getLocation() { return location; }
+  public void setLocation(String location) { this.location = location; }
 }

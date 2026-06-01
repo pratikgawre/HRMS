@@ -329,7 +329,6 @@ function MyPayslip({ records, role, month, year, setMonth, setYear }) {
           ['PF', payslip.providentFund],
           ['GRATUITY', payslip.gratuity],
           ['PROF TAX', payslip.professionalTax],
-          ['Absent Days', payslip.absentDeduction],
           ['Half Days', payslip.halfDayDeduction],
           ['Other Deduction', payslip.otherDeduction],
         ]} total={getDeductions(payslip)} tone="deductions" />
@@ -505,7 +504,10 @@ function getPayslipPrintHtml(record) {
       html, body { width: 297mm; min-height: 210mm; margin: 0; background: #fff; color: #000; }
       body { font-family: Arial, Helvetica, sans-serif; }
       .print-shell { width: 297mm; min-height: 210mm; padding: 10mm 14mm; display: flex; align-items: flex-start; justify-content: center; }
-      .generated-payslip { width: 269mm; border: 2px solid #333; background: #fff; color: #000; font-size: 10px; line-height: 1.2; }
+      .generated-payslip { position: relative; width: 269mm; border: 2px solid #333; background: #fff; color: #000; font-size: 10px; line-height: 1.2; overflow: hidden; }
+      .generated-payslip-watermark { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 14mm; padding: 16mm; pointer-events: none; z-index: 0; }
+      .generated-payslip-watermark span { display: grid; place-items: center; color: rgba(15, 159, 154, 0.07); font-size: 30px; font-weight: 900; transform: rotate(-28deg); user-select: none; }
+      .generated-payslip > :not(.generated-payslip-watermark) { position: relative; z-index: 1; }
       .generated-payslip-header { display: grid; grid-template-columns: 52mm 1fr 52mm; align-items: center; min-height: 31mm; border-bottom: 2px solid #333; text-align: center; }
       .generated-payslip-header::after { content: ''; }
       .generated-payslip-logo { display: grid; justify-items: center; }
@@ -935,7 +937,6 @@ function getPayslipDeductions(record) {
     { label: 'PF', actual: record.providentFund },
     { label: 'GRATUITY', actual: record.gratuity },
     { label: 'PROF TAX', actual: record.professionalTax },
-    { label: 'ABSENT DAYS', actual: record.absentDeduction },
     { label: 'HALF DAYS', actual: record.halfDayDeduction },
     { label: 'OTHER DEDUCTION', actual: record.otherDeduction },
   ].filter((item) => item.actual > 0);

@@ -25,7 +25,6 @@ public class UserController {
 
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
-    appUserRepository.deleteAll();
     return appUserRepository.saveAll(users);
   }
 }
