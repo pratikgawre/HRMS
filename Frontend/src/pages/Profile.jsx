@@ -631,7 +631,13 @@ function Profile() {
               <label className="profile-password-field">
                 <span>New Password</span>
                 <div className="profile-password-input">
-                  <input type={showNewPassword ? 'text' : 'password'} value={form.newPassword} onChange={(event) => updateField('newPassword', event.target.value)} placeholder="Leave blank to keep current password" />
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={form.newPassword}
+                    onChange={(event) => updateField('newPassword', event.target.value)}
+                    placeholder="Leave blank to keep current password"
+                    autoComplete="new-password"
+                  />
                   <button type="button" className="profile-password-toggle" onClick={() => setShowNewPassword((current) => !current)} aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}>
                     <i className={showNewPassword ? 'ri-eye-off-line' : 'ri-eye-line'} aria-hidden="true" />
                   </button>
@@ -640,7 +646,13 @@ function Profile() {
               <label className="profile-password-field">
                 <span>Confirm Password</span>
                 <div className="profile-password-input">
-                  <input type={showConfirmPassword ? 'text' : 'password'} value={form.confirmPassword} onChange={(event) => updateField('confirmPassword', event.target.value)} placeholder="Repeat the new password" />
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={form.confirmPassword}
+                    onChange={(event) => updateField('confirmPassword', event.target.value)}
+                    placeholder="Repeat the new password"
+                    autoComplete="new-password"
+                  />
                   <button type="button" className="profile-password-toggle" onClick={() => setShowConfirmPassword((current) => !current)} aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}>
                     <i className={showConfirmPassword ? 'ri-eye-off-line' : 'ri-eye-line'} aria-hidden="true" />
                   </button>
