@@ -286,10 +286,11 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
 function MyPayslip({ records, role, month, year, setMonth, setYear }) {
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const employeeId = getSessionValue('kavyaEmployeeId');
-  const payslip = records.find((record) => employeeId && record.employeeId === employeeId && record.month === month && record.year === year)
-    || records.find((record) => record.ownerRole === role && record.month === month && record.year === year)
-    || records.find((record) => record.id === roleEmployeeFallback[role])
-    || records[0];
+  const safeRecords = Array.isArray(records) ? records : [];
+  const payslip = safeRecords.find((record) => employeeId && record.employeeId === employeeId && record.month === month && record.year === year)
+    || safeRecords.find((record) => record.ownerRole === role && record.month === month && record.year === year)
+    || safeRecords.find((record) => record.id === roleEmployeeFallback[role])
+    || getEmptyPayslip(role, month, year);
 
   return (
     <>
@@ -361,6 +362,39 @@ function MyPayslip({ records, role, month, year, setMonth, setYear }) {
       )}
     </>
   );
+}
+
+function getEmptyPayslip(role, month, year) {
+  const employeeCode = roleEmployeeFallback[role] || 'PAY-0000';
+
+  return {
+    id: `empty-${role}-${month}-${year}`,
+    employeeId: employeeCode,
+    employeeName: 'No payroll record',
+    role: roleLabels[role] || 'Employee',
+    department: '-',
+    location: '-',
+    month,
+    year,
+    status: 'Unpaid',
+    basic: 0,
+    hra: 0,
+    allowance: 0,
+    bonus: 0,
+    providentFund: 0,
+    gratuity: 0,
+    professionalTax: 0,
+    halfDayDeduction: 0,
+    otherDeduction: 0,
+    payableDays: 0,
+    daysInMonth: 0,
+    lopDays: 0,
+    bankName: '-',
+    accountNo: '-',
+    uanNo: '-',
+    aadhaarNo: '-',
+    panNo: '-',
+  };
 }
 
 function PayslipModal({ record, onClose }) {
