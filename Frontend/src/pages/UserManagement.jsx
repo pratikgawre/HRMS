@@ -4,9 +4,18 @@ import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
-import { getStoredEmployees, saveStoredEmployees } from '../utils/employeeStorage.js';
+import { getStoredEmployees, saveStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
+import { safeApiRequest } from '../utils/api.js';
 import { ACCESS_ROLE_OPTIONS, USER_STATUS_OPTIONS, getRoleBadgeClass } from '../utils/role-access.js';
-import { buildUserAccess, createUserAccess, deleteUserAccess, getInitials, getUsers, updateUserAccess } from '../utils/user-management.js';
+import {
+  buildUserAccess,
+  createUserAccess,
+  deleteUserAccess,
+  getInitials,
+  getUsers,
+  setUsersCache,
+  updateUserAccess,
+} from '../utils/user-management.js';
 import { ensureSeedUsers } from '../utils/auth.js';
 
 const fallbackEmployees = people.map((person) => ({
@@ -20,7 +29,7 @@ const fallbackEmployees = people.map((person) => ({
 function UserManagement() {
   const navigate = useNavigate();
   const location = useLocation();
-  const existingEmployees = getStoredEmployees(fallbackEmployees);
+  const [employees, setEmployees] = useState(() => getStoredEmployees(fallbackEmployees));
   const [users, setUsers] = useState(() => ensureSeedUsers());
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
@@ -46,13 +55,60 @@ function UserManagement() {
     }
   }, [location.hash, location.search]);
 
-  const filteredUsers = useMemo(() => users.filter((user) => {
+  useEffect(() => {
+    let active = true;
+
+    Promise.all([
+      safeApiRequest('/employees', []),
+      safeApiRequest('/users', []),
+    ]).then(([employeeRows, userRows]) => {
+      if (!active) {
+        return;
+      }
+
+      const normalizedEmployees = normalizeEmployees(
+        Array.isArray(employeeRows) && employeeRows.length > 0
+          ? employeeRows
+          : getStoredEmployees(fallbackEmployees)
+      );
+      const normalizedUsers = normalizeUsers(
+        Array.isArray(userRows) && userRows.length > 0 ? userRows : getUsers(),
+        normalizedEmployees
+      );
+
+      setEmployees(normalizedEmployees);
+      setEmployeesCache(normalizedEmployees);
+      if (normalizedUsers.length > 0) {
+        setUsers(normalizedUsers);
+        setUsersCache(normalizedUsers);
+      } else {
+        const seededUsers = normalizeUsers(ensureSeedUsers(), normalizedEmployees);
+        setUsers(seededUsers);
+      }
+    }).catch(() => {
+      if (!active) {
+        return;
+      }
+
+      const cachedEmployees = normalizeEmployees(getStoredEmployees(fallbackEmployees));
+      setEmployees(cachedEmployees);
+      setUsers(normalizeUsers(ensureSeedUsers(), cachedEmployees));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const displayedUsers = useMemo(() => normalizeUsers(users, employees), [users, employees]);
+
+  const filteredUsers = useMemo(() => displayedUsers.filter((user) => {
     const matchesSearch = `${user.employeeName} ${user.email} ${user.role} ${user.department} ${user.employeeId}`.toLowerCase().includes(search.toLowerCase());
     const matchesRole = roleFilter === 'All Roles' || user.role === roleFilter;
     const matchesStatus = statusFilter === 'All Status' || user.status === statusFilter;
 
     return matchesSearch && matchesRole && matchesStatus;
-  }), [users, search, roleFilter, statusFilter]);
+  }), [displayedUsers, search, roleFilter, statusFilter]);
 
   const summary = useMemo(() => {
     const active = users.filter((user) => user.status === 'Active').length;
@@ -162,7 +218,7 @@ function UserManagement() {
       return;
     }
 
-    const employee = existingEmployees.find((item) => (item.employeeCode || item.id) === form.employeeId);
+    const employee = employees.find((item) => (item.employeeCode || item.id) === form.employeeId);
     if (!employee) {
       setMessage('Please select an existing employee before saving access.');
       return;
@@ -235,7 +291,7 @@ function UserManagement() {
         <UserModal
           form={form}
           setForm={setForm}
-          employees={existingEmployees}
+          employees={employees}
           users={users}
           isEditing={Boolean(editingUser)}
           title={editingUser ? 'Edit User Access' : 'Invite Existing Employee'}
@@ -293,7 +349,7 @@ function UserModal({ form, setForm, employees, users, isEditing, title, onClose,
       employeeId: employee.employeeCode || employee.id,
       employeeName: employee.displayName || employee.name,
       email: employee.email || '',
-      department: employee.department || '',
+      department: employee.department || employee.departmentName || 'General',
       designation: employee.jobTitle || employee.role || '',
     }));
   };
@@ -355,6 +411,73 @@ function UserModal({ form, setForm, employees, users, isEditing, title, onClose,
       </section>
     </div>
   );
+}
+
+function normalizeEmployees(rows) {
+  return (Array.isArray(rows) ? rows : []).map((employee, index) => {
+    const employeeCode = employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`;
+    const displayName = employee.displayName || employee.name || employee.employeeName || `Employee ${index + 1}`;
+
+    return {
+      ...employee,
+      id: employee.id || employeeCode,
+      employeeId: employee.employeeId || employeeCode,
+      employeeCode,
+      displayName,
+      name: employee.name || displayName,
+      department: employee.department || employee.departmentName || employee.team || 'General',
+      jobTitle: employee.jobTitle || employee.role || '',
+    };
+  });
+}
+
+function normalizeUsers(rows, employees = []) {
+  const employeeById = new Map();
+  const employeeByEmail = new Map();
+  const employeeByName = new Map();
+
+  normalizeEmployees(employees).forEach((employee) => {
+    const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase();
+    const employeeEmail = String(employee.email || '').trim().toLowerCase();
+    const employeeName = String(employee.displayName || employee.name || '').trim().toLowerCase();
+
+    if (employeeId) {
+      employeeById.set(employeeId, employee);
+    }
+
+    if (employeeEmail) {
+      employeeByEmail.set(employeeEmail, employee);
+    }
+
+    if (employeeName) {
+      employeeByName.set(employeeName, employee);
+    }
+  });
+
+  return (Array.isArray(rows) ? rows : []).map((user, index) => {
+    const employeeId = String(user.employeeId || '').trim().toLowerCase();
+    const email = String(user.email || '').trim().toLowerCase();
+    const employeeName = String(user.employeeName || '').trim().toLowerCase();
+    const matchedEmployee = employeeById.get(employeeId) || employeeByEmail.get(email) || employeeByName.get(employeeName);
+    const userId = user.userId || user.id || `USR-${user.employeeId || index + 1}`;
+    const role = user.role || 'Employee';
+
+    return {
+      ...user,
+      id: user.id || userId,
+      userId,
+      email: user.email || '',
+      role,
+      employeeId: user.employeeId || matchedEmployee?.employeeCode || matchedEmployee?.employeeId || '',
+      employeeName: user.employeeName || matchedEmployee?.displayName || matchedEmployee?.name || 'Employee',
+      department: user.department || matchedEmployee?.department || 'General',
+      designation: user.designation || matchedEmployee?.jobTitle || matchedEmployee?.role || '',
+      avatar: user.avatar || matchedEmployee?.avatar || '',
+      profilePicture: user.profilePicture || matchedEmployee?.profilePicture || '',
+      status: user.status || 'Active',
+      lastLogin: user.lastLogin || '-',
+    };
+  });
 }
 
 function getEmptyUserForm() {

@@ -314,7 +314,7 @@ function Settings() {
       )}
 
       <div className="settings-stack">
-        {!isEmployeeView && (
+        {isAdmin && (
           <section className="settings-banner">
             <div>
               <p className="eyebrow">Access scope</p>

@@ -19,7 +19,6 @@ const menus = {
     { label: 'User Management', to: '/hr/users', icon: 'ri-user-settings-line' },
     { label: 'Projects', to: '/hr/projects', icon: 'ri-folder-chart-line' },
     { label: 'Task Assignment', to: '/hr/tasks', icon: 'ri-task-line' },
-    { label: 'Task Status Update', to: '/hr/task-status', icon: 'ri-checkbox-circle-line' },
     { label: 'Asset Management', to: '/hr/assets', icon: 'ri-briefcase-4-line' },
     { label: 'Employees', to: '/hr/employees', icon: 'ri-team-line' },
     { label: 'Attendance', to: '/hr/attendance', icon: 'ri-time-line' },

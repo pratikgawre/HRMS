@@ -64,7 +64,7 @@ function App() {
             <Route path="/hr/users" element={<UserManagement />} />
             <Route path="/hr/projects" element={<Projects />} />
             <Route path="/hr/tasks" element={<Tasks />} />
-            <Route path="/hr/task-status" element={<Tasks />} />
+            <Route path="/hr/task-status" element={<Navigate to="/hr/tasks" replace />} />
             <Route path="/hr/assets" element={<Assets />} />
             <Route path="/hr/employees" element={<Employees />} />
             <Route path="/hr/attendance" element={<EmployeeAttendance />} />
