@@ -18,7 +18,18 @@ public class SettingsWebSocketHandler extends TextWebSocketHandler {
   @Override
   public void afterConnectionEstablished(WebSocketSession session) throws Exception {
     broadcastService.register(session);
-    session.sendMessage(new TextMessage("{\"type\":\"settings-connected\"}"));
+    try {
+      if (session.isOpen()) {
+        session.sendMessage(new TextMessage("{\"type\":\"settings-connected\"}"));
+      }
+    } catch (IOException ex) {
+      broadcastService.unregister(session);
+      try {
+        session.close();
+      } catch (IOException ignored) {
+        // Ignore close errors when the client disconnects during handshake.
+      }
+    }
   }
 
   @Override

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { people, salaryRecords } from '../data/dummyData.js';
+import { salaryRecords } from '../data/dummyData.js';
+import { apiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getInitialAttendanceRows } from '../utils/attendanceStorage.js';
-import { getStoredEmployees } from '../utils/employeeStorage.js';
 import { getStoredPayrollRecords, refreshStoredPayrollRecords, saveStoredPayrollRecords } from '../utils/payrollStorage.js';
 import kavyaLogo from '../assets/logo.png';
 
@@ -33,6 +33,7 @@ function Payroll() {
   const defaultPeriod = getDefaultPayrollPeriod();
   const [selectedMonth, setSelectedMonth] = useState(months[defaultPeriod.monthIndex]);
   const [selectedYear, setSelectedYear] = useState(String(defaultPeriod.year));
+  const [employees, setEmployees] = useState([]);
   const [savedPayrollRecords, setSavedPayrollRecords] = useState(() => getStoredPayrollRecords());
   const [statusOverrides, setStatusOverrides] = useState(() => getInitialPayrollStatuses(getStoredPayrollRecords()));
   const [isPayrollStorageReady, setIsPayrollStorageReady] = useState(false);
@@ -42,9 +43,30 @@ function Payroll() {
     year: Number(selectedYear),
   }), [selectedMonth, selectedYear]);
   const records = useMemo(() => {
-    const employees = getStoredEmployees(people).filter((employee) => !isAdminEmployee(employee));
     return buildPayrollRecords(employees, getInitialAttendanceRows(), statusOverrides, payrollPeriod, savedPayrollRecords);
-  }, [payrollPeriod, refreshKey, savedPayrollRecords, statusOverrides]);
+  }, [employees, payrollPeriod, refreshKey, savedPayrollRecords, statusOverrides]);
+
+  useEffect(() => {
+    let active = true;
+
+    apiRequest('/employees')
+      .then((employeeRows) => {
+        if (!active) {
+          return;
+        }
+
+        setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
+      })
+      .catch(() => {
+        if (active) {
+          setEmployees([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [refreshKey]);
 
   useEffect(() => {
     refreshStoredPayrollRecords()
@@ -1009,17 +1031,6 @@ function numberToWords(value) {
     thousand ? `${underThousand(thousand)} Thousand` : '',
     rest ? underThousand(rest) : '',
   ].filter(Boolean).join(' ');
-}
-
-function isAdminEmployee(employee) {
-  const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase();
-  const email = String(employee.email || '').trim().toLowerCase();
-  const accessRole = String(employee.accessRole || employee.role || employee.designation || '').trim().toLowerCase();
-
-  return employeeId === 'admin-001'
-    || email === 'admin@gmail.com'
-    || accessRole === 'super admin'
-    || accessRole === 'admin';
 }
 
 export default Payroll;

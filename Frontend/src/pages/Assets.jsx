@@ -2,18 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { apiRequest, safeApiRequest } from '../utils/api.js';
+import { apiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { useLocation } from 'react-router-dom';
-
-const initialAssets = [
-  { id: 'AST-101', assetName: 'Dell Latitude 5440', category: 'Laptop', assignedTo: 'Aarav Sharma', status: 'Assigned', condition: 'Good', location: 'Office' },
-  { id: 'AST-102', assetName: 'HP EliteBook 840', category: 'Laptop', assignedTo: 'Meera Nair', status: 'Assigned', condition: 'Good', location: 'Remote' },
-  { id: 'AST-103', assetName: 'Logitech MX Keys', category: 'Keyboard', assignedTo: '-', status: 'Available', condition: 'New', location: 'Store' },
-  { id: 'AST-104', assetName: 'Samsung Monitor 24"', category: 'Monitor', assignedTo: 'Kabir Khan', status: 'Pending Return', condition: 'Good', location: 'Cabin 3' },
-  { id: 'AST-105', assetName: 'Sony Headset WH-1000XM5', category: 'Headset', assignedTo: '-', status: 'Repair Needed', condition: 'Faulty', location: 'Store' },
-  { id: 'AST-106', assetName: 'iPhone 13', category: 'Phone', assignedTo: 'Isha Patel', status: 'Replacement Requested', condition: 'Damaged', location: 'IT Desk' },
-];
 
 function Assets() {
   const role = getSessionValue('kavyaRole') || 'employee';
@@ -38,30 +29,19 @@ function Assets() {
     let active = true;
 
     Promise.all([
-      safeApiRequest('/assets', []),
-      safeApiRequest('/employees', []),
+      apiRequest('/assets').catch(() => []),
+      apiRequest('/employees').catch(() => []),
     ]).then(([assetRows, employeeRows]) => {
       if (!active) {
         return;
       }
 
-      const employeeList = Array.isArray(employeeRows) ? employeeRows : [];
-      const normalizedAssets = normalizeAssetRows(
-        Array.isArray(assetRows) && assetRows.length > 0 ? assetRows : initialAssets,
-        employeeList
-      );
-      setAssets(normalizedAssets);
-      setEmployees(employeeList);
-
-      if (!Array.isArray(assetRows) || assetRows.length === 0) {
-        apiRequest('/assets/bulk', {
-          method: 'POST',
-          body: JSON.stringify(normalizedAssets.map(serializeAssetForApi)),
-        }).catch(() => {});
-      }
+      setAssets(normalizeAssetRows(Array.isArray(assetRows) ? assetRows : []));
+      setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
     }).catch(() => {
       if (active) {
-        setAssets(normalizeAssetRows(initialAssets));
+        setAssets([]);
+        setEmployees([]);
       }
     });
 
@@ -69,18 +49,6 @@ function Assets() {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (assets.length === 0) {
-      return;
-    }
-
-    window.localStorage.setItem('kavyaAssets', JSON.stringify(assets));
-    apiRequest('/assets/bulk', {
-      method: 'POST',
-      body: JSON.stringify(assets.map(serializeAssetForApi)),
-    }).catch(() => {});
-  }, [assets]);
 
   useEffect(() => {
     const hashId = location.hash.replace('#', '');
@@ -192,7 +160,21 @@ function Assets() {
       return;
     }
 
-    setAssets((current) => current.map((asset) => (asset.id === assetId ? { ...asset, ...patch } : asset)));
+    const currentAsset = assets.find((asset) => asset.id === assetId);
+    if (!currentAsset) {
+      return;
+    }
+
+    const nextAsset = { ...currentAsset, ...patch };
+    apiRequest(`/assets/${assetId}`, {
+      method: 'PUT',
+      body: JSON.stringify(serializeAssetForApi(nextAsset)),
+    })
+      .then((savedAsset) => {
+        const normalizedSavedAsset = normalizeAssetRows([savedAsset], employees)[0] || nextAsset;
+        setAssets((current) => current.map((asset) => (asset.id === assetId ? normalizedSavedAsset : asset)));
+      })
+      .catch(() => {});
   };
 
   const requestRepair = (assetId) => {
@@ -251,7 +233,7 @@ function Assets() {
     const selectedEmployee = employeeLookup.get(String(assetForm.assignedTo || '').trim().toLowerCase());
     const assignedTo = assetForm.status === 'Available'
       ? '-'
-      : (selectedEmployee?.employeeName || assignedEmployeeQuery.trim() || 'Unassigned');
+      : (selectedEmployee?.employeeId || assetForm.assignedTo || assignedEmployeeQuery.trim() || 'Unassigned');
 
     const nextAsset = {
       id: nextAssetCode,
@@ -269,18 +251,28 @@ function Assets() {
       location: assetForm.location.trim() || 'Store',
     };
 
-    setAssets((current) => [nextAsset, ...current]);
-    setAssetForm({
-      assetName: '',
-      category: 'Laptop',
-      assignedTo: '',
-      status: 'Available',
-      condition: 'Good',
-      location: 'Store',
-    });
-    setAssignedEmployeeQuery('');
-    setIsEmployeePickerOpen(false);
-    setAssetMessage(`Added ${nextAsset.assetName} as ${nextAsset.id}.`);
+    apiRequest('/assets', {
+      method: 'POST',
+      body: JSON.stringify(serializeAssetForApi(nextAsset)),
+    })
+      .then((savedAsset) => {
+        const normalizedSavedAsset = normalizeAssetRows([savedAsset], employees)[0] || nextAsset;
+        setAssets((current) => [normalizedSavedAsset, ...current]);
+        setAssetForm({
+          assetName: '',
+          category: 'Laptop',
+          assignedTo: '',
+          status: 'Available',
+          condition: 'Good',
+          location: 'Store',
+        });
+        setAssignedEmployeeQuery('');
+        setIsEmployeePickerOpen(false);
+        setAssetMessage(`Added ${nextAsset.assetName} as ${nextAsset.id}.`);
+      })
+      .catch(() => {
+        setAssetMessage('Could not save asset to backend. Please try again.');
+      });
   };
 
   const employeeOptions = useMemo(() => employees.map((employee) => {
@@ -604,6 +596,8 @@ function normalizeAssetRows(rows, employees = []) {
       ? employeeByName.get(String(asset.assignedTo).toLowerCase())
       : null;
     const matchedEmployee = employeeByAssetId || employeeByAssetName;
+    const assignedToEmployeeId = matchedEmployee?.employeeId || asset.assignedToEmployeeId || '';
+    const assignedToEmployeeName = matchedEmployee?.employeeName || asset.assignedTo || '-';
     return {
       id: asset.id || assetCode,
       assetCode,
@@ -614,8 +608,8 @@ function normalizeAssetRows(rows, employees = []) {
       serialNo: asset.serialNo || '',
       purchaseDate: asset.purchaseDate || '',
       status: asset.status || 'Available',
-      assignedTo: matchedEmployee?.employeeName || asset.assignedTo || '-',
-      assignedToEmployeeId: matchedEmployee?.employeeId || asset.assignedToEmployeeId || '',
+      assignedTo: assignedToEmployeeName,
+      assignedToEmployeeId,
       condition: asset.condition || 'Good',
       location: asset.location || 'Store',
     };
@@ -623,6 +617,8 @@ function normalizeAssetRows(rows, employees = []) {
 }
 
 function serializeAssetForApi(asset) {
+  const assignedToEmployeeId = String(asset.assignedToEmployeeId || asset.assignedTo || '').trim();
+
   return {
     id: asset.id,
     assetCode: asset.assetCode || asset.id,
@@ -633,8 +629,7 @@ function serializeAssetForApi(asset) {
     serialNo: asset.serialNo || '',
     purchaseDate: asset.purchaseDate || '',
     status: asset.status,
-    assignedTo: asset.assignedTo || '-',
-    assignedToEmployeeId: asset.assignedToEmployeeId || '',
+    assignedTo: assignedToEmployeeId || '-',
     condition: asset.condition || 'Good',
     location: asset.location || 'Store',
   };

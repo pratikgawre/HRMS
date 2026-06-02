@@ -6,9 +6,11 @@ import { dashboardStats } from '../data/dummyData.js';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section } from './AdminDashboard.jsx';
 import { projectColumns } from './Projects.jsx';
 import { taskColumns } from './Tasks.jsx';
+import { loadTasksWithSeed } from '../utils/taskStorage.js';
 
 function ProjectManagerDashboard() {
   const [projects, setProjects] = useState([]);
+  const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
     let mounted = true;
@@ -23,7 +25,18 @@ function ProjectManagerDashboard() {
         .catch(() => {});
     };
 
+    const loadTasks = () => {
+      loadTasksWithSeed(fallbackTasks)
+        .then((rows) => {
+          if (mounted) {
+            setTasks(rows);
+          }
+        })
+        .catch(() => {});
+    };
+
     loadProjects();
+    loadTasks();
     const interval = window.setInterval(loadProjects, 15000);
     window.addEventListener('focus', loadProjects);
     window.addEventListener('kavyaProjectsChanged', loadProjects);
@@ -37,6 +50,7 @@ function ProjectManagerDashboard() {
   }, []);
 
   const liveProjects = useMemo(() => projects.length > 0 ? projects : fallbackProjects(), [projects]);
+  const liveTasks = useMemo(() => tasks.length > 0 ? tasks : fallbackTasks.slice(0, 3), [tasks]);
 
   return (
     <>
@@ -48,7 +62,7 @@ function ProjectManagerDashboard() {
           <DataTable columns={projectColumns} rows={liveProjects} emptyMessage="No projects available." />
         </Section>
         <Section title="Delivery Tasks" action="Assign">
-          <DataTable columns={taskColumns} rows={fallbackTasks.slice(0, 3)} />
+          <DataTable columns={taskColumns} rows={liveTasks.slice(0, 3)} emptyMessage="No tasks available." />
         </Section>
       </div>
       <InsightGrid />
