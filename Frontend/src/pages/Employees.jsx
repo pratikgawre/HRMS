@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { getAllStatesWithDistricts } from 'india-state-district';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
@@ -235,7 +235,6 @@ const employeeSteps = [
 ];
 
 function Employees() {
-  const navigate = useNavigate();
   const location = useLocation();
   const [employees, setEmployees] = useState(() => getUserEnteredEmployees());
   const [search, setSearch] = useState('');
@@ -283,36 +282,12 @@ function Employees() {
     const fullTime = employees.filter((person) => person.employmentType === 'Full Time').length;
 
     return [
-      { label: 'Employees', value: String(employees.length).padStart(2, '0'), delta: 'People records', tone: 'blue', icon: 'ri-team-line', onClick: () => navigateEmployeeGroup() },
-      { label: 'Active', value: String(active).padStart(2, '0'), delta: 'Available today', tone: 'green', icon: 'ri-user-follow-line', onClick: () => navigateEmployeeGroup({ status: 'Active' }) },
-      { label: 'On Leave', value: String(onLeave).padStart(2, '0'), delta: 'Marked away', tone: 'orange', icon: 'ri-suitcase-line', onClick: () => navigateEmployeeGroup({ status: 'On Leave' }) },
-      { label: 'Full Time', value: String(fullTime).padStart(2, '0'), delta: 'Core team', tone: 'pink', icon: 'ri-briefcase-4-line', onClick: () => navigateEmployeeGroup({ employmentType: 'Full Time' }) },
+      { label: 'Employees', value: String(employees.length).padStart(2, '0'), delta: 'People records', tone: 'blue', icon: 'ri-team-line' },
+      { label: 'Active', value: String(active).padStart(2, '0'), delta: 'Available today', tone: 'green', icon: 'ri-user-follow-line' },
+      { label: 'On Leave', value: String(onLeave).padStart(2, '0'), delta: 'Marked away', tone: 'orange', icon: 'ri-suitcase-line' },
+      { label: 'Full Time', value: String(fullTime).padStart(2, '0'), delta: 'Core team', tone: 'pink', icon: 'ri-briefcase-4-line' },
     ];
   }, [employees]);
-
-  const navigateEmployeeGroup = (filters = {}) => {
-    const params = new URLSearchParams();
-    if (filters.status) params.set('status', filters.status);
-    if (filters.department) params.set('department', filters.department);
-    if (filters.employmentType) params.set('employmentType', filters.employmentType);
-
-    navigate({
-      pathname: location.pathname,
-      search: params.toString() ? `?${params.toString()}` : '',
-      hash: '#employee-directory',
-    });
-    showEmployeeGroup(filters);
-  };
-
-  const showEmployeeGroup = (filters = {}) => {
-    setSearch('');
-    setDepartment('All Departments');
-    setStatus(filters.status || 'All');
-    setEmploymentType(filters.employmentType || 'All Types');
-    requestAnimationFrame(() => {
-      document.getElementById('employee-directory')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  };
 
   const columns = [
     {

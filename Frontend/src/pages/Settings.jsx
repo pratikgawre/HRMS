@@ -6,8 +6,6 @@ import { normalizeAccessRole } from '../utils/role-access.js';
 
 const SECTION_KEYS = ['company', 'departments', 'designations', 'leaveTypes', 'rolePermissions', 'payroll'];
 const HR_SECTION_KEYS = ['company', 'departments', 'designations', 'leaveTypes', 'payroll'];
-const SETTINGS_WS_URL = 'ws://localhost:8080/ws/settings';
-
 const DEFAULT_SETTINGS = {
   id: 'default',
   companyName: 'Kavya HRMS',
@@ -56,8 +54,7 @@ function Settings() {
   const [previewRole, setPreviewRole] = useState(accessRole);
   const [popup, setPopup] = useState(null);
   const toastTimerRef = useRef(null);
-  const wsRef = useRef(null);
-  const wsReconnectTimerRef = useRef(null);
+  const refreshTimerRef = useRef(null);
 
   useEffect(() => {
     loadInitialSettings();
@@ -83,59 +80,28 @@ function Settings() {
   useEffect(() => {
     let disposed = false;
 
-    const connect = () => {
-      if (disposed || typeof WebSocket === 'undefined') {
-        return;
-      }
-
-      try {
-        const socket = new WebSocket(SETTINGS_WS_URL);
-        wsRef.current = socket;
-
-        socket.onmessage = (event) => {
-          try {
-            const payload = JSON.parse(event.data);
-            if (payload?.type === 'settings-updated') {
-              refreshSettingsFromServer().catch(() => {});
-            }
-          } catch {
-            refreshSettingsFromServer().catch(() => {});
-          }
-        };
-
-        socket.onclose = () => {
-          if (disposed) {
-            return;
-          }
-
-          wsReconnectTimerRef.current = window.setTimeout(connect, 3000);
-        };
-
-        socket.onerror = () => {
-          try {
-            socket.close();
-          } catch {
-            // Ignore websocket close errors.
-          }
-        };
-      } catch {
-        wsReconnectTimerRef.current = window.setTimeout(connect, 3000);
-      }
+    const pollSettings = () => {
+      refreshSettingsFromServer().catch(() => {});
     };
 
-    connect();
+    pollSettings();
+    refreshTimerRef.current = window.setInterval(() => {
+      if (!disposed) {
+        pollSettings();
+      }
+    }, 15000);
+
+    const handleSettingsChanged = () => {
+      pollSettings();
+    };
+
+    window.addEventListener('kavyaSettingsChanged', handleSettingsChanged);
 
     return () => {
       disposed = true;
-      if (wsReconnectTimerRef.current) {
-        window.clearTimeout(wsReconnectTimerRef.current);
-      }
-      if (wsRef.current) {
-        try {
-          wsRef.current.close();
-        } catch {
-          // Ignore cleanup errors.
-        }
+      window.removeEventListener('kavyaSettingsChanged', handleSettingsChanged);
+      if (refreshTimerRef.current) {
+        window.clearInterval(refreshTimerRef.current);
       }
     };
   }, []);

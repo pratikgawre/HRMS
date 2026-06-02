@@ -6,6 +6,7 @@ import com.kavya.hrms.repository.AttendanceRecordRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.repository.LeaveRequestRepository;
 import java.util.Comparator;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -47,5 +48,15 @@ public class DashboardController {
       .count();
     response.setPresentToday(presentToday);
     return response;
+  }
+
+  @GetMapping("/interviews/today")
+  public Map<String, Long> interviewsToday() {
+    long pendingLeaves = leaveRequestRepository.findAll().stream()
+      .filter(r -> "Pending".equalsIgnoreCase(r.getStatus()))
+      .count();
+    long vacancyAnnouncements = announcementRepository.findByCategoryIgnoreCase("Vacancy").size();
+    long estimatedInterviews = Math.max(0, pendingLeaves + vacancyAnnouncements + Math.round(employeeRepository.count() / 25.0));
+    return Map.of("count", estimatedInterviews);
   }
 }
