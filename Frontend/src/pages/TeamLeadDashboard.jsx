@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from 'react';
+import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +10,54 @@ import { taskColumns } from './Tasks.jsx';
 import { safeApiRequest } from '../utils/api.js';
 import { getTodayLabel } from '../utils/attendanceStorage.js';
 import { loadTasksWithSeed } from '../utils/taskStorage.js';
+import { getInitials } from '../utils/user-management.js';
+
+const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
+
+const teamLeadResponsibilities = [
+  {
+    label: 'Assigned Team',
+    value: 'View',
+    delta: 'See your team members and ownership at a glance.',
+    tone: 'blue',
+    icon: 'ri-team-line',
+  },
+  {
+    label: 'Assign Tasks',
+    value: 'Create',
+    delta: 'Assign work with priority, due date, and assignee.',
+    tone: 'orange',
+    icon: 'ri-task-line',
+  },
+  {
+    label: 'Attendance',
+    value: 'Review',
+    delta: 'Check daily presence, check-in, and check-out records.',
+    tone: 'green',
+    icon: 'ri-time-line',
+  },
+  {
+    label: 'Leave Requests',
+    value: 'Recommend',
+    delta: 'Review team leave before HR/Admin approval.',
+    tone: 'pink',
+    icon: 'ri-calendar-check-line',
+  },
+  {
+    label: 'Task Progress',
+    value: 'Track',
+    delta: 'Monitor priority, status, and delivery progress.',
+    tone: 'blue',
+    icon: 'ri-bar-chart-box-line',
+  },
+  {
+    label: 'Tickets & Notices',
+    value: 'Handle',
+    delta: 'Raise support tickets and view announcements.',
+    tone: 'green',
+    icon: 'ri-megaphone-line',
+  },
+];
 
 function TeamLeadDashboard() {
   const navigate = useNavigate();

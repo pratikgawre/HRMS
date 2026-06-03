@@ -16,11 +16,13 @@ import {
 import { getSessionValue } from '../utils/appSession.js';
 
 const attendanceStatusOptions = ['Present', 'Half Day', 'Late', 'Absent', 'Leave'];
+const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 
 function EmployeeAttendance() {
   const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isEmployeeView = role === 'employee';
+  const isTeamLeadView = role === 'teamLead';
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
   const [status, setStatus] = useState('All');
   const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(new Date()));
@@ -31,12 +33,20 @@ function EmployeeAttendance() {
   const todayLabel = getTodayLabel();
   const todayInputValue = getDateInputValue(new Date());
   const selectedDateLabel = getTodayLabel(getDateFromInputValue(selectedDate));
+  const attendanceEmployeeRows = useMemo(() => (
+    attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId)
+  ), [attendance, attendanceEmployee.employeeId]);
+  const teamLeadRows = useMemo(() => (
+    attendance.filter((row) => teamLeadMemberIds.includes(row.employeeId))
+  ), [attendance]);
 
   const scopedRows = useMemo(() => (
     isEmployeeView
-      ? attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId)
-      : attendance
-  ), [attendance, isEmployeeView, attendanceEmployee.employeeId]);
+      ? attendanceEmployeeRows
+      : isTeamLeadView
+        ? teamLeadRows
+        : attendance
+  ), [attendance, attendanceEmployeeRows, isEmployeeView, isTeamLeadView, teamLeadRows]);
 
   const rows = useMemo(() => scopedRows.filter((row) => {
     const matchesDate = row.date === selectedDateLabel;
@@ -44,9 +54,9 @@ function EmployeeAttendance() {
 
     return matchesDate && matchesStatus;
   }), [scopedRows, selectedDateLabel, status]);
-  const todayRecord = scopedRows.find((row) => row.employeeId === attendanceEmployee.employeeId && row.date === todayLabel);
-  const canCheckIn = isEmployeeView && !todayRecord;
-  const canCheckOut = isEmployeeView && Boolean(todayRecord?.checkInAt && !todayRecord?.checkOutAt);
+  const todayRecord = attendance.find((row) => row.employeeId === attendanceEmployee.employeeId && row.date === todayLabel);
+  const canCheckIn = (isEmployeeView || isTeamLeadView) && !todayRecord;
+  const canCheckOut = (isEmployeeView || isTeamLeadView) && Boolean(todayRecord?.checkInAt && !todayRecord?.checkOutAt);
 
   useEffect(() => {
     let mounted = true;
@@ -185,7 +195,7 @@ function EmployeeAttendance() {
     : null;
 
   const columns = [
-    ...(!isEmployeeView ? [{
+    ...(!isEmployeeView && !isTeamLeadView ? [{
       key: 'employee',
       label: 'Employee',
       render: (row) => (
@@ -199,7 +209,7 @@ function EmployeeAttendance() {
       ),
     }] : []),
     ...attendanceColumns,
-    ...(!isEmployeeView ? [{
+    ...(!isEmployeeView && !isTeamLeadView ? [{
       key: 'actions',
       label: 'Actions',
       render: (row) => (
@@ -212,7 +222,12 @@ function EmployeeAttendance() {
 
   return (
     <>
-      <Hero title="Attendance" copy="Review daily punches, monthly presence, late marks, and leave-day attendance records." />
+      <Hero
+        title="Attendance"
+        copy={isTeamLeadView
+          ? 'Review your team attendance while keeping your own check-in and check-out available.'
+          : 'Review daily punches, monthly presence, late marks, and leave-day attendance records.'}
+      />
 
       {message && (
         <div className="user-alert" role="status">
@@ -221,8 +236,11 @@ function EmployeeAttendance() {
         </div>
       )}
 
-      <Section title={isEmployeeView ? 'My Attendance Register' : 'Attendance Register'} action={!isEmployeeView ? 'Download CSV' : ''}>
-        {isEmployeeView && (
+      <Section
+        title={isTeamLeadView ? 'Team Attendance Register' : isEmployeeView ? 'My Attendance Register' : 'Attendance Register'}
+        action={!isEmployeeView && !isTeamLeadView ? 'Download CSV' : ''}
+      >
+        {(isEmployeeView || isTeamLeadView) && (
           <div className="attendance-action-panel">
             <div>
               <span>Today</span>
@@ -264,7 +282,7 @@ function EmployeeAttendance() {
         <DataTable columns={columns} rows={rows} emptyMessage={`No attendance records found for ${selectedDateLabel}.`} />
       </Section>
 
-      {editingRow && (
+      {editingRow && !isTeamLeadView && (
         <AttendanceCorrectionModal
           row={editingRow}
           form={correctionForm}

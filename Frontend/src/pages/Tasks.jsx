@@ -5,7 +5,9 @@ import { Hero, Section } from './AdminDashboard.jsx';
 import { tasks as fallbackTasks, people } from '../data/dummyData.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
-import { loadTasksWithSeed } from '../utils/taskStorage.js';
+import { apiRequest } from '../utils/api.js';
+import { getInitials } from '../utils/user-management.js';
+import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
 
 export const taskColumns = [
   { key: 'id', label: 'Task ID' },
@@ -16,12 +18,14 @@ export const taskColumns = [
   { key: 'status', label: 'Status' },
 ];
 
+const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
+const priorityOptions = ['Low', 'Medium', 'High', 'Urgent'];
+
 function Tasks() {
   const navigate = useNavigate();
   const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
-  const isHr = role === 'hr';
-  const showAssignAction = role !== 'hr';
+  const isTeamLead = role === 'teamLead';
   const [taskRows, setTaskRows] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [status, setStatus] = useState('All');
@@ -119,10 +123,10 @@ function Tasks() {
   return (
     <>
       <Hero
-        title={isHr ? 'Tasks' : 'Task Assignment'}
-        copy={isHr
-          ? 'View team tasks with ownership, priority, due date, and current status.'
-          : 'Assign, monitor, and review team tasks with ownership, priority, due date, and current status.'}
+        title={isTeamLead ? 'Task Assignment' : 'Tasks'}
+        copy={isTeamLead
+          ? 'Assign tasks to your team, track priority, and monitor delivery progress.'
+          : 'View team tasks with ownership, priority, due date, and current status.'}
       />
       {message && (
         <div className="user-alert" role="status">

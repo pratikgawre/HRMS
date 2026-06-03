@@ -33,7 +33,7 @@ const menus = {
   teamLead: [
     { label: 'Team Dashboard', to: '/team-lead/dashboard', icon: 'ri-dashboard-line' },
     { label: 'My Team', to: '/team-lead/team', icon: 'ri-team-line' },
-    { label: 'Team Attendance', to: '/team-lead/attendance', icon: 'ri-time-line' },
+    { label: 'My Attendance', to: '/team-lead/attendance', icon: 'ri-time-line' },
     { label: 'Task Assignment', to: '/team-lead/tasks', icon: 'ri-task-line' },
     { label: 'Leave Review', to: '/team-lead/leave-review', icon: 'ri-calendar-check-line' },
     { label: 'My Payslip', to: '/team-lead/payroll', icon: 'ri-money-rupee-circle-line' },
@@ -46,6 +46,7 @@ const menus = {
     { label: 'Projects', to: '/project-manager/projects', icon: 'ri-folder-chart-line' },
     { label: 'Project Team', to: '/project-manager/team', icon: 'ri-team-line' },
     { label: 'Task Assignment', to: '/project-manager/tasks', icon: 'ri-task-line' },
+    { label: 'Leave Review', to: '/project-manager/leave-review', icon: 'ri-calendar-check-line' },
     { label: 'Attendance', to: '/project-manager/attendance', icon: 'ri-time-line' },
     { label: 'My Payslip', to: '/project-manager/payroll', icon: 'ri-money-rupee-circle-line' },
     { label: 'Announcements', to: '/project-manager/announcements', icon: 'ri-megaphone-line' },

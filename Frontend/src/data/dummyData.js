@@ -42,7 +42,7 @@ export const quickActions = [
     adminPath: '/admin/leave-management',
     hrPath: '/hr/leave-approval',
     teamLeadPath: '/team-lead/leave-review',
-    projectManagerPath: '/project-manager/attendance',
+    projectManagerPath: '/project-manager/leave-review',
   },
   {
     label: 'Run Payroll',
