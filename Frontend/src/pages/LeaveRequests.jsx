@@ -223,13 +223,18 @@ function LeaveRequests() {
           <div className="leave-balance-strip" aria-label="Leave balances">
             {leaveSummary.balances.map((item) => (
               <article key={item.name} className="leave-balance-card">
-                <span>Leave balance</span>
-                <strong>{item.name}</strong>
-                <div className="leave-balance-card-value">
-                  <b>{item.remaining}</b>
-                  <small>of {item.days} days</small>
+                <span className={`leave-balance-card-icon tone-${getLeaveBalanceTone(item.name)}`}>
+                  <i className={getLeaveBalanceIcon(item.name)} aria-hidden="true" />
+                </span>
+                <div className="leave-balance-card-content">
+                  <span>Leave balance</span>
+                  <strong>{item.name}</strong>
+                  <div className="leave-balance-card-value">
+                    <b>{item.remaining}</b>
+                    <small>of {item.days} days</small>
+                  </div>
+                  <p>{item.used > 0 ? `${item.used} days used` : 'Unused so far'}</p>
                 </div>
-                <p>{item.used > 0 ? `${item.used} days used` : 'Unused so far'}</p>
               </article>
             ))}
           </div>
@@ -405,6 +410,22 @@ function formatRequesterRole(role) {
     .filter(Boolean)
     .map((part) => part[0].toUpperCase() + part.slice(1).toLowerCase())
     .join(' ');
+}
+
+function getLeaveBalanceIcon(name) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized.includes('sick')) return 'ri-first-aid-kit-line';
+  if (normalized.includes('work from home')) return 'ri-home-office-line';
+  if (normalized.includes('earned')) return 'ri-award-line';
+  return 'ri-calendar-check-line';
+}
+
+function getLeaveBalanceTone(name) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized.includes('sick')) return 'orange';
+  if (normalized.includes('work from home')) return 'pink';
+  if (normalized.includes('earned')) return 'green';
+  return 'blue';
 }
 
 export default LeaveRequests;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { salaryRecords } from '../data/dummyData.js';
@@ -129,6 +129,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
   const [message, setMessage] = useState('');
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [activeSummary, setActiveSummary] = useState('total');
+  const tableSectionRef = useRef(null);
 
   const summary = useMemo(() => {
     const totalPayroll = records.reduce((sum, record) => sum + getNetSalary(record), 0);
@@ -144,6 +145,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
   }, [records]);
 
   const summaryDetail = useMemo(() => getPayrollSummaryDetail(activeSummary, records), [activeSummary, records]);
+  const filteredRecords = useMemo(() => getFilteredPayrollRecords(activeSummary, records), [activeSummary, records]);
 
   const toggleStatus = (recordId) => {
     setStatusOverrides((current) => {
@@ -158,6 +160,21 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
       };
     });
     setMessage('Payroll payment status updated successfully');
+  };
+
+  const handleSummaryClick = (summaryId) => {
+    setActiveSummary(summaryId);
+    requestAnimationFrame(() => {
+      tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const handleGeneratePayroll = () => {
+    saveStoredPayrollRecords(mergePayrollRecords(savedPayrollRecords, records));
+    setMessage(`${selectedMonth} ${selectedYear} payroll generated and saved (${records.length} records).`);
+    requestAnimationFrame(() => {
+      tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   return (
@@ -176,7 +193,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
           <DashboardCard
             key={item.label}
             {...item}
-            onClick={() => setActiveSummary(item.id)}
+            onClick={() => handleSummaryClick(item.id)}
           />
         ))}
       </div>
@@ -197,20 +214,10 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
             </div>
           ))}
         </div>
-        <div className="payroll-detail-list">
-          {summaryDetail.rows.length > 0 ? summaryDetail.rows.map((record) => (
-            <button type="button" key={record.id} onClick={() => setSelectedPayslip(record)}>
-              <span>{record.employeeName}</span>
-              <small>{record.employeeId} - {record.department}</small>
-              <strong>{formatCurrency(getNetSalary(record))}</strong>
-            </button>
-          )) : (
-            <p>No records available for this summary.</p>
-          )}
-        </div>
       </section>
 
-      <Section title="Employee Salary Table" action="Payroll">
+      <div ref={tableSectionRef}>
+        <Section title="Employee Salary Table">
         <div className="payroll-toolbar">
           <label className="field payroll-filter-field">
             <span>Month</span>
@@ -224,7 +231,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
               {years.map((year) => <option key={year} value={year}>{year}</option>)}
             </select>
           </label>
-          <button className="payroll-primary" type="button" onClick={() => setMessage(`${selectedMonth} ${selectedYear} payroll generated and saved.`)}>
+          <button className="payroll-primary" type="button" onClick={handleGeneratePayroll}>
             <i className="ri-file-list-3-line" aria-hidden="true" />
             Generate
           </button>
@@ -244,7 +251,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
                 </tr>
               </thead>
               <tbody>
-                {records.map((record) => (
+                {filteredRecords.map((record) => (
                   <tr key={record.id}>
                     <td data-label="Employee">
                       <div className="employee-cell payroll-employee-cell">
@@ -275,6 +282,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
           </div>
         </div>
       </Section>
+      </div>
 
       {selectedPayslip && (
         <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
@@ -793,7 +801,6 @@ function getPayrollSummaryDetail(summaryId, records) {
   return {
     title: 'Total Payroll Details',
     value: formatCurrency(totalNet),
-    rows: records,
     metrics: [
       { label: 'Gross Earnings', value: formatCurrency(totalEarnings) },
       { label: 'Total Deductions', value: formatCurrency(totalDeductions) },
@@ -996,6 +1003,22 @@ function getPayslipDeductions(record) {
     { label: 'HALF DAYS', actual: record.halfDayDeduction },
     { label: 'OTHER DEDUCTION', actual: record.otherDeduction },
   ].filter((item) => item.actual > 0);
+}
+
+function getFilteredPayrollRecords(summaryId, records) {
+  if (summaryId === 'paid') {
+    return records.filter((record) => record.status === 'Paid');
+  }
+
+  if (summaryId === 'unpaid') {
+    return records.filter((record) => record.status !== 'Paid');
+  }
+
+  if (summaryId === 'average') {
+    return [...records].sort((first, second) => getNetSalary(second) - getNetSalary(first));
+  }
+
+  return records;
 }
 
 function getProvidentFund(monthlyGross, employee) {

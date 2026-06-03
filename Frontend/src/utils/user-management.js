@@ -95,13 +95,16 @@ export function updateUserAccess(userId, patch) {
 }
 
 function normalizeUser(user) {
-  const employeeId = user.employeeId || '';
+  const employeeId = String(user.employeeId || '').trim();
   const email = String(user.email || '').trim().toLowerCase();
+  const userId = String(user.userId || user.id || `USR-${employeeId || email}`).trim();
   const role = normalizeAccessRole(user.role || 'Employee');
 
   return {
     ...user,
-    userId: user.userId || user.id || `USR-${employeeId || email}`,
+    id: user.id || userId,
+    userId,
+    employeeId,
     email,
     role,
     status: user.status || 'Active',
@@ -121,56 +124,65 @@ export function getInitials(name) {
     .toUpperCase() || 'US';
 }
 
-function dedupeUsers(users) {
+export function dedupeUsers(users) {
   const uniqueUsers = [];
-  const employeeIdIndexes = new Map();
-  const emailIndexes = new Map();
+  const identityIndexes = new Map();
 
   users.forEach((user) => {
-    const employeeId = String(user.employeeId || '').trim().toLowerCase();
-    const email = String(user.email || '').trim().toLowerCase();
-    const duplicateIndex = employeeIdIndexes.get(employeeId) ?? emailIndexes.get(email);
+    const normalizedUser = normalizeUser(user);
+    const identityKeys = getUserIdentityKeys(normalizedUser);
+    const duplicateIndex = identityKeys.map((key) => identityIndexes.get(key)).find((value) => value !== undefined);
 
     if (duplicateIndex === undefined) {
-      uniqueUsers.push(user);
-      rememberUserIndexes(uniqueUsers.length - 1, user, employeeIdIndexes, emailIndexes);
+      uniqueUsers.push(normalizedUser);
+      rememberUserIndexes(uniqueUsers.length - 1, normalizedUser, identityIndexes);
       return;
     }
 
     const existingUser = uniqueUsers[duplicateIndex];
-    const preferredUser = getPreferredDuplicateUser(existingUser, user);
+    const preferredUser = getPreferredDuplicateUser(existingUser, normalizedUser);
     if (preferredUser !== existingUser) {
       uniqueUsers[duplicateIndex] = preferredUser;
-      rememberUserIndexes(duplicateIndex, preferredUser, employeeIdIndexes, emailIndexes);
     }
+
+    rememberUserIndexes(duplicateIndex, uniqueUsers[duplicateIndex], identityIndexes);
   });
 
   return uniqueUsers;
 }
 
-function rememberUserIndexes(index, user, employeeIdIndexes, emailIndexes) {
-  const employeeId = String(user.employeeId || '').trim().toLowerCase();
-  const email = String(user.email || '').trim().toLowerCase();
-
-  if (employeeId) {
-    employeeIdIndexes.set(employeeId, index);
-  }
-
-  if (email) {
-    emailIndexes.set(email, index);
-  }
+function rememberUserIndexes(index, user, identityIndexes) {
+  getUserIdentityKeys(user).forEach((key) => {
+    identityIndexes.set(key, index);
+  });
 }
 
 function getPreferredDuplicateUser(currentUser, nextUser) {
-  const currentEmail = String(currentUser.email || '').trim();
-  const nextEmail = String(nextUser.email || '').trim();
+  const mergedUser = {
+    ...currentUser,
+    ...nextUser,
+    id: currentUser.id || nextUser.id || currentUser.userId || nextUser.userId,
+    userId: currentUser.userId || nextUser.userId || currentUser.id || nextUser.id,
+    employeeId: currentUser.employeeId || nextUser.employeeId || '',
+    email: currentUser.email || nextUser.email || '',
+    employeeName: currentUser.employeeName || nextUser.employeeName || '',
+    role: currentUser.role || nextUser.role || 'Employee',
+    status: currentUser.status || nextUser.status || 'Active',
+    permissions: currentUser.permissions || nextUser.permissions || getPermissions(currentUser.role || nextUser.role || 'Employee'),
+    avatar: currentUser.avatar || nextUser.avatar || '',
+    profilePicture: currentUser.profilePicture || nextUser.profilePicture || '',
+    department: currentUser.department || nextUser.department || '',
+    designation: currentUser.designation || nextUser.designation || '',
+    lastLogin: currentUser.lastLogin || nextUser.lastLogin || '-',
+    twoFactorEnabled: Boolean(currentUser.twoFactorEnabled || nextUser.twoFactorEnabled),
+    twoFactorSecret: currentUser.twoFactorSecret || nextUser.twoFactorSecret || '',
+  };
 
-  if (!isValidEmail(currentEmail) && isValidEmail(nextEmail)) {
-    return nextUser;
-  }
+  const currentCompleteness = getUserCompletenessScore(currentUser);
+  const nextCompleteness = getUserCompletenessScore(nextUser);
 
-  if (!currentUser.employeeName && nextUser.employeeName) {
-    return nextUser;
+  if (nextCompleteness > currentCompleteness) {
+    return mergedUser;
   }
 
   return currentUser;
@@ -178,4 +190,26 @@ function getPreferredDuplicateUser(currentUser, nextUser) {
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function getUserIdentityKeys(user) {
+  return [
+    String(user.userId || '').trim().toLowerCase(),
+    String(user.employeeId || '').trim().toLowerCase(),
+    String(user.email || '').trim().toLowerCase(),
+  ].filter(Boolean);
+}
+
+function getUserCompletenessScore(user) {
+  return [
+    user.userId,
+    user.employeeId,
+    user.email,
+    user.employeeName,
+    user.department,
+    user.designation,
+    user.avatar,
+    user.profilePicture,
+    user.lastLogin && user.lastLogin !== '-' ? user.lastLogin : '',
+  ].filter(Boolean).length;
 }

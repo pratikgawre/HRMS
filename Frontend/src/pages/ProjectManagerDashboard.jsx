@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import { apiRequest } from '../utils/api.js';
 import { people, tasks as fallbackTasks } from '../data/dummyData.js';
@@ -11,6 +12,7 @@ import { loadTasksWithSeed } from '../utils/taskStorage.js';
 function ProjectManagerDashboard() {
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let mounted = true;
@@ -58,10 +60,10 @@ function ProjectManagerDashboard() {
       <QuickActions />
       <CardGrid stats={dashboardStats.projectManager} />
       <div className="dashboard-grid">
-        <Section title="Active Projects" action="New Project">
+        <Section title="Active Projects" action="Manage Projects" actionOnClick={() => navigate('/project-manager/projects')}>
           <DataTable columns={projectColumns} rows={liveProjects} emptyMessage="No projects available." />
         </Section>
-        <Section title="Delivery Tasks" action="Assign">
+        <Section title="Delivery Tasks" action="Assign" actionOnClick={() => navigate('/project-manager/tasks')}>
           <DataTable columns={taskColumns} rows={liveTasks.slice(0, 3)} emptyMessage="No tasks available." />
         </Section>
       </div>
@@ -76,6 +78,7 @@ function normalizeProjects(items = []) {
     name: item.name,
     manager: item.manager,
     team: item.team || '',
+    teamLabel: item.teamMembers?.length ? `${item.teamMembers.length} members` : item.team || '',
     milestone: item.milestone || '',
     progress: item.progress || '0%',
     status: item.status || 'Planning',
@@ -88,6 +91,7 @@ function fallbackProjects() {
     name: `${person.department} Project`,
     manager: person.name,
     team: person.role,
+    teamLabel: person.role,
     milestone: 'In progress',
     progress: `${50 + (index * 10)}%`,
     status: index === 0 ? 'Active' : 'Planning',
