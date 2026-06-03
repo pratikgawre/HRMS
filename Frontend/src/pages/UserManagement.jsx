@@ -11,6 +11,7 @@ import {
   buildUserAccess,
   createUserAccess,
   deleteUserAccess,
+  dedupeUsers,
   getInitials,
   getUsers,
   setUsersCache,
@@ -30,7 +31,7 @@ function UserManagement() {
   const navigate = useNavigate();
   const location = useLocation();
   const [employees, setEmployees] = useState(() => getStoredEmployees(fallbackEmployees));
-  const [users, setUsers] = useState(() => ensureSeedUsers());
+  const [users, setUsers] = useState(() => dedupeUsers(ensureSeedUsers()));
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
   const [statusFilter, setStatusFilter] = useState('All Status');
@@ -71,10 +72,10 @@ function UserManagement() {
           ? employeeRows
           : getStoredEmployees(fallbackEmployees)
       );
-      const normalizedUsers = normalizeUsers(
+      const normalizedUsers = dedupeUsers(normalizeUsers(
         Array.isArray(userRows) && userRows.length > 0 ? userRows : getUsers(),
         normalizedEmployees
-      );
+      ));
 
       setEmployees(normalizedEmployees);
       setEmployeesCache(normalizedEmployees);
@@ -92,7 +93,7 @@ function UserManagement() {
 
       const cachedEmployees = normalizeEmployees(getStoredEmployees(fallbackEmployees));
       setEmployees(cachedEmployees);
-      setUsers(normalizeUsers(ensureSeedUsers(), cachedEmployees));
+      setUsers(dedupeUsers(normalizeUsers(ensureSeedUsers(), cachedEmployees)));
     });
 
     return () => {
@@ -100,7 +101,7 @@ function UserManagement() {
     };
   }, []);
 
-  const displayedUsers = useMemo(() => normalizeUsers(users, employees), [users, employees]);
+  const displayedUsers = useMemo(() => dedupeUsers(normalizeUsers(users, employees)), [users, employees]);
 
   const filteredUsers = useMemo(() => displayedUsers.filter((user) => {
     const matchesSearch = `${user.employeeName} ${user.email} ${user.role} ${user.department} ${user.employeeId}`.toLowerCase().includes(search.toLowerCase());
@@ -211,7 +212,7 @@ function UserManagement() {
         role: form.role,
         status: form.status,
       });
-      setUsers(nextUsers);
+      setUsers(dedupeUsers(nextUsers));
       syncEmployeeAccessRole(form.employeeId, form.role);
       setMessage('System access updated successfully. Changes apply on next login or refresh.');
       setIsModalOpen(false);
@@ -230,7 +231,7 @@ function UserManagement() {
       status: form.status,
     });
     const result = createUserAccess(accessUser);
-    setUsers(getUsers());
+    setUsers(dedupeUsers(getUsers()));
     setMessage(result.message);
     if (result.ok) {
       setIsModalOpen(false);
@@ -245,7 +246,7 @@ function UserManagement() {
     }
 
     const nextUsers = deleteUserAccess(user.userId);
-    setUsers(nextUsers);
+    setUsers(dedupeUsers(nextUsers));
     setMessage(`${user.employeeName} access deleted successfully.`);
   };
 

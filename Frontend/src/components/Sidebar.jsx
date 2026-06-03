@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 const menus = {
   admin: [
     { label: 'Dashboard', to: '/admin/dashboard', icon: 'ri-dashboard-line' },
+    { label: 'Projects', to: '/admin/projects', icon: 'ri-folder-chart-line' },
     { label: 'User Management', to: '/admin/users', icon: 'ri-user-settings-line' },
     { label: 'Employees', to: '/admin/employees', icon: 'ri-team-line' },
     { label: 'Attendance', to: '/admin/attendance', icon: 'ri-time-line' },

@@ -1,29 +1,50 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { apiRequest } from '../utils/api.js';
-import { getSessionValue } from '../utils/appSession.js';
-
-const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
+import { safeApiRequest } from '../utils/api.js';
 
 function MyTeam() {
-  const role = getSessionValue('kavyaRole') || 'employee';
-  const isTeamLead = role === 'teamLead';
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
-    Promise.all([
-      apiRequest('/employees').catch(() => []),
-      apiRequest('/attendance').catch(() => []),
-      apiRequest('/tasks').catch(() => []),
-    ]).then(([employeeRows, attendanceRows, taskRows]) => {
-      setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
-      setAttendance(Array.isArray(attendanceRows) ? attendanceRows : []);
-      setTasks(Array.isArray(taskRows) ? taskRows : []);
-    });
+    let active = true;
+
+    const refreshTeamData = () => {
+      Promise.all([
+        safeApiRequest('/employees', []),
+        safeApiRequest('/attendance', []),
+        safeApiRequest('/tasks', []),
+      ]).then(([employeeRows, attendanceRows, taskRows]) => {
+        if (!active) {
+          return;
+        }
+
+        setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
+        setAttendance(Array.isArray(attendanceRows) ? attendanceRows : []);
+        setTasks(Array.isArray(taskRows) ? taskRows : []);
+      });
+    };
+
+    refreshTeamData();
+    const intervalId = window.setInterval(refreshTeamData, 15000);
+    window.addEventListener('focus', refreshTeamData);
+    window.addEventListener('kavyaEmployeesChanged', refreshTeamData);
+    window.addEventListener('kavyaAttendanceRowsChanged', refreshTeamData);
+    window.addEventListener('kavyaTasksChanged', refreshTeamData);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshTeamData);
+      window.removeEventListener('kavyaEmployeesChanged', refreshTeamData);
+      window.removeEventListener('kavyaAttendanceRowsChanged', refreshTeamData);
+      window.removeEventListener('kavyaTasksChanged', refreshTeamData);
+    };
   }, []);
 
   const rows = useMemo(() => {
@@ -79,6 +100,13 @@ function MyTeam() {
     { label: 'Departments', value: String(new Set(employees.map((employee) => employee.department).filter(Boolean)).size).padStart(2, '0'), delta: 'Reporting groups', tone: 'pink', icon: 'ri-building-2-line' },
   ];
 
+  const cardRoutes = {
+    'Team Members': '/team-lead/team',
+    'Attendance Marked': '/team-lead/attendance',
+    'Open Workload': '/team-lead/tasks',
+    Departments: '/team-lead/dashboard',
+  };
+
   const columns = [
     {
       key: 'name',
@@ -110,7 +138,13 @@ function MyTeam() {
       />
 
       <section className="dashboard-card-grid">
-        {cards.map((card) => <DashboardCard key={card.label} {...card} />)}
+        {cards.map((card) => (
+          <DashboardCard
+            key={card.label}
+            {...card}
+            onClick={() => navigate(cardRoutes[card.label] || '/team-lead/team')}
+          />
+        ))}
       </section>
 
       <Section title={isTeamLead ? 'Assigned Team' : 'Team Members'} action="Team Summary">

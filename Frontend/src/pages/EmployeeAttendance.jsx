@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import { Section, Hero } from './AdminDashboard.jsx';
 import { attendanceColumns } from './EmployeeDashboard.jsx';
@@ -18,6 +19,7 @@ const attendanceStatusOptions = ['Present', 'Half Day', 'Late', 'Absent', 'Leave
 const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 
 function EmployeeAttendance() {
+  const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isEmployeeView = role === 'employee';
   const isTeamLeadView = role === 'teamLead';
@@ -76,6 +78,14 @@ function EmployeeAttendance() {
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
     };
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nextStatus = params.get('status');
+    if (nextStatus && attendanceStatusOptions.includes(nextStatus)) {
+      setStatus(nextStatus);
+    }
+  }, [location.search]);
 
   const updateAttendance = (updater) => {
     setAttendance((current) => {
