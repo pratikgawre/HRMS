@@ -3,8 +3,13 @@ import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { apiRequest } from '../utils/api.js';
+import { getSessionValue } from '../utils/appSession.js';
+
+const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 
 function MyTeam() {
+  const role = getSessionValue('kavyaRole') || 'employee';
+  const isTeamLead = role === 'teamLead';
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -22,29 +27,55 @@ function MyTeam() {
   }, []);
 
   const rows = useMemo(() => {
-    return employees
-      .filter((employee) => !isAdminEmployee(employee))
-      .map((employee) => {
-        const attendanceSummary = getAttendanceSummary(attendance, employee.employeeId || employee.id);
-        const workload = tasks.filter((task) => String(task.owner || '').toLowerCase() === String(employee.displayName || employee.name || '').toLowerCase()).length;
+    const visibleEmployees = employees.filter((employee) => (
+      isTeamLead ? teamLeadMemberIds.includes(employee.employeeId || employee.id) : !isAdminEmployee(employee)
+    ));
 
-        return {
-          id: employee.employeeId || employee.id,
-          avatar: getInitials(employee.displayName || employee.name || ''),
-          name: employee.displayName || employee.name || '',
-          role: employee.jobTitle || employee.role || '-',
-          department: employee.department || '-',
-          manager: getReportingManager(employee),
-          attendance: attendanceSummary,
-          workload: `${workload} tasks`,
-        };
-      });
-  }, [attendance, employees, tasks]);
+    return visibleEmployees.map((employee) => {
+      const attendanceSummary = getAttendanceSummary(attendance, employee.employeeId || employee.id);
+      const workload = tasks.filter((task) => String(task.owner || '').toLowerCase() === String(employee.displayName || employee.name || '').toLowerCase()).length;
+
+      return {
+        id: employee.employeeId || employee.id,
+        avatar: getInitials(employee.displayName || employee.name || ''),
+        name: employee.displayName || employee.name || '',
+        role: employee.jobTitle || employee.role || '-',
+        department: employee.department || '-',
+        manager: getReportingManager(employee),
+        attendance: attendanceSummary,
+        workload: `${workload} tasks`,
+      };
+    });
+  }, [attendance, employees, isTeamLead, tasks]);
+
+  const visibleAttendance = isTeamLead
+    ? attendance.filter((row) => teamLeadMemberIds.includes(row.employeeId))
+    : attendance;
+  const teamMemberNames = useMemo(() => (
+    employees
+      .filter((employee) => teamLeadMemberIds.includes(employee.employeeId || employee.id))
+      .map((employee) => String(employee.displayName || employee.name || '').toLowerCase())
+  ), [employees]);
+  const visibleTasks = isTeamLead
+    ? tasks.filter((task) => teamMemberNames.includes(String(task.owner || '').toLowerCase()))
+    : tasks;
 
   const cards = [
     { label: 'Team Members', value: String(rows.length).padStart(2, '0'), delta: 'Live from database', tone: 'blue', icon: 'ri-team-line' },
-    { label: 'Attendance Marked', value: String(attendance.length).padStart(2, '0'), delta: 'Monthly records', tone: 'green', icon: 'ri-time-line' },
-    { label: 'Open Workload', value: String(tasks.filter((task) => task.status !== 'Completed').length).padStart(2, '0'), delta: 'Active tasks', tone: 'orange', icon: 'ri-task-line' },
+    {
+      label: 'Attendance Marked',
+      value: String(visibleAttendance.length).padStart(2, '0'),
+      delta: 'Monthly records',
+      tone: 'green',
+      icon: 'ri-time-line',
+    },
+    {
+      label: 'Open Workload',
+      value: String(visibleTasks.filter((task) => task.status !== 'Completed').length).padStart(2, '0'),
+      delta: 'Active tasks',
+      tone: 'orange',
+      icon: 'ri-task-line',
+    },
     { label: 'Departments', value: String(new Set(employees.map((employee) => employee.department).filter(Boolean)).size).padStart(2, '0'), delta: 'Reporting groups', tone: 'pink', icon: 'ri-building-2-line' },
   ];
 
@@ -71,13 +102,18 @@ function MyTeam() {
 
   return (
     <>
-      <Hero title="My Team" copy="View team members, reporting hierarchy, attendance, and workload summary from the live database." />
+      <Hero
+        title="My Team"
+        copy={isTeamLead
+          ? 'View your assigned team, their attendance, and live workload summary.'
+          : 'View team members, reporting hierarchy, attendance, and workload summary from the live database.'}
+      />
 
       <section className="dashboard-card-grid">
         {cards.map((card) => <DashboardCard key={card.label} {...card} />)}
       </section>
 
-      <Section title="Team Members" action="Team Summary">
+      <Section title={isTeamLead ? 'Assigned Team' : 'Team Members'} action="Team Summary">
         <DataTable columns={columns} rows={rows} emptyMessage="No team members found." />
       </Section>
     </>

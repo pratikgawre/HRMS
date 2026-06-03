@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
-import { people } from '../data/dummyData.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests, saveLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
@@ -18,14 +17,14 @@ const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 function LeaveRequests() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const currentEmployee = getCurrentEmployeeIdentity();
-  const canCreateRequest = role === 'employee' || role === 'hr';
-  const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead';
+  const canCreateRequest = true;
+  const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
   const [requests, setRequests] = useState(getInitialLeaveRequests);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
-  const [form, setForm] = useState(() => getEmptyLeaveForm(role, currentEmployee, DEFAULT_LEAVE_TYPES));
+  const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
   const leaveSummary = useMemo(
     () => getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee),
@@ -46,7 +45,7 @@ function LeaveRequests() {
   }, [leaveTypeOptions]);
 
   const visibleRequests = useMemo(() => requests.filter((request) => {
-    if (role === 'teamLead') {
+    if (role === 'teamLead' || role === 'projectManager') {
       return teamLeadMemberIds.includes(request.employeeId);
     }
 
@@ -99,7 +98,13 @@ function LeaveRequests() {
       label: 'Actions',
       render: (row) => (
         <div className="table-actions">
-          <button type="button" onClick={() => updateLeaveStatus(row.id, 'Approved')}><i className="ri-checkbox-circle-line" aria-hidden="true" />Approve</button>
+          <button
+            type="button"
+            onClick={() => updateLeaveStatus(row.id, role === 'admin' || role === 'hr' ? 'Approved' : 'Recommended')}
+          >
+            <i className="ri-checkbox-circle-line" aria-hidden="true" />
+            {role === 'admin' || role === 'hr' ? 'Approve' : 'Recommend'}
+          </button>
           {row.status === 'Pending' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
         </div>
       ),
@@ -168,9 +173,7 @@ function LeaveRequests() {
       return;
     }
 
-    const selectedPerson = role === 'employee' || role === 'hr'
-      ? { id: currentEmployee.employeeId, name: currentEmployee.employee }
-      : people.find((person) => person.name === form.employee);
+    const selectedPerson = { id: currentEmployee.employeeId, name: currentEmployee.employee };
     const newRequest = {
       id: `LV-${101 + requests.length}`,
       employee: selectedPerson?.name || form.employee,
@@ -190,7 +193,7 @@ function LeaveRequests() {
       saveLeaveRequests(next);
       return next;
     });
-    setForm(getEmptyLeaveForm(role, currentEmployee, leaveTypes));
+    setForm(getEmptyLeaveForm(currentEmployee, leaveTypes));
     setFileErrors({});
     setShowForm(false);
     setMessage('Leave request created successfully.');
@@ -219,7 +222,7 @@ function LeaveRequests() {
       )}
 
       <Section title="Leave Request Queue">
-        {(role === 'employee' || role === 'hr') && (
+        {(role === 'employee' || role === 'hr' || role === 'teamLead' || role === 'projectManager') && (
           <div className="leave-balance-strip" aria-label="Leave balances">
             {leaveSummary.balances.map((item) => (
               <article key={item.name} className="leave-balance-card">
@@ -238,6 +241,7 @@ function LeaveRequests() {
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>
             <option>Pending</option>
+            <option>Recommended</option>
             <option>Approved</option>
             <option>Rejected</option>
           </select>
@@ -256,7 +260,6 @@ function LeaveRequests() {
 
       {showForm && (
         <LeaveRequestModal
-          role={role}
           currentEmployee={currentEmployee}
           leaveTypeOptions={leaveTypeOptions}
           form={form}
@@ -274,8 +277,7 @@ function LeaveRequests() {
   );
 }
 
-function LeaveRequestModal({ role, currentEmployee, leaveTypeOptions, form, fileErrors, updateField, updateMedicalReport, onSubmit, onClose }) {
-  const employeeOptions = role === 'employee' || role === 'hr' ? [] : people;
+function LeaveRequestModal({ currentEmployee, leaveTypeOptions, form, fileErrors, updateField, updateMedicalReport, onSubmit, onClose }) {
   const needsMedicalReport = form.type === 'Sick Leave' && Number(form.days) > 2;
 
   return (
@@ -287,20 +289,11 @@ function LeaveRequestModal({ role, currentEmployee, leaveTypeOptions, form, file
         </div>
 
         <form className="leave-request-form" onSubmit={onSubmit}>
-          {role === 'employee' || role === 'hr' ? (
-            <div className="field readonly-field">
-              <span>Employee</span>
-              <strong>{currentEmployee.employee}</strong>
-              <small>{currentEmployee.employeeId}</small>
-            </div>
-          ) : (
-            <label className="field">
-              <span>Employee</span>
-              <select value={form.employee} onChange={(event) => updateField('employee', event.target.value)}>
-                {employeeOptions.map((person) => <option key={person.id}>{person.name}</option>)}
-              </select>
-            </label>
-          )}
+          <div className="field readonly-field">
+            <span>Employee</span>
+            <strong>{currentEmployee.employee}</strong>
+            <small>{currentEmployee.employeeId}</small>
+          </div>
           <label className="field">
             <span>Leave Type</span>
             <select value={form.type} onChange={(event) => updateField('type', event.target.value)}>
@@ -351,9 +344,9 @@ function LeaveRequestModal({ role, currentEmployee, leaveTypeOptions, form, file
   );
 }
 
-function getEmptyLeaveForm(role = 'employee', currentEmployee = getCurrentEmployeeIdentity(), leaveTypes = DEFAULT_LEAVE_TYPES) {
+function getEmptyLeaveForm(currentEmployee = getCurrentEmployeeIdentity(), leaveTypes = DEFAULT_LEAVE_TYPES) {
   const today = new Date().toISOString().slice(0, 10);
-  const employee = role === 'employee' || role === 'hr' ? currentEmployee.employee : people[0].name;
+  const employee = currentEmployee.employee;
   const availableLeaveTypes = getLeaveTypeOptions(leaveTypes);
   return {
     employee,

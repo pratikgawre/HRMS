@@ -97,6 +97,7 @@ function App() {
             <Route path="/project-manager/projects" element={<Projects />} />
             <Route path="/project-manager/team" element={<MyTeam />} />
             <Route path="/project-manager/tasks" element={<Tasks />} />
+            <Route path="/project-manager/leave-review" element={<LeaveRequests />} />
             <Route path="/project-manager/attendance" element={<EmployeeAttendance />} />
             <Route path="/project-manager/payroll" element={<Payroll />} />
             <Route path="/project-manager/announcements" element={<Announcements />} />

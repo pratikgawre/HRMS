@@ -12,12 +12,12 @@ export const ACCESS_ROLES = {
   'Project Manager': {
     appRole: 'projectManager',
     dashboardPath: '/project-manager/dashboard',
-    permissions: ['projects.manage', 'team.view', 'tasks.manage', 'attendance.view'],
+    permissions: ['projects.manage', 'team.view', 'tasks.manage', 'attendance.view', 'leave.review', 'self.leave'],
   },
   'Team Lead': {
     appRole: 'teamLead',
     dashboardPath: '/team-lead/dashboard',
-    permissions: ['team.view', 'team.attendance.view', 'leave.review', 'tasks.manage'],
+    permissions: ['team.view', 'team.attendance.view', 'leave.review', 'tasks.manage', 'self.leave', 'self.attendance'],
   },
   Employee: {
     appRole: 'employee',
