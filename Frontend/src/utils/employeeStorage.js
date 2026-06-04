@@ -3,7 +3,6 @@ import { getInitials, getUsers, saveUsers } from './user-management.js';
 import { getPermissions, normalizeAccessRole } from './role-access.js';
 import { getSessionValue, setSessionValue } from './appSession.js';
 
-const EMPLOYEE_STORAGE_KEY = 'kavyaEmployees';
 let employeesCache = [];
 
 const fallbackEmployee = {
@@ -14,12 +13,19 @@ const fallbackEmployee = {
 };
 
 export function getStoredEmployees(fallbackEmployees) {
-  return employeesCache.length > 0 ? employeesCache : fallbackEmployees;
+  if (employeesCache.length > 0) {
+    return employeesCache;
+  }
+
+  return fallbackEmployees;
 }
 
 export function setEmployeesCache(employees) {
   employeesCache = Array.isArray(employees) ? employees : [];
-  window.dispatchEvent(new Event('kavyaEmployeesChanged'));
+}
+
+export function refreshEmployeesCacheFromStorage() {
+  return employeesCache;
 }
 
 export function saveStoredEmployees(employees) {

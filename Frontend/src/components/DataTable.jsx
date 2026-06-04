@@ -1,4 +1,24 @@
-function DataTable({ columns, rows, emptyMessage = 'No records found.' }) {
+function DataTable({ columns, rows, emptyMessage = 'No records found.', onRowClick, getRowClassName }) {
+  const handleRowClick = (event, row) => {
+    const interactiveElement = event.target.closest('button, a, input, select, textarea, label');
+    if (interactiveElement || typeof onRowClick !== 'function') {
+      return;
+    }
+
+    onRowClick(row);
+  };
+
+  const handleRowKeyDown = (event, row) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    if (typeof onRowClick === 'function') {
+      onRowClick(row);
+    }
+  };
+
   return (
     <div className="table-card">
       <div className="table-responsive">
@@ -17,7 +37,13 @@ function DataTable({ columns, rows, emptyMessage = 'No records found.' }) {
               </tr>
             )}
             {rows.map((row, index) => (
-              <tr key={getRowKey(row, index)}>
+              <tr
+                key={getRowKey(row, index)}
+                className={getRowClassName ? getRowClassName(row) : undefined}
+                onClick={(event) => handleRowClick(event, row)}
+                onKeyDown={(event) => handleRowKeyDown(event, row)}
+                tabIndex={onRowClick ? 0 : undefined}
+              >
                 {columns.map((column) => (
                   <td key={column.key} data-label={column.label}>{renderCell(row, column)}</td>
                 ))}
