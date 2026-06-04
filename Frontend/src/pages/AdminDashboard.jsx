@@ -7,7 +7,7 @@ import { getInitialLeaveRequests, setLeaveRequestsCache } from '../utils/leaveSt
 import { getStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
 import { getStoredAnnouncements, setAnnouncementsCache } from '../utils/announcementStorage.js';
 import { getInitialAttendanceRows, getTodayLabel, refreshStoredAttendanceRows } from '../utils/attendanceStorage.js';
-import { safeApiRequest } from '../utils/api.js';
+import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 
 const DASHBOARD_REFRESH_MS = 15000;
@@ -59,7 +59,9 @@ function normalizeDashboardAnnouncement(item, index = 0) {
 }
 
 function getInitialDashboardEmployees() {
-  return getStoredEmployees(people).map((employee, index) => normalizeDashboardEmployee(employee, index));
+  return getStoredEmployees(people)
+    .map((employee, index) => normalizeDashboardEmployee(employee, index))
+    .filter((employee) => !isAdminEmployee(employee));
 }
 
 function getInitialDashboardLeaves() {
@@ -145,13 +147,16 @@ function AdminDashboard() {
       });
     };
     const refreshEmployees = () => {
-      const cached = getInitialDashboardEmployees();
-      setDashboardEmployees(cached);
-      safeApiRequest('/employees', cached).then((rows) => {
-        const source = Array.isArray(rows) ? rows : cached;
-        const normalized = source.map((employee, index) => normalizeDashboardEmployee(employee, index));
+      apiRequest('/employees').then((rows) => {
+        const source = Array.isArray(rows) ? rows : [];
+        const normalized = source
+          .map((employee, index) => normalizeDashboardEmployee(employee, index))
+          .filter((employee) => !isAdminEmployee(employee));
         setDashboardEmployees(normalized);
         setEmployeesCache(normalized);
+      }).catch(() => {
+        setDashboardEmployees([]);
+        setEmployeesCache([]);
       });
     };
     const refreshAnnouncements = () => {
@@ -265,6 +270,13 @@ function AdminDashboard() {
       )}
     </>
   );
+}
+
+function isAdminEmployee(employee) {
+  const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase();
+  const email = String(employee.email || '').trim().toLowerCase();
+
+  return employeeId === 'admin-001' || email === 'admin@gmail.com';
 }
 
 export const employeeColumns = [

@@ -5,7 +5,6 @@ import { Hero, Section } from './AdminDashboard.jsx';
 import { tasks as fallbackTasks, people } from '../data/dummyData.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
-import { apiRequest } from '../utils/api.js';
 import { getInitials } from '../utils/user-management.js';
 import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
 
@@ -26,6 +25,7 @@ function Tasks() {
   const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isTeamLead = role === 'teamLead';
+  const showAssignAction = role !== 'hr';
   const [taskRows, setTaskRows] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [status, setStatus] = useState('All');

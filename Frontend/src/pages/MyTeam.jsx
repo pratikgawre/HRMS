@@ -4,9 +4,14 @@ import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { safeApiRequest } from '../utils/api.js';
+import { getSessionValue } from '../utils/appSession.js';
+
+const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 
 function MyTeam() {
   const navigate = useNavigate();
+  const role = getSessionValue('kavyaRole') || 'employee';
+  const isTeamLead = role === 'teamLead';
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -47,11 +52,15 @@ function MyTeam() {
     };
   }, []);
 
-  const rows = useMemo(() => {
-    const visibleEmployees = employees.filter((employee) => (
-      isTeamLead ? teamLeadMemberIds.includes(employee.employeeId || employee.id) : !isAdminEmployee(employee)
-    ));
+  const visibleEmployees = useMemo(() => (
+    employees.filter((employee) => (
+      isTeamLead
+        ? teamLeadMemberIds.includes(employee.employeeId || employee.id)
+        : !isAdminEmployee(employee)
+    ))
+  ), [employees, isTeamLead]);
 
+  const rows = useMemo(() => {
     return visibleEmployees.map((employee) => {
       const attendanceSummary = getAttendanceSummary(attendance, employee.employeeId || employee.id);
       const workload = tasks.filter((task) => String(task.owner || '').toLowerCase() === String(employee.displayName || employee.name || '').toLowerCase()).length;
@@ -67,22 +76,26 @@ function MyTeam() {
         workload: `${workload} tasks`,
       };
     });
-  }, [attendance, employees, isTeamLead, tasks]);
+  }, [attendance, tasks, visibleEmployees]);
 
-  const visibleAttendance = isTeamLead
-    ? attendance.filter((row) => teamLeadMemberIds.includes(row.employeeId))
-    : attendance;
+  const visibleAttendance = useMemo(() => (
+    isTeamLead
+      ? attendance.filter((row) => teamLeadMemberIds.includes(row.employeeId))
+      : attendance
+  ), [attendance, isTeamLead]);
+
   const teamMemberNames = useMemo(() => (
-    employees
-      .filter((employee) => teamLeadMemberIds.includes(employee.employeeId || employee.id))
-      .map((employee) => String(employee.displayName || employee.name || '').toLowerCase())
-  ), [employees]);
-  const visibleTasks = isTeamLead
-    ? tasks.filter((task) => teamMemberNames.includes(String(task.owner || '').toLowerCase()))
-    : tasks;
+    visibleEmployees.map((employee) => String(employee.displayName || employee.name || '').toLowerCase())
+  ), [visibleEmployees]);
+
+  const visibleTasks = useMemo(() => (
+    isTeamLead
+      ? tasks.filter((task) => teamMemberNames.includes(String(task.owner || '').toLowerCase()))
+      : tasks
+  ), [isTeamLead, tasks, teamMemberNames]);
 
   const cards = [
-    { label: 'Team Members', value: String(rows.length).padStart(2, '0'), delta: 'Live from database', tone: 'blue', icon: 'ri-team-line' },
+    { label: 'Team Members', value: String(visibleEmployees.length).padStart(2, '0'), delta: 'Live from database', tone: 'blue', icon: 'ri-team-line' },
     {
       label: 'Attendance Marked',
       value: String(visibleAttendance.length).padStart(2, '0'),
@@ -97,7 +110,7 @@ function MyTeam() {
       tone: 'orange',
       icon: 'ri-task-line',
     },
-    { label: 'Departments', value: String(new Set(employees.map((employee) => employee.department).filter(Boolean)).size).padStart(2, '0'), delta: 'Reporting groups', tone: 'pink', icon: 'ri-building-2-line' },
+    { label: 'Departments', value: String(new Set(visibleEmployees.map((employee) => employee.department).filter(Boolean)).size).padStart(2, '0'), delta: 'Reporting groups', tone: 'pink', icon: 'ri-building-2-line' },
   ];
 
   const cardRoutes = {

@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import DashboardCard from '../components/DashboardCard.jsx';
-import DataTable from '../components/DataTable.jsx';
-import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import DataTable from '../components/DataTable.jsx';
 import { attendanceRows as fallbackAttendanceRows, announcements as fallbackAnnouncements, leaveRequests as fallbackLeaveRequests, people as fallbackPeople, tasks as fallbackTasks } from '../data/dummyData.js';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section, leaveColumns } from './AdminDashboard.jsx';
 import { attendanceColumns } from './EmployeeDashboard.jsx';
