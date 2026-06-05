@@ -116,6 +116,7 @@ function Payroll() {
   return (
     <MyPayslip
       records={records}
+      savedPayrollRecords={savedPayrollRecords}
       role={role}
       month={selectedMonth}
       year={selectedYear}
@@ -291,13 +292,67 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
   );
 }
 
-function MyPayslip({ records, role, month, year, setMonth, setYear }) {
+function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMonth, setYear }) {
   const [selectedPayslip, setSelectedPayslip] = useState(null);
+  const [periodRecords, setPeriodRecords] = useState([]);
+  const [periodLoading, setPeriodLoading] = useState(false);
   const employeeId = getSessionValue('kavyaEmployeeId');
   const safeRecords = Array.isArray(records) ? records : [];
-  const payslip = safeRecords.find((record) => employeeId && record.employeeId === employeeId && record.month === month && record.year === year)
-    || safeRecords.find((record) => record.ownerRole === role && record.month === month && record.year === year)
-    || safeRecords.find((record) => record.id === roleEmployeeFallback[role])
+  const safeSavedPayrollRecords = Array.isArray(savedPayrollRecords) ? savedPayrollRecords : [];
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPeriodPayroll = async () => {
+      setPeriodLoading(true);
+      try {
+        const rows = await apiRequest(`/payroll/${encodeURIComponent(month)}/${encodeURIComponent(year)}`);
+        if (!active) {
+          return;
+        }
+        setPeriodRecords(normalizePayrollRecords(rows));
+      } catch {
+        if (active) {
+          setPeriodRecords([]);
+        }
+      } finally {
+        if (active) {
+          setPeriodLoading(false);
+        }
+      }
+    };
+
+    loadPeriodPayroll();
+
+    const refreshPeriodPayroll = () => {
+      loadPeriodPayroll();
+    };
+
+    window.addEventListener('focus', refreshPeriodPayroll);
+    window.addEventListener('storage', refreshPeriodPayroll);
+    window.addEventListener('kavyaPayrollRecordsChanged', refreshPeriodPayroll);
+
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refreshPeriodPayroll);
+      window.removeEventListener('storage', refreshPeriodPayroll);
+      window.removeEventListener('kavyaPayrollRecordsChanged', refreshPeriodPayroll);
+    };
+  }, [month, year]);
+
+  const payrollRecordsForSelection = useMemo(() => {
+    const combined = [
+      ...periodRecords,
+      ...safeSavedPayrollRecords,
+      ...safeRecords,
+    ];
+
+    return normalizePayrollRecords(combined);
+  }, [periodRecords, safeRecords, safeSavedPayrollRecords]);
+
+  const payslip = payrollRecordsForSelection.find((record) => employeeId && record.employeeId === employeeId && record.month === month && record.year === year)
+    || payrollRecordsForSelection.find((record) => record.ownerRole === role && record.month === month && record.year === year)
+    || payrollRecordsForSelection.find((record) => record.id === roleEmployeeFallback[role])
     || getEmptyPayslip(role, month, year);
 
   return (
@@ -320,7 +375,7 @@ function MyPayslip({ records, role, month, year, setMonth, setYear }) {
           </label>
           <button className="payroll-primary" type="button" onClick={() => setSelectedPayslip(payslip)}>
             <i className="ri-download-cloud-2-line" aria-hidden="true" />
-            Download Payslip
+            {periodLoading ? 'Loading...' : 'Download Payslip'}
           </button>
         </div>
       </Section>
@@ -815,6 +870,44 @@ function getDefaultPayrollPeriod() {
 
 function getPayrollRecordId(employeeId, month, year) {
   return `PAY-${employeeId}-${month}-${year}`;
+}
+
+function normalizePayrollRecords(rows = []) {
+  return (Array.isArray(rows) ? rows : []).map((record, index) => ({
+    ...record,
+    id: record.id || getPayrollRecordId(record.employeeId || `EMP-${index + 1}`, record.month || months[0], String(record.year || years[0])),
+    employeeId: String(record.employeeId || record.employeeCode || record.id || `EMP-${index + 1}`),
+    employeeName: record.employeeName || record.name || 'Employee',
+    role: record.role || record.designation || 'Employee',
+    ownerRole: record.ownerRole || 'employee',
+    department: record.department || '-',
+    month: String(record.month || months[0]),
+    year: String(record.year || years[0]),
+    basic: Number(record.basic || 0),
+    hra: Number(record.hra || 0),
+    allowance: Number(record.allowance || 0),
+    bonus: Number(record.bonus || 0),
+    tax: Number(record.tax || 0),
+    providentFund: Number(record.providentFund || 0),
+    gratuity: Number(record.gratuity || 0),
+    professionalTax: Number(record.professionalTax || 0),
+    absentDeduction: Number(record.absentDeduction || 0),
+    halfDayDeduction: Number(record.halfDayDeduction || 0),
+    otherDeduction: Number(record.otherDeduction || 0),
+    packageAmount: Number(record.packageAmount || 0),
+    daysInMonth: Number(record.daysInMonth || 0),
+    payableDays: Number(record.payableDays || 0),
+    lopDays: Number(record.lopDays || 0),
+    bankName: record.bankName || '-',
+    accountNo: record.accountNo || '-',
+    uanNo: record.uanNo || record.pfUanNo || '-',
+    aadhaarNo: record.aadhaarNo || record.aadhaarCardNo || '-',
+    panNo: record.panNo || record.panCardNo || '-',
+    location: record.location || '-',
+    status: record.status || 'Unpaid',
+    attendanceSummary: record.attendanceSummary || '',
+    deductionSummary: record.deductionSummary || '',
+  }));
 }
 
 function mergePayrollRecords(existingRecords, nextRecords) {

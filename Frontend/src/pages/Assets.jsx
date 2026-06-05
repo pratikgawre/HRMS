@@ -9,6 +9,9 @@ import { useLocation } from 'react-router-dom';
 function Assets() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const canManage = role === 'admin' || role === 'hr';
+  const isProjectManager = role === 'projectManager';
+  const canRaiseRepair = role === 'employee';
+  const canRaiseReplacement = role === 'employee' || role === 'projectManager';
   const location = useLocation();
   const [assets, setAssets] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -73,36 +76,65 @@ function Assets() {
     pendingReturn: assets.filter((asset) => asset.status === 'Pending Return').length,
   }), [assets]);
 
+  const teamMembers = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee)), [employees]);
+  const teamMemberIds = useMemo(() => new Set(
+    teamMembers
+      .map((employee) => String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase())
+      .filter(Boolean),
+  ), [teamMembers]);
+  const scopedAssets = useMemo(() => {
+    if (!isProjectManager) {
+      return assets;
+    }
+
+    return assets.filter((asset) => {
+      const assignedToEmployeeId = String(asset.assignedToEmployeeId || '').trim().toLowerCase();
+      const assignedTo = String(asset.assignedTo || '').trim();
+      return teamMemberIds.has(assignedToEmployeeId) || (assignedTo && assignedTo !== '-');
+    });
+  }, [assets, isProjectManager, teamMemberIds]);
+  const scopedSummary = useMemo(() => ({
+    total: scopedAssets.length,
+    assigned: scopedAssets.filter((asset) => asset.status === 'Assigned').length,
+    needsAttention: scopedAssets.filter((asset) => ['Replacement Requested', 'Repair Needed', 'Pending Return'].includes(asset.status)).length,
+    available: scopedAssets.filter((asset) => asset.status === 'Available').length,
+    replacementRequested: scopedAssets.filter((asset) => asset.status === 'Replacement Requested').length,
+    repairNeeded: scopedAssets.filter((asset) => asset.status === 'Repair Needed').length,
+    pendingReturn: scopedAssets.filter((asset) => asset.status === 'Pending Return').length,
+  }), [scopedAssets]);
+
+  const activeSummary = isProjectManager ? scopedSummary : summary;
+
   const stats = useMemo(() => ([
     {
       label: 'Total Assets',
-      value: String(summary.total).padStart(2, '0'),
+      value: String(activeSummary.total).padStart(2, '0'),
       delta: 'Tracked items',
       tone: 'blue',
       icon: 'ri-briefcase-4-line',
     },
     {
       label: 'Assigned',
-      value: String(summary.assigned).padStart(2, '0'),
+      value: String(activeSummary.assigned).padStart(2, '0'),
       delta: 'In use',
       tone: 'green',
       icon: 'ri-user-follow-line',
     },
     {
       label: 'Needs Attention',
-      value: String(summary.needsAttention).padStart(2, '0'),
+      value: String(activeSummary.needsAttention).padStart(2, '0'),
       delta: 'Replacement or repair',
       tone: 'orange',
       icon: 'ri-alert-line',
     },
     {
       label: 'Available',
-      value: String(summary.available).padStart(2, '0'),
+      value: String(activeSummary.available).padStart(2, '0'),
       delta: 'Ready to assign',
       tone: 'pink',
       icon: 'ri-checkbox-circle-line',
     },
-  ]), [summary]);
+  ]), [activeSummary]);
 
   const moduleCards = useMemo(() => ([
     {
@@ -117,7 +149,7 @@ function Assets() {
       id: 'manage-assets',
       label: 'Manage Assets',
       detail: 'Create, assign, and update company hardware.',
-      value: String(summary.total).padStart(2, '0'),
+      value: String(activeSummary.total).padStart(2, '0'),
       icon: 'ri-briefcase-4-line',
       tone: 'green',
     },
@@ -125,7 +157,7 @@ function Assets() {
       id: 'asset-assignment',
       label: 'Asset Assignment',
       detail: 'Track who is using which device right now.',
-      value: String(summary.assigned).padStart(2, '0'),
+      value: String(activeSummary.assigned).padStart(2, '0'),
       icon: 'ri-user-follow-line',
       tone: 'blue',
     },
@@ -133,7 +165,7 @@ function Assets() {
       id: 'replacement-request',
       label: 'Replacement Request',
       detail: 'Pending device swaps and replacement approvals.',
-      value: String(summary.replacementRequested).padStart(2, '0'),
+      value: String(activeSummary.replacementRequested).padStart(2, '0'),
       icon: 'ri-refresh-line',
       tone: 'orange',
     },
@@ -141,7 +173,7 @@ function Assets() {
       id: 'repair-status',
       label: 'Repair Status',
       detail: 'Open repair cases and return-to-service items.',
-      value: String(summary.repairNeeded).padStart(2, '0'),
+      value: String(activeSummary.repairNeeded).padStart(2, '0'),
       icon: 'ri-tools-line',
       tone: 'pink',
     },
@@ -149,11 +181,11 @@ function Assets() {
       id: 'return-asset',
       label: 'Return Asset',
       detail: 'Clear returned assets and send them back to stock.',
-      value: String(summary.pendingReturn).padStart(2, '0'),
+      value: String(activeSummary.pendingReturn).padStart(2, '0'),
       icon: 'ri-loop-right-line',
       tone: 'green',
     },
-  ]), [summary]);
+  ]), [activeSummary]);
 
   const updateAsset = (assetId, patch) => {
     if (!canManage) {
@@ -178,19 +210,19 @@ function Assets() {
   };
 
   const requestRepair = (assetId) => {
-    setAssets((current) => current.map((asset) => (
-      asset.id === assetId
-        ? { ...asset, status: 'Repair Needed' }
-        : asset
-    )));
+    if (!canRaiseRepair) {
+      return;
+    }
+
+    updateAsset(assetId, { status: 'Repair Needed' });
   };
 
   const requestReplacement = (assetId) => {
-    setAssets((current) => current.map((asset) => (
-      asset.id === assetId
-        ? { ...asset, status: 'Replacement Requested' }
-        : asset
-    )));
+    if (!canRaiseReplacement) {
+      return;
+    }
+
+    updateAsset(assetId, { status: 'Replacement Requested' });
   };
 
   const markReturned = (assetId) => {
@@ -370,8 +402,8 @@ function Assets() {
       label: 'Actions',
       render: (asset) => (
         <div className="table-actions">
-          <button type="button" onClick={() => requestRepair(asset.id)}>Repair</button>
-          <button type="button" onClick={() => requestReplacement(asset.id)}>Replace</button>
+          {canRaiseRepair && <button type="button" onClick={() => requestRepair(asset.id)}>Repair</button>}
+          {canRaiseReplacement && <button type="button" onClick={() => requestReplacement(asset.id)}>Replace</button>}
         </div>
       ),
     }]),
@@ -387,16 +419,16 @@ function Assets() {
   const filteredAssets = useMemo(() => {
     const query = searchText.trim().toLowerCase();
     if (!query) {
-      return assets;
+      return scopedAssets;
     }
 
-    return assets.filter((asset) => {
+    return scopedAssets.filter((asset) => {
       const employeeId = String(asset.assignedToEmployeeId || '').toLowerCase();
       const assignedTo = String(asset.assignedTo || '').toLowerCase();
       const assetName = String(asset.assetName || '').toLowerCase();
       return assetName.includes(query) || assignedTo.includes(query) || employeeId.includes(query);
     });
-  }, [assets, searchText]);
+  }, [scopedAssets, searchText]);
 
   const assignedAssets = filteredAssets.filter((asset) => asset.status === 'Assigned');
   const replacementRequests = filteredAssets.filter((asset) => asset.status === 'Replacement Requested');
@@ -413,9 +445,11 @@ function Assets() {
     <>
       <Hero
         title="Asset Management"
-        copy={role === 'employee'
-          ? 'Employees can view assigned assets and raise replacement or repair requests.'
-          : 'HR and Admin can manage company assets, assignments, replacement requests, repair cases, and return tracking.'}
+        copy={isProjectManager
+          ? 'Project Managers can view team assets and raise replacement requests for their team only.'
+          : role === 'employee'
+            ? 'Employees can view assigned assets and raise replacement or repair requests.'
+            : 'HR and Admin can manage company assets, assignments, replacement requests, repair cases, and return tracking.'}
       />
 
       <div id="asset-overview" className="card-grid">
@@ -553,18 +587,22 @@ function Assets() {
           <DataTable
             columns={assignedColumns}
             rows={assignedAssets}
-            emptyMessage={canManage ? 'No assigned assets.' : 'No assigned assets available for your account.'}
+            emptyMessage={canManage ? 'No assigned assets.' : isProjectManager ? 'No team assets found.' : 'No assigned assets available for your account.'}
           />
         </Section>
         <Section id="replacement-request" title="Replacement Request">
           <DataTable columns={requestColumns} rows={replacementRequests} emptyMessage="No replacement requests." />
         </Section>
-        <Section id="repair-status" title="Repair Status">
-          <DataTable columns={requestColumns} rows={repairAssets} emptyMessage="No repair requests." />
-        </Section>
-        <Section id="return-asset" title="Return Asset">
-          <DataTable columns={requestColumns} rows={returnAssets} emptyMessage="No returns pending." />
-        </Section>
+        {!isProjectManager && (
+          <>
+            <Section id="repair-status" title="Repair Status">
+              <DataTable columns={requestColumns} rows={repairAssets} emptyMessage="No repair requests." />
+            </Section>
+            <Section id="return-asset" title="Return Asset">
+              <DataTable columns={requestColumns} rows={returnAssets} emptyMessage="No returns pending." />
+            </Section>
+          </>
+        )}
       </div>
     </>
   );
@@ -647,4 +685,11 @@ function getNextAssetCode(assets) {
   }, 100);
 
   return `AST-${String(highest + 1)}`;
+}
+
+function isAdminEmployee(employee) {
+  const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase();
+  const email = String(employee.email || '').trim().toLowerCase();
+
+  return employeeId === 'admin-001' || email === 'admin@gmail.com';
 }

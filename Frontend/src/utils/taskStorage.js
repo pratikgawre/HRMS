@@ -14,6 +14,7 @@ export function normalizeTaskRows(rows = []) {
     assignedByRole: task.assignedByRole || '',
     priority: task.priority || 'Medium',
     due: task.due || task.dueDate || '-',
+    dueDate: task.dueDate || task.due || '',
     status: task.status || 'Pending',
     projectId: task.projectId || '',
   }));
@@ -53,19 +54,7 @@ export function getNextTaskCode(tasks = []) {
   return `TSK-${String(highest + 1)}`;
 }
 
-export async function loadTasksWithSeed(seedTasks = []) {
+export async function loadTasksWithSeed() {
   const records = await apiRequest('/tasks').catch(() => []);
-  if (Array.isArray(records) && records.length > 0) {
-    return normalizeTaskRows(records);
-  }
-
-  const normalizedSeed = normalizeTaskRows(seedTasks);
-  if (normalizedSeed.length > 0) {
-    apiRequest('/tasks/bulk', {
-      method: 'POST',
-      body: JSON.stringify(normalizedSeed.map(serializeTaskForApi)),
-    }).catch(() => {});
-  }
-
-  return normalizedSeed;
+  return normalizeTaskRows(Array.isArray(records) ? records : []);
 }
