@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 
 const menus = {
@@ -42,16 +43,17 @@ const menus = {
     { label: 'My Profile', to: '/team-lead/profile', icon: 'ri-user-line' },
   ],
   projectManager: [
-    { label: 'PM Dashboard', to: '/project-manager/dashboard', icon: 'ri-dashboard-line' },
-    { label: 'Projects', to: '/project-manager/projects', icon: 'ri-folder-chart-line' },
-    { label: 'Project Team', to: '/project-manager/team', icon: 'ri-team-line' },
-    { label: 'Task Assignment', to: '/project-manager/tasks', icon: 'ri-task-line' },
-    { label: 'Leave Review', to: '/project-manager/leave-review', icon: 'ri-calendar-check-line' },
-    { label: 'Attendance', to: '/project-manager/attendance', icon: 'ri-time-line' },
-    { label: 'My Payslip', to: '/project-manager/payroll', icon: 'ri-money-rupee-circle-line' },
+    { label: 'Dashboard', to: '/project-manager/dashboard', icon: 'ri-dashboard-line' },
     { label: 'Announcements', to: '/project-manager/announcements', icon: 'ri-megaphone-line' },
-    { label: 'Support', to: '/project-manager/support', icon: 'ri-customer-service-2-line' },
+    { label: 'Attendance', to: '/project-manager/attendance', icon: 'ri-time-line' },
+    { label: 'Leave Review', to: '/project-manager/leave-review', icon: 'ri-calendar-check-line' },
+    { label: 'My Payslip', to: '/project-manager/payroll', icon: 'ri-money-rupee-circle-line' },
     { label: 'My Profile', to: '/project-manager/profile', icon: 'ri-user-line' },
+    { label: 'Project Team', to: '/project-manager/team', icon: 'ri-team-line' },
+    { label: 'Projects', to: '/project-manager/projects', icon: 'ri-folder-chart-line' },
+    { label: 'Support', to: '/project-manager/support', icon: 'ri-customer-service-2-line' },
+    { label: 'Task Assignment', to: '/project-manager/tasks', icon: 'ri-task-line' },
+    { label: 'Team Assets', to: '/project-manager/assets', icon: 'ri-briefcase-4-line' },
   ],
   employee: [
     { label: 'My Dashboard', to: '/employee/dashboard', icon: 'ri-dashboard-line' },
@@ -66,6 +68,18 @@ const menus = {
 };
 
 function Sidebar({ role, isOpen, onClose }) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 60 * 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const payrollCycle = useMemo(() => getPayrollCycleStatus(now), [now]);
+
   return (
     <>
       <aside className={`sidebar ${isOpen ? 'is-open' : ''}`}>
@@ -89,13 +103,30 @@ function Sidebar({ role, isOpen, onClose }) {
         <div className="sidebar-card">
           <i className="ri-shield-check-line" aria-hidden="true" />
           <p>Payroll cycle</p>
-          <strong>06 days left</strong>
-          <span>Review attendance before closing.</span>
+          <strong>{payrollCycle.title}</strong>
+          <span>{payrollCycle.subtitle}</span>
         </div>
       </aside>
       <button className={`sidebar-backdrop ${isOpen ? 'is-visible' : ''}`} onClick={onClose} aria-label="Close menu" />
     </>
   );
+}
+
+function getPayrollCycleStatus(currentDate) {
+  const startOfToday = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+  const startOfNextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const daysLeft = Math.max(0, Math.round((startOfNextMonth - startOfToday) / msPerDay) - 1);
+  const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+  const monthEndLabel = new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+  }).format(monthEnd);
+
+  return {
+    title: daysLeft === 0 ? 'Closes today' : `${String(daysLeft).padStart(2, '0')} days left`,
+    subtitle: `Review attendance before ${monthEndLabel}.`,
+  };
 }
 
 export default Sidebar;

@@ -30,6 +30,7 @@ const ticketColumns = [
 function SupportTickets() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const isEmployeeView = role === 'employee';
+  const canUpdateTicketStatus = role === 'admin' || role === 'hr' || role === 'teamLead';
   const currentEmployee = getCurrentEmployeeIdentity();
   const [tickets, setTickets] = useState([]);
   const [successMessage, setSuccessMessage] = useState('');
@@ -90,6 +91,11 @@ function SupportTickets() {
   };
 
   const handleStatusUpdate = async (ticketId, mongoId, newStatus) => {
+    if (!canUpdateTicketStatus) {
+      setErrorMessage('You do not have permission to change ticket status.');
+      return;
+    }
+
     try {
       const response = await apiRequest(`/support/${encodeURIComponent(mongoId)}/status`, {
         method: 'PATCH',
@@ -263,9 +269,15 @@ function SupportTickets() {
                         <span className={`status status-${String(ticket.priority || '').toLowerCase()}`}>{ticket.priority}</span>
                       </td>
                       <td style={{ padding: '12px' }}>
-                        <select value={ticket.status} onChange={(e) => handleStatusUpdate(ticket.id || ticket.ticketId, ticket.mongoId || ticket._id || ticket.id, e.target.value)}>
-                          {statusStages.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
-                        </select>
+                        {canUpdateTicketStatus ? (
+                          <select value={ticket.status} onChange={(e) => handleStatusUpdate(ticket.id || ticket.ticketId, ticket.mongoId || ticket._id || ticket.id, e.target.value)}>
+                            {statusStages.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+                          </select>
+                        ) : (
+                          <span className={`status status-${String(ticket.status || '').toLowerCase().replace(/\s+/g, '-')}`}>
+                            {ticket.status}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '12px' }}>{ticket.createdDate}</td>
                     </tr>

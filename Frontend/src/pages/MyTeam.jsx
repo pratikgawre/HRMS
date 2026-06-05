@@ -12,6 +12,10 @@ function MyTeam() {
   const navigate = useNavigate();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isTeamLead = role === 'teamLead';
+  const roleBasePath = {
+    teamLead: '/team-lead',
+    projectManager: '/project-manager',
+  }[role] || '/team-lead';
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -114,10 +118,10 @@ function MyTeam() {
   ];
 
   const cardRoutes = {
-    'Team Members': '/team-lead/team',
-    'Attendance Marked': '/team-lead/attendance',
-    'Open Workload': '/team-lead/tasks',
-    Departments: '/team-lead/dashboard',
+    'Team Members': `${roleBasePath}/team`,
+    'Attendance Marked': `${roleBasePath}/attendance`,
+    'Open Workload': `${roleBasePath}/tasks`,
+    Departments: role === 'projectManager' ? `${roleBasePath}/departments` : `${roleBasePath}/team`,
   };
 
   const columns = [
@@ -155,7 +159,7 @@ function MyTeam() {
           <DashboardCard
             key={card.label}
             {...card}
-            onClick={() => navigate(cardRoutes[card.label] || '/team-lead/team')}
+            onClick={() => navigate(cardRoutes[card.label] || `${roleBasePath}/team`)}
           />
         ))}
       </section>

@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { tasks as fallbackTasks, people } from '../data/dummyData.js';
+import { people } from '../data/dummyData.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
+import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitials } from '../utils/user-management.js';
 import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
 
@@ -19,25 +20,44 @@ export const taskColumns = [
 
 const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 const priorityOptions = ['Low', 'Medium', 'High', 'Urgent'];
+const taskStatusOptions = ['Pending', 'Active', 'Approved', 'Completed'];
+const taskAssignableRoles = ['admin', 'projectManager', 'teamLead'];
+const TASK_TABS = [
+  { id: 'list', label: 'List', icon: 'ri-list-check-3' },
+  { id: 'assign', label: 'Assign', icon: 'ri-add-circle-line', roles: taskAssignableRoles },
+  { id: 'status', label: 'Status Update', icon: 'ri-loop-left-line' },
+];
 
 function Tasks() {
   const navigate = useNavigate();
   const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isTeamLead = role === 'teamLead';
-  const showAssignAction = role !== 'hr';
+  const canAssignTasks = taskAssignableRoles.includes(role);
+  const canUpdateAnyTask = role === 'admin' || role === 'projectManager' || role === 'teamLead';
   const [taskRows, setTaskRows] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [status, setStatus] = useState('All');
+  const [priority, setPriority] = useState('All');
+  const [dueDate, setDueDate] = useState('');
+  const [activeTab, setActiveTab] = useState('list');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(getEmptyTaskForm());
+  const employeeIdentity = getCurrentEmployeeIdentity();
+  const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const nextStatus = params.get('status');
     if (nextStatus) {
       setStatus(nextStatus);
+    }
+    const nextTab = params.get('tab');
+    if (nextTab && TASK_TABS.some((tab) => tab.id === nextTab && (!tab.roles || tab.roles.includes(role)))) {
+      setActiveTab(nextTab);
     }
   }, [location.search]);
 
@@ -46,14 +66,14 @@ function Tasks() {
 
     const refreshData = () => {
       Promise.all([
-        loadTasksWithSeed(fallbackTasks),
+        loadTasksWithSeed(),
         safeApiRequest('/employees', people),
       ]).then(([rows, employeeRows]) => {
         if (!active) {
           return;
         }
 
-        setTaskRows(Array.isArray(rows) ? rows : []);
+        setTaskRows(Array.isArray(rows) ? rows.map(normalizeTaskRow) : []);
         setEmployees(normalizeEmployees(employeeRows));
       });
     };
@@ -73,13 +93,75 @@ function Tasks() {
     };
   }, []);
 
-  const filteredRows = useMemo(() => taskRows.filter((task) => status === 'All' || task.status === status), [status, taskRows]);
+  const filteredRows = useMemo(() => {
+    let rows = [...taskRows];
+
+    if (role === 'employee') {
+      rows = rows.filter((task) => isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee));
+    }
+
+    if (status !== 'All') {
+      rows = rows.filter((task) => task.status === status);
+    }
+
+    if (priority !== 'All') {
+      rows = rows.filter((task) => task.priority === priority);
+    }
+
+    if (dueDate) {
+      rows = rows.filter((task) => normalizeDateValue(task.dueDate || task.due) === dueDate);
+    }
+
+    return rows;
+  }, [currentEmployeeId, dueDate, employeeIdentity.employee, priority, role, status, taskRows]);
+
   const assigneeOptions = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee)), [employees]);
+  const assignableTasks = useMemo(() => (
+    taskRows.filter((task) => role !== 'employee' || isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee))
+  ), [currentEmployeeId, employeeIdentity.employee, role, taskRows]);
+  const statusUpdateTasks = useMemo(() => (
+    taskRows.filter((task) => role !== 'employee' || isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee))
+  ), [currentEmployeeId, employeeIdentity.employee, role, taskRows]);
   const openTaskModal = () => {
     setForm(getEmptyTaskForm(assigneeOptions[0]));
     setMessage('');
     setIsTaskModalOpen(true);
   };
+
+  function openTaskStatusModal(task) {
+    if (!task) {
+      return;
+    }
+
+    if (role === 'employee' && !isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee)) {
+      setMessage('You can only update your assigned tasks.');
+      return;
+    }
+
+    setSelectedTask(task);
+    setForm({
+      ...getEmptyTaskForm(),
+      status: task.status || 'Pending',
+    });
+    setMessage('');
+    setIsStatusModalOpen(true);
+  }
+
+  const taskListColumns = [
+    ...taskColumns,
+    {
+      key: 'actions',
+      label: canUpdateAnyTask || role === 'employee' ? 'Actions' : 'View',
+      render: (row) => (
+        <div className="table-actions table-actions-inline">
+          <button type="button" onClick={() => openTaskStatusModal(row)}>
+            {role === 'employee' ? 'Update Status' : 'View / Update'}
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   const createTask = async (event) => {
     event.preventDefault();
 
@@ -120,13 +202,47 @@ function Tasks() {
     }
   };
 
+  const updateTaskStatus = async (event) => {
+    event.preventDefault();
+
+    if (!selectedTask) {
+      setMessage('Please select a task first.');
+      return;
+    }
+
+    if (role === 'employee' && !isTaskVisibleToEmployee(selectedTask, currentEmployeeId, employeeIdentity.employee)) {
+      setMessage('You can only update your assigned tasks.');
+      return;
+    }
+
+    const nextTask = {
+      ...selectedTask,
+      status: form.status,
+    };
+
+    try {
+      const saved = await apiRequest(`/tasks/${selectedTask.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(serializeTaskForApi(nextTask)),
+      });
+      const normalized = normalizeTaskRow(saved || nextTask);
+      setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
+      window.dispatchEvent(new Event('kavyaTasksChanged'));
+      setIsStatusModalOpen(false);
+      setSelectedTask(null);
+      setMessage('Task status updated successfully.');
+    } catch {
+      setMessage('Task status could not be updated right now.');
+    }
+  };
+
   return (
     <>
       <Hero
-        title={isTeamLead ? 'Task Assignment' : 'Tasks'}
-        copy={isTeamLead
-          ? 'Assign tasks to your team, track priority, and monitor delivery progress.'
-          : 'View team tasks with ownership, priority, due date, and current status.'}
+        title={role === 'employee' ? 'My Tasks' : isTeamLead || role === 'projectManager' ? 'Task Assignment' : 'Task Management'}
+        copy={role === 'employee'
+          ? 'Track your assigned tasks, update the current status, and stay on top of due dates.'
+          : 'Assign tasks, track priority and due date, and keep delivery moving across the team.'}
       />
       {message && (
         <div className="user-alert" role="status">
@@ -134,24 +250,107 @@ function Tasks() {
           <span>{message}</span>
         </div>
       )}
-      <Section title="Assigned Tasks" action={showAssignAction ? 'Assign Task' : undefined} actionOnClick={showAssignAction ? openTaskModal : undefined}>
-        <div className="page-toolbar compact">
-          <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter task status">
-            <option>All</option>
-            <option>Pending</option>
-            <option>Active</option>
-            <option>Approved</option>
-            <option>Completed</option>
-          </select>
-          <button type="button" className="section-action" onClick={() => navigate('/team-lead/dashboard')}>
-            Back to Dashboard
-          </button>
+      <Section title="Task Workspace">
+        <div className="project-tab-strip" role="tablist" aria-label="Task modules">
+          {TASK_TABS.filter((tab) => !tab.roles || tab.roles.includes(role)).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`project-tab ${activeTab === tab.id ? 'is-active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <i className={tab.icon} aria-hidden="true" />
+              <span>{tab.label}</span>
+            </button>
+          ))}
         </div>
-        <DataTable columns={taskColumns} rows={filteredRows} emptyMessage="No tasks available." />
+
+        <div className="task-tab-panel">
+          {activeTab === 'list' && (
+            <div className="task-panel">
+              <div className="page-toolbar compact">
+                <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter task status">
+                  <option>All</option>
+                  {taskStatusOptions.map((item) => <option key={item}>{item}</option>)}
+                </select>
+                <select value={priority} onChange={(event) => setPriority(event.target.value)} aria-label="Filter task priority">
+                  <option value="All">All Priorities</option>
+                  {priorityOptions.map((item) => <option key={item}>{item}</option>)}
+                </select>
+                <label className="toolbar-date">
+                  <span>Due Date</span>
+                  <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+                </label>
+                <button type="button" className="section-action" onClick={() => {
+                  setStatus('All');
+                  setPriority('All');
+                  setDueDate('');
+                }}>
+                  Reset Filters
+                </button>
+                <button type="button" className="section-action" onClick={() => navigate(`/${role}/dashboard`)}>
+                  Back to Dashboard
+                </button>
+              </div>
+              <DataTable columns={taskListColumns} rows={filteredRows} emptyMessage="No tasks available." />
+            </div>
+          )}
+
+          {activeTab === 'assign' && (
+            <div className="task-panel">
+              <div className="task-panel-head">
+                <div>
+                  <p className="eyebrow">Assign Task</p>
+                  <h3>Create and assign work for your team</h3>
+                </div>
+                <button type="button" className="payroll-primary" onClick={openTaskModal}>
+                  <i className="ri-add-line" aria-hidden="true" />
+                  Open Assign Form
+                </button>
+              </div>
+              <DataTable
+                columns={taskColumns}
+                rows={assignableTasks}
+                emptyMessage="No tasks available."
+                onRowClick={(task) => {
+                  if (canAssignTasks) {
+                    setSelectedTask(task);
+                    setActiveTab('status');
+                    setIsStatusModalOpen(true);
+                    setForm((current) => ({ ...current, status: task.status || 'Pending' }));
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {activeTab === 'status' && (
+            <div className="task-panel">
+              <div className="task-panel-head">
+                <div>
+                  <p className="eyebrow">Status Update</p>
+                  <h3>Update task progress</h3>
+                </div>
+                <button type="button" className="payroll-primary" onClick={() => setIsStatusModalOpen(true)}>
+                  <i className="ri-loop-left-line" aria-hidden="true" />
+                  Update Status
+                </button>
+              </div>
+              <DataTable
+                columns={taskColumns}
+                rows={statusUpdateTasks}
+                emptyMessage="No tasks available."
+                onRowClick={(task) => openTaskStatusModal(task)}
+              />
+            </div>
+          )}
+        </div>
       </Section>
 
       {isTaskModalOpen && (
-        <TaskModal
+        <TaskAssignmentModal
           form={form}
           setForm={setForm}
           assigneeOptions={assigneeOptions}
@@ -159,11 +358,24 @@ function Tasks() {
           onSubmit={createTask}
         />
       )}
+
+      {isStatusModalOpen && selectedTask && (
+        <TaskStatusModal
+          task={selectedTask}
+          form={form}
+          setForm={setForm}
+          onClose={() => {
+            setIsStatusModalOpen(false);
+            setSelectedTask(null);
+          }}
+          onSubmit={updateTaskStatus}
+        />
+      )}
     </>
   );
 }
 
-function TaskModal({ form, setForm, assigneeOptions, onClose, onSubmit }) {
+function TaskAssignmentModal({ form, setForm, assigneeOptions, onClose, onSubmit }) {
   return (
     <div className="payroll-modal-backdrop" role="presentation">
       <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Assign task">
@@ -223,6 +435,38 @@ function TaskModal({ form, setForm, assigneeOptions, onClose, onSubmit }) {
   );
 }
 
+function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
+  return (
+    <div className="payroll-modal-backdrop" role="presentation">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Update task status">
+        <div className="payroll-modal-head">
+          <h3>Update Task Status</h3>
+          <button type="button" onClick={onClose} aria-label="Close status modal"><i className="ri-close-line" aria-hidden="true" /></button>
+        </div>
+
+        <form className="salary-form" onSubmit={onSubmit}>
+          <div className="task-summary-card">
+            <p className="eyebrow">{task.id}</p>
+            <strong>{task.title}</strong>
+            <small>Priority: {task.priority} | Due: {task.dueDate || task.due || '-'}</small>
+            <small>Assigned to: {task.owner}</small>
+          </div>
+          <label className="field">
+            <span>Status</span>
+            <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+              {taskStatusOptions.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </label>
+          <div className="salary-form-actions">
+            <button className="payroll-primary" type="submit">Save Status</button>
+            <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function getEmptyTaskForm(defaultEmployee = null) {
   const today = new Date().toISOString().slice(0, 10);
   return {
@@ -251,10 +495,39 @@ function normalizeTaskRow(task) {
     id: task.id,
     title: task.title || '-',
     owner: task.owner || task.assignedToName || task.assignedTo || '-',
+    assignedToId: task.assignedToId || '',
+    assignedToName: task.assignedToName || task.owner || task.assignedTo || '-',
     priority: task.priority || 'Medium',
     due: task.due || task.dueDate || '-',
+    dueDate: task.dueDate || task.due || '',
     status: task.status || 'Pending',
   };
+}
+
+function normalizeDateValue(value) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  return String(value);
+}
+
+function isTaskVisibleToEmployee(task, employeeId, employeeName) {
+  const taskEmployeeId = String(task.assignedToId || '').trim();
+  const taskOwner = String(task.owner || task.assignedToName || task.assignedTo || '').trim().toLowerCase();
+  const currentName = String(employeeName || '').trim().toLowerCase();
+  const currentId = String(employeeId || '').trim().toLowerCase();
+
+  return (
+    taskEmployeeId.toLowerCase() === currentId
+    || taskOwner === currentName
+    || taskOwner === currentId
+  );
 }
 
 function isAdminEmployee(employee) {

@@ -2078,6 +2078,184 @@ a:focus-visible {
   width: 100%;
 }
 
+.project-manager-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.project-manager-stack .section-card {
+  width: 100%;
+}
+
+.department-detail-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.department-detail-stack .section-card {
+  width: 100%;
+}
+
+.department-toolbar {
+  align-items: center;
+}
+
+.live-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid rgba(15, 159, 154, 0.2);
+  border-radius: 999px;
+  background: rgba(15, 159, 154, 0.06);
+  color: var(--dark-text);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.live-sync-pill i {
+  color: var(--primary);
+  font-size: 1rem;
+}
+
+.department-project-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 240px;
+}
+
+.department-project-badge {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #fff;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  box-shadow: 0 10px 18px rgba(15, 159, 154, 0.14);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.department-project-copy {
+  min-width: 0;
+}
+
+.department-project-copy strong,
+.department-project-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.department-project-copy strong {
+  color: var(--dark-text);
+  font-weight: 900;
+}
+
+.department-project-copy small {
+  color: var(--muted-text);
+  font-size: 0.82rem;
+}
+
+.project-manager-stack .table-card {
+  border-color: rgba(201, 221, 221, 0.92);
+  box-shadow: 0 18px 38px rgba(21, 46, 58, 0.06);
+  overflow-x: scroll;
+  overflow-y: hidden;
+  scrollbar-width: auto;
+  scrollbar-color: var(--primary) rgba(15, 159, 154, 0.28);
+  scrollbar-gutter: stable;
+  padding-bottom: 10px;
+}
+
+.project-manager-stack .table-card::-webkit-scrollbar {
+  display: block;
+  height: 22px;
+}
+
+.project-manager-stack .table-card::-webkit-scrollbar-track {
+  background: rgba(15, 159, 154, 0.28);
+  border-radius: 999px;
+  margin: 0 4px 4px;
+}
+
+.project-manager-stack .table-card::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #0f9f9a, #2a6fdb);
+  border: 4px solid rgba(255, 255, 255, 0.98);
+  border-radius: 999px;
+  min-height: 40px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.project-manager-stack .table-responsive {
+  overflow: visible;
+  min-width: max-content;
+}
+
+.project-manager-stack .table {
+  min-width: 1320px;
+  table-layout: auto;
+}
+
+.project-manager-stack .table th,
+.project-manager-stack .table td {
+  white-space: nowrap;
+  padding: 0.5rem 0.6rem;
+}
+
+.project-manager-stack .project-cell--compact {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 220px;
+}
+
+.project-manager-stack .project-cell-copy--inline {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.project-manager-stack .project-cell-copy--inline strong {
+  display: inline-block;
+  overflow: hidden;
+  color: var(--dark-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.project-manager-stack .project-badge {
+  width: 34px;
+  height: 34px;
+  font-size: 0.72rem;
+}
+
+.project-manager-stack .compact-table-section .table-card {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+}
+
+.project-manager-stack .compact-table-section .table-responsive {
+  min-width: 0;
+}
+
+.project-manager-stack .compact-table-section .table {
+  min-width: 100%;
+}
+
+.project-manager-stack .compact-table-section .table th,
+.project-manager-stack .compact-table-section .table td {
+  padding: 0.7rem 0.8rem;
+}
+
 .assets-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -5060,6 +5238,55 @@ img.profile-avatar.large {
   color: var(--muted-text);
 }
 
+.task-summary-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid rgba(201, 221, 221, 0.86);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(15, 159, 154, 0.08), rgba(255, 255, 255, 0.96));
+}
+
+.task-summary-card strong {
+  color: var(--dark-text);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.task-summary-card small {
+  color: var(--muted-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.task-tab-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.task-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.task-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.task-panel-head h3 {
+  margin: 0.25rem 0 0;
+  color: var(--dark-text);
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.task-panel-head .payroll-primary {
+  flex: 0 0 auto;
+}
+
 .file-field em {
   color: var(--muted-text);
   font-size: 0.82rem;
@@ -6683,6 +6910,15 @@ img.profile-avatar.large {
   .table-card:not(.payroll-table-card) .table td {
     grid-template-columns: 1fr;
     gap: 0.35rem;
+  }
+
+  .department-project-cell {
+    gap: 0.55rem;
+  }
+
+  .department-project-badge {
+    width: 34px;
+    height: 34px;
   }
 
   .table-actions {

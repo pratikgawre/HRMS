@@ -18,6 +18,7 @@ import ProjectManagerDashboard from './pages/ProjectManagerDashboard.jsx';
 import Tasks from './pages/Tasks.jsx';
 import Projects from './pages/Projects.jsx';
 import MyTeam from './pages/MyTeam.jsx';
+import Departments from './pages/Departments.jsx';
 import SupportTickets from './pages/SupportTickets.jsx';
 import Payroll from './pages/Payroll.jsx';
 import AnnouncementTextView from './pages/AnnouncementTextView.jsx';
@@ -97,6 +98,8 @@ function App() {
             <Route path="/project-manager/dashboard" element={<ProjectManagerDashboard />} />
             <Route path="/project-manager/projects" element={<Projects />} />
             <Route path="/project-manager/team" element={<MyTeam />} />
+            <Route path="/project-manager/departments" element={<Departments />} />
+            <Route path="/project-manager/assets" element={<Assets />} />
             <Route path="/project-manager/tasks" element={<Tasks />} />
             <Route path="/project-manager/leave-review" element={<LeaveRequests />} />
             <Route path="/project-manager/attendance" element={<EmployeeAttendance />} />

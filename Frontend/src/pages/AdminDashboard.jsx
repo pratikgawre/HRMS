@@ -612,17 +612,17 @@ export function Section({
   );
 }
 
-export function QuickActions({ detailOverrides = {} }) {
+export function QuickActions({ detailOverrides = {}, labelOverrides = {} }) {
   const navigate = useNavigate();
   const role = getSessionValue('kavyaRole') || 'employee';
 
   return (
     <section className="quick-actions" aria-label="Quick actions">
       {quickActions.map((item) => (
-        <button key={item.label} type="button" onClick={() => navigate(item[`${role}Path`] || item.employeePath || item.adminPath)} aria-label={item.label}>
+        <button key={item.label} type="button" onClick={() => navigate(item[`${role}Path`] || item.employeePath || item.adminPath)} aria-label={labelOverrides[item.label] || item.label}>
           <i className={item.icon} aria-hidden="true" />
-          <span>{item.label}</span>
-          <small>{detailOverrides[item.label] || item.detail}</small>
+          <span>{labelOverrides[item.label] || item.label}</span>
+          {(detailOverrides[item.label] || item.detail) ? <small>{detailOverrides[item.label] || item.detail}</small> : null}
           <i className="ri-arrow-right-line quick-action-arrow" aria-hidden="true" />
         </button>
 
