@@ -8,6 +8,7 @@ import {
   createCheckInRecord,
   getAttendanceEmployee,
   getDurationLabel,
+  getLateCheckInCountForMonth,
   getInitialAttendanceRows,
   getTodayLabel,
   refreshStoredAttendanceRows,
@@ -60,20 +61,27 @@ function EmployeeAttendance() {
 
   useEffect(() => {
     let mounted = true;
-    refreshStoredAttendanceRows()
-      .then((rows) => {
+    const refreshAttendance = async () => {
+      try {
+        const rows = await refreshStoredAttendanceRows();
         if (mounted && Array.isArray(rows)) {
           setAttendance(rows);
         }
-      })
-      .catch(() => {});
+      } catch {
+        if (mounted) {
+          setAttendance(getInitialAttendanceRows());
+        }
+      }
+    };
 
-    const refreshAttendance = () => setAttendance(getInitialAttendanceRows());
+    refreshAttendance();
+    const intervalId = window.setInterval(refreshAttendance, 60 * 1000);
     window.addEventListener('storage', refreshAttendance);
     window.addEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
 
     return () => {
       mounted = false;
+      window.clearInterval(intervalId);
       window.removeEventListener('storage', refreshAttendance);
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
     };
@@ -98,7 +106,7 @@ function EmployeeAttendance() {
   const checkIn = () => {
     const now = new Date();
     updateAttendance((current) => [
-      createCheckInRecord(attendanceEmployee, now),
+      createCheckInRecord(attendanceEmployee, now, getLateCheckInCountForMonth(current, attendanceEmployee.employeeId, now)),
       ...current.filter((row) => !(row.employeeId === attendanceEmployee.employeeId && row.date === todayLabel)),
     ]);
     setMessage('Checked in successfully. Day status will finalize at check-out.');
