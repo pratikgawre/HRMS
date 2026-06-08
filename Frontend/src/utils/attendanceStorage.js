@@ -1,8 +1,6 @@
-import { attendanceRows } from '../data/dummyData.js';
 import { getCurrentEmployeeIdentity } from './employeeStorage.js';
 import { apiRequest } from './api.js';
 
-const ATTENDANCE_STORAGE_KEY = 'kavyaAttendanceRows';
 let attendanceRowsCache = [];
 
 export const ATTENDANCE_POLICY = {
@@ -36,7 +34,7 @@ export function getAttendanceEmployee() {
 }
 
 export function getInitialAttendanceRows() {
-  return finalizeAttendanceRows(attendanceRowsCache.length > 0 ? attendanceRowsCache : attendanceRows);
+  return finalizeAttendanceRows(attendanceRowsCache);
 }
 
 export function setAttendanceRowsCache(rows) {
@@ -65,19 +63,17 @@ export async function fetchAttendanceRows() {
 export async function refreshStoredAttendanceRows() {
   const rawRows = await apiRequest('/attendance');
   const rows = finalizeAttendanceRows(rawRows);
-  if (rows.length > 0) {
-    attendanceRowsCache = rows;
-    if (hasAttendanceChanged(rawRows, rows)) {
-      persistAttendanceRows(rows);
-    }
+  attendanceRowsCache = rows;
+  if (hasAttendanceChanged(rawRows, rows)) {
+    await persistAttendanceRows(rows);
   }
-  return rows.length > 0 ? rows : getInitialAttendanceRows();
+  return rows;
 }
 
 export function saveAttendanceRows(rows) {
   const normalizedRows = finalizeAttendanceRows(rows);
   attendanceRowsCache = normalizedRows;
-  persistAttendanceRows(normalizedRows);
+  return persistAttendanceRows(normalizedRows);
 }
 
 export function getLateCheckInCountForMonth(rows, employeeId, referenceDate = new Date()) {
@@ -101,7 +97,7 @@ export function applyAutoCheckoutPolicy(rows, now = new Date()) {
   return finalizeAttendanceRows(rows, now);
 }
 
-function persistAttendanceRows(rows) {
+async function persistAttendanceRows(rows) {
   const payload = rows.map((row) => ({
     id: row.id ? String(row.id) : null,
     employeeId: row.employeeId,
@@ -115,7 +111,7 @@ function persistAttendanceRows(rows) {
     checkOutAt: row.checkOutAt,
     lateCheckInCount: row.lateCheckInCount || 0,
   }));
-  apiRequest('/attendance/bulk', { method: 'POST', body: JSON.stringify(payload) }).catch(() => {});
+  await apiRequest('/attendance/bulk', { method: 'POST', body: JSON.stringify(payload) });
   window.dispatchEvent(new Event('kavyaAttendanceRowsChanged'));
 }
 
