@@ -6,8 +6,9 @@ import './styles.css';
 import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { bootstrapData } from './utils/bootstrapData.js';
+import { bootstrapSessionFromBackend } from './utils/appSession.js';
 
-bootstrapData().finally(() => {
+Promise.all([bootstrapSessionFromBackend(), bootstrapData()]).finally(() => {
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
       <ErrorBoundary>

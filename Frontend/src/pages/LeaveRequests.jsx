@@ -164,7 +164,7 @@ function LeaveRequests() {
     reader.readAsDataURL(file);
   };
 
-  const submitLeaveRequest = (event) => {
+  const submitLeaveRequest = async (event) => {
     event.preventDefault();
     const needsMedicalReport = form.type === 'Sick Leave' && Number(form.days) > 2;
     if (needsMedicalReport && !form.medicalReport) {
@@ -188,26 +188,32 @@ function LeaveRequests() {
       medicalReport: form.medicalReport || null,
     };
 
-    setRequests((current) => {
-      const next = [newRequest, ...current];
-      saveLeaveRequests(next);
-      return next;
-    });
-    setForm(getEmptyLeaveForm(currentEmployee, leaveTypes));
-    setFileErrors({});
-    setShowForm(false);
-    setMessage('Leave request created successfully.');
+    const next = [newRequest, ...requests];
+    setRequests(next);
+
+    try {
+      await saveLeaveRequests(next);
+      setForm(getEmptyLeaveForm(currentEmployee, leaveTypes));
+      setFileErrors({});
+      setShowForm(false);
+      setMessage('Leave request created successfully.');
+    } catch (error) {
+      setMessage(error.message || 'Failed to save leave request.');
+    }
   };
 
-  const updateLeaveStatus = (requestId, nextStatus) => {
-    setRequests((current) => {
-      const next = current.map((request) => (
-        request.id === requestId ? { ...request, status: nextStatus } : request
-      ));
-      saveLeaveRequests(next);
-      return next;
-    });
-    setMessage(`Leave request ${nextStatus.toLowerCase()} successfully.`);
+  const updateLeaveStatus = async (requestId, nextStatus) => {
+    const next = requests.map((request) => (
+      request.id === requestId ? { ...request, status: nextStatus } : request
+    ));
+    setRequests(next);
+
+    try {
+      await saveLeaveRequests(next);
+      setMessage(`Leave request ${nextStatus.toLowerCase()} successfully.`);
+    } catch (error) {
+      setMessage(error.message || 'Failed to update leave request.');
+    }
   };
 
   return (

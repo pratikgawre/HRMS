@@ -73,6 +73,19 @@ function Projects() {
   const [selectedTeamMembers, setSelectedTeamMembers] = useState([]);
   const [isTeamDraftDirty, setIsTeamDraftDirty] = useState(false);
   const [isTeamRosterOpen, setIsTeamRosterOpen] = useState(false);
+  const [savePopup, setSavePopup] = useState('');
+
+  useEffect(() => {
+    if (!savePopup) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSavePopup('');
+    }, 2200);
+
+    return () => window.clearTimeout(timer);
+  }, [savePopup]);
 
   const navigateProjectList = useCallback((status = '') => {
     const params = new URLSearchParams({ tab: 'list' });
@@ -188,13 +201,6 @@ function Projects() {
   const visibleProjects = useMemo(() => {
     let rows = [...projects];
 
-    if (isProjectManager && managerId) {
-      const ownedProjects = rows.filter((project) => String(project.managerId || '').trim() === managerId || String(project.manager || '').trim() === managerName);
-      if (ownedProjects.length > 0) {
-        rows = ownedProjects;
-      }
-    }
-
     if (teamFilter !== 'All') {
       rows = rows.filter((project) => (teamFilter === 'At Risk'
         ? ['On Hold', 'Pending'].includes(project.status)
@@ -217,7 +223,7 @@ function Projects() {
     }
 
     return rows;
-  }, [projects, isProjectManager, managerId, managerName, searchTerm, teamFilter]);
+  }, [projects, searchTerm, teamFilter]);
 
   const selectedProject = useMemo(() => (
     visibleProjects.find((project) => project.id === selectedProjectId)
@@ -419,7 +425,8 @@ function Projects() {
       setSelectedTeamMembers([]);
       setIsTeamDraftDirty(false);
       setActiveTab('list');
-      setMessage(editingProjectId ? `${normalized.name} updated.` : `${normalized.name} created.`);
+      setSavePopup(editingProjectId ? 'Project updated successfully.' : 'Project created successfully.');
+      setMessage('');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
@@ -452,7 +459,8 @@ function Projects() {
       setSelectedProjectId(normalized.id);
       setSelectedTeamMembers(Array.isArray(normalized.teamMembers) ? normalized.teamMembers : []);
       setIsTeamDraftDirty(false);
-      setMessage(successMessage);
+      setSavePopup(successMessage);
+      setMessage('');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
@@ -465,7 +473,7 @@ function Projects() {
       teamMembers: selectedTeamMembers,
       teamMemberDetails: buildTeamMemberDetails(selectedTeamMembers, employeeDirectory),
       team: buildTeamLabel(selectedTeamMembers, employeeLookup),
-    }, 'Team assignment updated.');
+    }, 'Team assignment updated successfully.');
   }
 
   function handleTeamMemberToggle(memberId) {
@@ -476,19 +484,19 @@ function Projects() {
   function handleProgressSave() {
     return handlePatchProject({
       progress: normalizeProgress(progressDraft),
-    }, 'Project progress updated.');
+    }, 'Project progress updated successfully.');
   }
 
   function handleMilestoneSave() {
     return handlePatchProject({
       milestone: milestoneDraft.trim() || 'Planning',
-    }, 'Milestone updated.');
+    }, 'Milestone updated successfully.');
   }
 
   function handleStatusSave() {
     return handlePatchProject({
       status: statusDraft || 'Planning',
-    }, 'Project status updated.');
+    }, 'Project status updated successfully.');
   }
 
   async function removeProject(project) {
@@ -561,7 +569,19 @@ function Projects() {
           </div>
         </div>
 
-        {message && <div className="user-alert"><i className="ri-checkbox-circle-line" aria-hidden="true" /><span>{message}</span></div>}
+      {message && <div className="user-alert"><i className="ri-checkbox-circle-line" aria-hidden="true" /><span>{message}</span></div>}
+      {savePopup && (
+        <div className="save-toast" role="status" aria-live="polite">
+          <span className="save-toast-icon" aria-hidden="true">
+            <i className="ri-checkbox-circle-fill" />
+          </span>
+          <div className="save-toast-body">
+            <span className="save-toast-kicker">Saved</span>
+            <strong>{savePopup}</strong>
+          </div>
+          <span className="save-toast-accent" aria-hidden="true" />
+        </div>
+      )}
 
         <div className="project-tab-strip" role="tablist" aria-label="Project modules">
           {PROJECT_TABS.map((tab) => {

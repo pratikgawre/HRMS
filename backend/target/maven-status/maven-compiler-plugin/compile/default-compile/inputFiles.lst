@@ -20,6 +20,7 @@ C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\contro
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\SystemSettingsController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\AuditLog.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\AppUser.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\AuthSession.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\AssetAssignmentController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\Designation.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\TaskRepository.java
@@ -28,6 +29,7 @@ C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\websoc
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\SystemSettings.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\Role.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\Project.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\AuthSessionRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\LeaveType.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\TaskController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\DashboardController.java
