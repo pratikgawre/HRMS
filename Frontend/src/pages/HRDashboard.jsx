@@ -7,8 +7,10 @@ import {
   applyCheckOutToRecord,
   createCheckInRecord,
   getAttendanceEmployee,
+  getLateCheckInCountForMonth,
   getInitialAttendanceRows,
   getTodayLabel,
+  refreshStoredAttendanceRows,
   saveAttendanceRows,
 } from '../utils/attendanceStorage.js';
 import { getStoredEmployees } from '../utils/employeeStorage.js';
@@ -95,7 +97,20 @@ function HRDashboard() {
   ]), [announcementsCount, interviewsCount, navigate, pendingLeaveRequests.length, teamMembersCount, urgentPendingLeaves]);
 
   useEffect(() => {
-    const refreshAttendance = () => setAttendance(getInitialAttendanceRows());
+    let active = true;
+
+    const refreshAttendance = async () => {
+      try {
+        const rows = await refreshStoredAttendanceRows();
+        if (active) {
+          setAttendance(rows);
+        }
+      } catch {
+        if (active) {
+          setAttendance(getInitialAttendanceRows());
+        }
+      }
+    };
     const refreshEmployees = () => {
       const cached = getInitialHREmployees();
       setDashboardEmployees(cached);
@@ -161,6 +176,7 @@ function HRDashboard() {
     }, DASHBOARD_REFRESH_MS);
 
     return () => {
+      active = false;
       window.removeEventListener('storage', refreshAttendance);
       window.removeEventListener('storage', refreshEmployees);
       window.removeEventListener('storage', refreshLeaveRequests);
@@ -232,7 +248,7 @@ function HRDashboard() {
   function checkIn() {
     const now = new Date();
     updateAttendance((current) => [
-      createCheckInRecord(attendanceEmployee, now),
+      createCheckInRecord(attendanceEmployee, now, getLateCheckInCountForMonth(current, attendanceEmployee.employeeId, now)),
       ...current.filter((row) => !(row.employeeId === attendanceEmployee.employeeId && row.date === todayLabel)),
     ]);
     setAttendanceMessage('Checked in successfully. Day status will finalize at check-out.');

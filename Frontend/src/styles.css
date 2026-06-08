@@ -2193,6 +2193,11 @@ a:focus-visible {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
 }
 
+.project-manager-stack .active-projects-table-section .table-card {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
 .project-manager-stack .table-responsive {
   overflow: visible;
   min-width: max-content;
@@ -2203,38 +2208,49 @@ a:focus-visible {
   table-layout: auto;
 }
 
-.project-manager-stack .table th,
-.project-manager-stack .table td {
-  white-space: nowrap;
-  padding: 0.5rem 0.6rem;
-}
-
-.project-manager-stack .project-cell--compact {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 220px;
-}
-
-.project-manager-stack .project-cell-copy--inline {
-  display: flex;
-  align-items: center;
+.project-manager-stack .active-projects-table-section .table-responsive {
+  width: 100%;
   min-width: 0;
 }
 
-.project-manager-stack .project-cell-copy--inline strong {
-  display: inline-block;
+.project-manager-stack .active-projects-table-section .table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: auto;
+}
+
+.project-manager-stack .active-projects-table-section .table th,
+.project-manager-stack .active-projects-table-section .table td {
+  padding: 0.7rem 0.8rem;
+}
+
+.project-manager-stack .table th,
+.project-manager-stack .table td {
+  white-space: nowrap;
+  padding: 0.5rem 0.55rem;
+}
+
+.project-manager-stack .employee-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.project-manager-stack .employee-cell > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.project-manager-stack .employee-cell strong {
+  display: block;
   overflow: hidden;
   color: var(--dark-text);
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: middle;
-}
-
-.project-manager-stack .project-badge {
-  width: 34px;
-  height: 34px;
-  font-size: 0.72rem;
+  line-height: 1.1;
 }
 
 .project-manager-stack .compact-table-section .table-card {
