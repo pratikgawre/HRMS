@@ -1,8 +1,6 @@
-import { attendanceRows } from '../data/dummyData.js';
 import { getCurrentEmployeeIdentity } from './employeeStorage.js';
 import { apiRequest } from './api.js';
 
-const ATTENDANCE_STORAGE_KEY = 'kavyaAttendanceRows';
 let attendanceRowsCache = [];
 
 export const ATTENDANCE_POLICY = {
@@ -14,6 +12,9 @@ export const ATTENDANCE_POLICY = {
   halfDayCheckInCutoffMinute: 30,
   fullDayCheckOutHour: 18,
   fullDayCheckOutMinute: 30,
+  autoCheckOutHour: 21,
+  autoCheckOutMinute: 0,
+  lateCheckInPenaltyThreshold: 4,
   fullDayMinutes: 8 * 60,
   halfDayMinutes: 4 * 60,
 };
@@ -33,11 +34,11 @@ export function getAttendanceEmployee() {
 }
 
 export function getInitialAttendanceRows() {
-  return dedupeAttendanceRows(attendanceRowsCache.length > 0 ? attendanceRowsCache : attendanceRows);
+  return finalizeAttendanceRows(attendanceRowsCache);
 }
 
 export function setAttendanceRowsCache(rows) {
-  attendanceRowsCache = dedupeAttendanceRows((Array.isArray(rows) ? rows : []).map(normalizeAttendanceRow));
+  attendanceRowsCache = finalizeAttendanceRows(Array.isArray(rows) ? rows : []);
   window.dispatchEvent(new Event('kavyaAttendanceRowsChanged'));
 }
 
@@ -50,26 +51,54 @@ export function normalizeAttendanceRow(row) {
     date: row.date || row.dateLabel || '-',
     hours: row.hours || row.workedHours || '-',
     avatar: row.avatar || getInitials(employeeName || row.employeeId || 'EM'),
+    lateCheckInCount: Number(row.lateCheckInCount || 0),
   };
 }
 
 export async function fetchAttendanceRows() {
   const rows = await apiRequest('/attendance');
-  return dedupeAttendanceRows(rows.map(normalizeAttendanceRow));
+  return finalizeAttendanceRows(rows);
 }
 
 export async function refreshStoredAttendanceRows() {
-  const rows = await fetchAttendanceRows();
-  if (rows.length > 0) {
-    attendanceRowsCache = rows;
+  const rawRows = await apiRequest('/attendance');
+  const rows = finalizeAttendanceRows(rawRows);
+  attendanceRowsCache = rows;
+  if (hasAttendanceChanged(rawRows, rows)) {
+    await persistAttendanceRows(rows);
   }
-  return rows.length > 0 ? rows : getInitialAttendanceRows();
+  return rows;
 }
 
 export function saveAttendanceRows(rows) {
-  const normalizedRows = dedupeAttendanceRows(rows.map(normalizeAttendanceRow));
+  const normalizedRows = finalizeAttendanceRows(rows);
   attendanceRowsCache = normalizedRows;
-  const payload = normalizedRows.map((row) => ({
+  return persistAttendanceRows(normalizedRows);
+}
+
+export function getLateCheckInCountForMonth(rows, employeeId, referenceDate = new Date()) {
+  const targetEmployeeId = String(employeeId || '').trim();
+  const targetMonth = referenceDate.getMonth();
+  const targetYear = referenceDate.getFullYear();
+
+  return dedupeAttendanceRows(rows)
+    .filter((row) => String(row.employeeId || '').trim() === targetEmployeeId)
+    .filter((row) => {
+      const checkInDate = getAttendanceDate(row);
+      return checkInDate
+        && checkInDate.getMonth() === targetMonth
+        && checkInDate.getFullYear() === targetYear
+        && isLateCheckIn(checkInDate);
+    })
+    .length;
+}
+
+export function applyAutoCheckoutPolicy(rows, now = new Date()) {
+  return finalizeAttendanceRows(rows, now);
+}
+
+async function persistAttendanceRows(rows) {
+  const payload = rows.map((row) => ({
     id: row.id ? String(row.id) : null,
     employeeId: row.employeeId,
     employeeName: row.employee || row.employeeName,
@@ -78,8 +107,11 @@ export function saveAttendanceRows(rows) {
     checkOut: row.checkOut,
     workedHours: row.hours || row.workedHours,
     status: row.status,
+    checkInAt: row.checkInAt,
+    checkOutAt: row.checkOutAt,
+    lateCheckInCount: row.lateCheckInCount || 0,
   }));
-  apiRequest('/attendance/bulk', { method: 'POST', body: JSON.stringify(payload) }).catch(() => {});
+  await apiRequest('/attendance/bulk', { method: 'POST', body: JSON.stringify(payload) });
   window.dispatchEvent(new Event('kavyaAttendanceRowsChanged'));
 }
 
@@ -133,12 +165,14 @@ export function getCheckInBand(checkInDate) {
   return 'absent-eligible';
 }
 
-export function getStatusFromMinutes(workedMinutes, checkInBand = 'full-day-eligible') {
-  if (checkInBand === 'absent-eligible') {
-    return 'Absent';
+export function getStatusFromMinutes(workedMinutes, checkInDate = null, lateCheckInCount = 0) {
+  const lateApplied = isLateCheckIn(checkInDate) && Number(lateCheckInCount || 0) >= ATTENDANCE_POLICY.lateCheckInPenaltyThreshold;
+
+  if (lateApplied) {
+    return 'Half Day';
   }
 
-  if (workedMinutes >= ATTENDANCE_POLICY.fullDayMinutes && checkInBand === 'full-day-eligible') {
+  if (workedMinutes >= ATTENDANCE_POLICY.fullDayMinutes) {
     return 'Present';
   }
 
@@ -146,7 +180,7 @@ export function getStatusFromMinutes(workedMinutes, checkInBand = 'full-day-elig
     return 'Half Day';
   }
 
-  return 'Absent';
+  return isLateCheckIn(checkInDate) ? 'Late' : 'Absent';
 }
 
 export function isFullDayCheckOut(checkOutDate) {
@@ -155,9 +189,13 @@ export function isFullDayCheckOut(checkOutDate) {
   return minuteOfDay >= fullDayCutoff;
 }
 
-export function createCheckInRecord(employee, now = new Date()) {
-  const checkInBand = getCheckInBand(now);
-  const initialStatus = checkInBand === 'absent-eligible' ? 'Absent' : checkInBand === 'half-day-eligible' ? 'Half Day' : 'Present';
+export function createCheckInRecord(employee, now = new Date(), lateCheckInCount = 0) {
+  const lateCheckInSequence = isLateCheckIn(now) ? Number(lateCheckInCount || 0) + 1 : 0;
+  const initialStatus = lateCheckInSequence >= ATTENDANCE_POLICY.lateCheckInPenaltyThreshold
+    ? 'Half Day'
+    : isLateCheckIn(now)
+      ? 'Late'
+      : 'Present';
 
   return {
     ...employee,
@@ -167,16 +205,14 @@ export function createCheckInRecord(employee, now = new Date()) {
     hours: '-',
     status: initialStatus,
     checkInAt: now.toISOString(),
-    checkInBand,
+    lateCheckInCount: lateCheckInSequence,
   };
 }
 
 export function applyCheckOutToRecord(row, now = new Date()) {
   const checkOutAt = now.toISOString();
   const workedMinutes = getWorkedMinutes(row.checkInAt, checkOutAt);
-  const fullDayEligibleByCheckout = isFullDayCheckOut(now);
-  const statusByHours = getStatusFromMinutes(workedMinutes, row.checkInBand);
-  const finalStatus = statusByHours === 'Present' && !fullDayEligibleByCheckout ? 'Half Day' : statusByHours;
+  const finalStatus = getStatusFromMinutes(workedMinutes, row.checkInAt ? new Date(row.checkInAt) : null, row.lateCheckInCount);
 
   return {
     ...row,
@@ -214,6 +250,142 @@ function dedupeAttendanceRows(rows) {
   });
 
   return [...uniqueByEmployeeDay.values()];
+}
+
+function finalizeAttendanceRows(rows, now = new Date()) {
+  return dedupeAttendanceRows((Array.isArray(rows) ? rows : []).map(normalizeAttendanceRow).map((row) => finalizeAttendanceRow(row, now)));
+}
+
+function hasAttendanceChanged(firstRows, secondRows) {
+  return attendanceSnapshot(firstRows) !== attendanceSnapshot(secondRows);
+}
+
+function attendanceSnapshot(rows) {
+  return JSON.stringify(dedupeAttendanceRows(rows).map((row) => ({
+    id: row.id || '',
+    employeeId: row.employeeId || '',
+    date: row.date || row.dateLabel || '',
+    checkIn: row.checkIn || '',
+    checkOut: row.checkOut || '',
+    hours: row.hours || '',
+    status: row.status || '',
+    checkInAt: row.checkInAt || '',
+    checkOutAt: row.checkOutAt || '',
+    lateCheckInCount: Number(row.lateCheckInCount || 0),
+  })));
+}
+
+function finalizeAttendanceRow(row, now = new Date()) {
+  if (!row.checkInAt || row.checkOutAt || row.status === 'Leave') {
+    return row;
+  }
+
+  if (!shouldAutoCheckout(row, now)) {
+    return row;
+  }
+
+  return applyCheckOutToRecord({
+    ...row,
+    lateCheckInCount: Number(row.lateCheckInCount || 0),
+  }, getAutoCheckoutDate(row, now));
+}
+
+function shouldAutoCheckout(row, now) {
+  const checkInDate = getAttendanceDate(row);
+  if (!checkInDate) {
+    return false;
+  }
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const recordDay = new Date(checkInDate.getFullYear(), checkInDate.getMonth(), checkInDate.getDate());
+  if (recordDay < today) {
+    return true;
+  }
+
+  if (recordDay.getTime() !== today.getTime()) {
+    return false;
+  }
+
+  const minuteOfDay = (now.getHours() * 60) + now.getMinutes();
+  const autoCheckoutMinute = (ATTENDANCE_POLICY.autoCheckOutHour * 60) + ATTENDANCE_POLICY.autoCheckOutMinute;
+  return minuteOfDay >= autoCheckoutMinute;
+}
+
+function getAutoCheckoutDate(row, now) {
+  const checkInDate = getAttendanceDate(row) || now;
+  return new Date(
+    checkInDate.getFullYear(),
+    checkInDate.getMonth(),
+    checkInDate.getDate(),
+    ATTENDANCE_POLICY.autoCheckOutHour,
+    ATTENDANCE_POLICY.autoCheckOutMinute,
+    0,
+    0,
+  );
+}
+
+function getAttendanceDate(row) {
+  if (row?.checkInAt) {
+    const parsed = new Date(row.checkInAt);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  if (row?.date) {
+    const parsedLabel = parseAttendanceDate(row.date);
+    if (parsedLabel) {
+      return parsedLabel;
+    }
+  }
+
+  if (row?.dateLabel) {
+    const parsedLabel = parseAttendanceDate(row.dateLabel);
+    if (parsedLabel) {
+      return parsedLabel;
+    }
+  }
+
+  return null;
+}
+
+function parseAttendanceDate(value) {
+  const match = String(value || '').trim().match(/^(\d{1,2})\s([A-Za-z]{3})\s(\d{4})$/);
+  if (!match) {
+    const fallback = new Date(value);
+    return Number.isNaN(fallback.getTime()) ? null : fallback;
+  }
+
+  const monthMap = {
+    jan: 0,
+    feb: 1,
+    mar: 2,
+    apr: 3,
+    may: 4,
+    jun: 5,
+    jul: 6,
+    aug: 7,
+    sep: 8,
+    oct: 9,
+    nov: 10,
+    dec: 11,
+  };
+  const monthIndex = monthMap[match[2].toLowerCase()];
+  if (monthIndex === undefined) {
+    return null;
+  }
+
+  return new Date(Number(match[3]), monthIndex, Number(match[1]));
+}
+
+function isLateCheckIn(checkInDate) {
+  if (!checkInDate || Number.isNaN(checkInDate.getTime())) {
+    return false;
+  }
+
+  const minuteOfDay = (checkInDate.getHours() * 60) + checkInDate.getMinutes();
+  const lateCutoff = (ATTENDANCE_POLICY.fullDayCheckInCutoffHour * 60) + ATTENDANCE_POLICY.fullDayCheckInCutoffMinute;
+  return minuteOfDay > lateCutoff;
 }
 
 function getAttendanceDayKey(row) {

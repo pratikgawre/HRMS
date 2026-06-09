@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
-import { attendanceRows, dashboardStats, leaveRequests, people, tasks } from '../data/dummyData.js';
+import { attendanceRows as fallbackAttendanceRows, announcements as fallbackAnnouncements, leaveRequests as fallbackLeaveRequests, people as fallbackPeople, tasks as fallbackTasks } from '../data/dummyData.js';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section, leaveColumns } from './AdminDashboard.jsx';
 import { attendanceColumns } from './EmployeeDashboard.jsx';
 import { taskColumns } from './Tasks.jsx';
+import { safeApiRequest } from '../utils/api.js';
+import { getTodayLabel } from '../utils/attendanceStorage.js';
 import { loadTasksWithSeed } from '../utils/taskStorage.js';
 import { getInitials } from '../utils/user-management.js';
 
@@ -58,116 +59,187 @@ const teamLeadResponsibilities = [
 
 function TeamLeadDashboard() {
   const navigate = useNavigate();
+  const [employees, setEmployees] = useState([]);
+  const [attendance, setAttendance] = useState([]);
   const [liveTasks, setLiveTasks] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+
+  const refreshDashboard = () => {
+    Promise.all([
+      safeApiRequest('/employees', fallbackPeople),
+      safeApiRequest('/attendance', fallbackAttendanceRows),
+      safeApiRequest('/leaves', fallbackLeaveRequests),
+      safeApiRequest('/announcements', fallbackAnnouncements),
+      loadTasksWithSeed(fallbackTasks),
+    ]).then(([employeeRows, attendanceRows, leaveRows, announcementRows, taskRows]) => {
+      setEmployees(normalizeEmployees(employeeRows));
+      setAttendance(normalizeAttendanceRows(attendanceRows));
+      setLeaveRequests(normalizeLeaveRows(leaveRows));
+      setAnnouncements(normalizeAnnouncementRows(announcementRows));
+      setLiveTasks(Array.isArray(taskRows) ? taskRows : []);
+    });
+  };
 
   useEffect(() => {
     let active = true;
 
-    loadTasksWithSeed(tasks).then((rows) => {
-      if (active) {
-        setLiveTasks(rows);
+    const refresh = () => {
+      if (!active) {
+        return;
       }
-    });
+
+      refreshDashboard();
+    };
+
+    refresh();
+    const intervalId = window.setInterval(refresh, 15000);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('kavyaEmployeesChanged', refresh);
+    window.addEventListener('kavyaAttendanceRowsChanged', refresh);
+    window.addEventListener('kavyaLeaveRequestsChanged', refresh);
+    window.addEventListener('kavyaAnnouncementsChanged', refresh);
+    window.addEventListener('kavyaTasksChanged', refresh);
 
     return () => {
       active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('kavyaEmployeesChanged', refresh);
+      window.removeEventListener('kavyaAttendanceRowsChanged', refresh);
+      window.removeEventListener('kavyaLeaveRequestsChanged', refresh);
+      window.removeEventListener('kavyaAnnouncementsChanged', refresh);
+      window.removeEventListener('kavyaTasksChanged', refresh);
     };
   }, []);
 
-  const assignedTeam = useMemo(() => {
-    return people
-      .filter((employee) => teamLeadMemberIds.includes(employee.id))
-      .map((employee) => ({
-        id: employee.id,
-        avatar: employee.avatar || getInitials(employee.name),
-        name: employee.name,
-        role: employee.role,
-        department: employee.department,
-        attendance: getAttendanceSummary(employee.id),
-        workload: `${liveTasks.filter((task) => String(task.owner || '').toLowerCase() === String(employee.name || '').toLowerCase()).length} tasks`,
-      }));
-  }, [liveTasks]);
-  const teamLeadMemberNames = useMemo(() => (
-    people
-      .filter((employee) => teamLeadMemberIds.includes(employee.id))
-      .map((employee) => String(employee.name || '').toLowerCase())
-  ), []);
-  const teamAttendanceRows = attendanceRows.filter((row) => teamLeadMemberIds.includes(row.employeeId));
-  const teamLeaveRequests = leaveRequests.filter((request) => teamLeadMemberNames.includes(String(request.employee || '').toLowerCase()));
-  const teamTasks = liveTasks.filter((task) => teamLeadMemberNames.some((memberName) => (
-    String(task.owner || '').toLowerCase() === memberName
-    || String(task.assignedToName || '').toLowerCase() === memberName
-  )));
+  const teamMembers = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee)), [employees]);
+  const todayLabel = getTodayLabel();
+  const todayAttendance = useMemo(() => attendance.filter((row) => row.date === todayLabel), [attendance, todayLabel]);
+  const presentToday = todayAttendance.filter((row) => String(row.status || '').toLowerCase() === 'present');
+  const pendingLeaves = leaveRequests.filter((request) => String(request.status || '').toLowerCase() === 'pending');
+  const openTasks = liveTasks.filter((task) => String(task.status || '').toLowerCase() !== 'completed');
+  const departments = new Set(teamMembers.map((employee) => employee.department).filter(Boolean));
+  const urgentLeaves = pendingLeaves.filter((request) => Number(request.days) >= 3).length;
+  const highPriorityTasks = openTasks.filter((task) => String(task.priority || '').toLowerCase() === 'high').length;
+  const activeAnnouncements = announcements.filter((item) => String(item.status || 'active').toLowerCase() !== 'inactive');
+
+  const summaryCards = [
+    {
+      label: 'Team Members',
+      value: String(teamMembers.length).padStart(2, '0'),
+      delta: teamMembers.length > 0 ? `${teamMembers.filter((employee) => String(employee.status || '').toLowerCase() === 'on leave').length} on leave` : 'Live from database',
+      tone: 'blue',
+      icon: 'ri-team-line',
+      onClick: () => navigate('/team-lead/team'),
+    },
+    {
+      label: 'Tasks Pending',
+      value: String(openTasks.length).padStart(2, '0'),
+      delta: highPriorityTasks > 0 ? `${highPriorityTasks} high priority` : 'Active tasks',
+      tone: 'orange',
+      icon: 'ri-list-check-3',
+      onClick: () => navigate('/team-lead/tasks?status=Pending'),
+    },
+    {
+      label: 'Present Today',
+      value: String(presentToday.length).padStart(2, '0'),
+      delta: `${teamMembers.length ? Math.round((presentToday.length / teamMembers.length) * 100) : 0}% attendance`,
+      tone: 'green',
+      icon: 'ri-user-smile-line',
+      onClick: () => navigate('/team-lead/attendance?status=Present'),
+    },
+    {
+      label: 'Leave Requests',
+      value: String(pendingLeaves.length).padStart(2, '0'),
+      delta: urgentLeaves > 0 ? `${urgentLeaves} urgent` : 'Awaiting action',
+      tone: 'pink',
+      icon: 'ri-calendar-check-line',
+      onClick: () => navigate('/team-lead/leave-review?status=Pending'),
+    },
+  ];
+
+  const quickActionDetails = {
+    'Add Employee': `${teamMembers.length} profiles`,
+    'Approve Leave': `${pendingLeaves.length} pending`,
+    'Run Payroll': `${departments.size} departments`,
+    'Post Notice': `${activeAnnouncements.length} published`,
+  };
+
+  const reviewLink = '/team-lead/leave-review?status=Pending';
+  const tasksLink = '/team-lead/tasks?status=Pending';
+  const attendanceLink = '/team-lead/attendance?status=Present';
 
   return (
     <>
-      <Hero
-        title="Team Lead Dashboard"
-        copy="View your assigned team, assign tasks, review attendance, recommend leave requests, track task progress and priority, and stay on top of support tickets and announcements."
-      />
-      <QuickActions />
-      <CardGrid stats={dashboardStats.teamLead} />
-
-      <Section title="Team Lead Workbench" action="Overview">
-        <div className="dashboard-card-grid">
-          {teamLeadResponsibilities.map((item) => (
-            <DashboardCard key={item.label} {...item} />
-          ))}
-        </div>
-      </Section>
-
-      <Section title="Assigned Team" action="Team Members">
-        <DataTable
-          columns={teamColumns}
-          rows={assignedTeam}
-          emptyMessage="No assigned team members found."
-        />
-      </Section>
-
+      <Hero title="Team Lead Dashboard" copy="Coordinate team attendance, task ownership, leave requests, and day-to-day delivery updates." />
+      <QuickActions detailOverrides={quickActionDetails} />
+      <CardGrid stats={summaryCards} />
       <div className="dashboard-grid">
-        <Section title="Team Tasks" action="Assign Task" actionOnClick={() => navigate('/tasks')}>
-          <DataTable columns={taskColumns} rows={teamTasks.slice(0, 3)} emptyMessage="No tasks available." />
+        <Section title="Team Tasks" action="Assign Task" actionTo={tasksLink}>
+          <DataTable columns={taskColumns} rows={liveTasks.slice(0, 3)} emptyMessage="No tasks available." />
         </Section>
-        <Section title="Leave Review" action="Review">
-          <DataTable columns={leaveColumns} rows={teamLeaveRequests} />
+        <Section title="Leave Review" action="Review" actionTo={reviewLink}>
+          <DataTable columns={leaveColumns} rows={leaveRequests} />
         </Section>
       </div>
-
-      <Section title="Today Attendance" action="View Team">
-        <DataTable columns={attendanceColumns} rows={teamAttendanceRows} />
+      <Section title="Today Attendance" action="View Team" actionTo={attendanceLink}>
+        <DataTable columns={attendanceColumns} rows={todayAttendance} emptyMessage="No attendance records found for today." />
       </Section>
-
-      <InsightGrid />
+      <InsightGrid
+        pendingLeaves={pendingLeaves.length}
+        openRoles={activeAnnouncements.filter((item) => String(item.category || '').toLowerCase() === 'vacancy').length}
+        employees={teamMembers.length}
+        wellnessAnnouncements={announcements.filter((item) => String(item.category || '').toLowerCase() === 'wellness').slice(0, 3)}
+      />
     </>
   );
 }
 
-const teamColumns = [
-  {
-    key: 'name',
-    label: 'Team Member',
-    render: (row) => (
-      <div className="employee-cell">
-        <span>{row.avatar}</span>
-        <div>
-          <strong>{row.name}</strong>
-          <small>{row.id}</small>
-        </div>
-      </div>
-    ),
-  },
-  { key: 'role', label: 'Designation' },
-  { key: 'department', label: 'Department' },
-  { key: 'attendance', label: 'Attendance' },
-  { key: 'workload', label: 'Workload' },
-];
+function normalizeEmployees(rows) {
+  return (Array.isArray(rows) ? rows : []).map((employee, index) => ({
+    ...employee,
+    id: employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`,
+    employeeId: employee.employeeId || employee.employeeCode || employee.id || `EMP-${index + 1}`,
+    employeeCode: employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`,
+    displayName: employee.displayName || employee.name || employee.employeeName || `Employee ${index + 1}`,
+    department: employee.department || employee.departmentName || '-',
+    status: employee.status || 'Active',
+  }));
+}
 
-function getAttendanceSummary(employeeId) {
-  const rows = attendanceRows.filter((row) => String(row.employeeId || '').toLowerCase() === String(employeeId || '').toLowerCase());
-  const present = rows.filter((row) => row.status === 'Present').length;
-  const late = rows.filter((row) => row.status === 'Late').length;
-  const leave = rows.filter((row) => row.status === 'Leave').length;
-  return `${present}P / ${late}L / ${leave}LV`;
+function normalizeAttendanceRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    ...row,
+    date: row.date || row.dateLabel || '-',
+    status: row.status || 'Present',
+  }));
+}
+
+function normalizeLeaveRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((row, index) => ({
+    ...row,
+    id: row.id || `LV-${101 + index}`,
+    employee: row.employee || row.employeeName || '-',
+    status: row.status || 'Pending',
+    days: row.days ?? 0,
+  }));
+}
+
+function normalizeAnnouncementRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((item, index) => ({
+    ...item,
+    id: item.id || `ANN-${101 + index}`,
+    status: item.status || 'Active',
+    category: item.category || 'Other',
+  }));
+}
+
+function isAdminEmployee(employee) {
+  const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase();
+  const email = String(employee.email || '').trim().toLowerCase();
+
+  return employeeId === 'admin-001' || email === 'admin@gmail.com';
 }
 
 export default TeamLeadDashboard;

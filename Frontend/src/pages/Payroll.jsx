@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { salaryRecords } from '../data/dummyData.js';
 import { apiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getInitialAttendanceRows } from '../utils/attendanceStorage.js';
+import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getStoredPayrollRecords, refreshStoredPayrollRecords, saveStoredPayrollRecords } from '../utils/payrollStorage.js';
 import kavyaLogo from '../assets/logo.png';
 
@@ -27,6 +28,37 @@ const roleEmployeeFallback = {
   employee: 'PAY-1005',
 };
 
+function isPayrollPeriodAvailable(month, year, referenceDate = new Date()) {
+  const monthIndex = months.indexOf(String(month || ''));
+  const targetYear = Number.parseInt(year, 10);
+
+  if (monthIndex < 0 || !Number.isFinite(targetYear)) {
+    return false;
+  }
+
+  const selectedStart = new Date(targetYear, monthIndex, 1);
+  const currentStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+  return selectedStart < currentStart;
+}
+
+function getPayrollAvailabilityText(month, year) {
+  const monthIndex = months.indexOf(String(month || ''));
+  const targetYear = Number.parseInt(year, 10);
+
+  if (monthIndex < 0 || !Number.isFinite(targetYear)) {
+    return 'Payslip is not available for the selected period.';
+  }
+
+  const monthEnd = new Date(targetYear, monthIndex + 1, 0);
+  const formattedEndDate = new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(monthEnd);
+
+  return `This payslip will be available after ${formattedEndDate}.`;
+}
+
 function Payroll() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const canManagePayroll = role === 'admin' || role === 'hr';
@@ -34,6 +66,7 @@ function Payroll() {
   const [selectedMonth, setSelectedMonth] = useState(months[defaultPeriod.monthIndex]);
   const [selectedYear, setSelectedYear] = useState(String(defaultPeriod.year));
   const [employees, setEmployees] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState(() => getInitialLeaveRequests());
   const [savedPayrollRecords, setSavedPayrollRecords] = useState(() => getStoredPayrollRecords());
   const [statusOverrides, setStatusOverrides] = useState(() => getInitialPayrollStatuses(getStoredPayrollRecords()));
   const [isPayrollStorageReady, setIsPayrollStorageReady] = useState(false);
@@ -43,8 +76,8 @@ function Payroll() {
     year: Number(selectedYear),
   }), [selectedMonth, selectedYear]);
   const records = useMemo(() => {
-    return buildPayrollRecords(employees, getInitialAttendanceRows(), statusOverrides, payrollPeriod, savedPayrollRecords);
-  }, [employees, payrollPeriod, refreshKey, savedPayrollRecords, statusOverrides]);
+    return buildPayrollRecords(employees, getInitialAttendanceRows(), leaveRequests, statusOverrides, payrollPeriod, savedPayrollRecords);
+  }, [employees, leaveRequests, payrollPeriod, refreshKey, savedPayrollRecords, statusOverrides]);
 
   useEffect(() => {
     let active = true;
@@ -67,6 +100,34 @@ function Payroll() {
       active = false;
     };
   }, [refreshKey]);
+
+  useEffect(() => {
+    let active = true;
+
+    const refreshLeaves = () => {
+      refreshStoredLeaveRequests()
+        .then((requests) => {
+          if (active) {
+            setLeaveRequests(Array.isArray(requests) ? requests : []);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setLeaveRequests(getInitialLeaveRequests());
+          }
+        });
+    };
+
+    refreshLeaves();
+    window.addEventListener('storage', refreshLeaves);
+    window.addEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
+
+    return () => {
+      active = false;
+      window.removeEventListener('storage', refreshLeaves);
+      window.removeEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
+    };
+  }, []);
 
   useEffect(() => {
     refreshStoredPayrollRecords()
@@ -116,6 +177,7 @@ function Payroll() {
   return (
     <MyPayslip
       records={records}
+      savedPayrollRecords={savedPayrollRecords}
       role={role}
       month={selectedMonth}
       year={selectedYear}
@@ -129,6 +191,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
   const [message, setMessage] = useState('');
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [activeSummary, setActiveSummary] = useState('total');
+  const tableSectionRef = useRef(null);
 
   const summary = useMemo(() => {
     const totalPayroll = records.reduce((sum, record) => sum + getNetSalary(record), 0);
@@ -144,6 +207,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
   }, [records]);
 
   const summaryDetail = useMemo(() => getPayrollSummaryDetail(activeSummary, records), [activeSummary, records]);
+  const filteredRecords = useMemo(() => getFilteredPayrollRecords(activeSummary, records), [activeSummary, records]);
 
   const toggleStatus = (recordId) => {
     setStatusOverrides((current) => {
@@ -158,6 +222,21 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
       };
     });
     setMessage('Payroll payment status updated successfully');
+  };
+
+  const handleSummaryClick = (summaryId) => {
+    setActiveSummary(summaryId);
+    requestAnimationFrame(() => {
+      tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const handleGeneratePayroll = () => {
+    saveStoredPayrollRecords(mergePayrollRecords(savedPayrollRecords, records));
+    setMessage(`${selectedMonth} ${selectedYear} payroll generated and saved (${records.length} records).`);
+    requestAnimationFrame(() => {
+      tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   return (
@@ -176,7 +255,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
           <DashboardCard
             key={item.label}
             {...item}
-            onClick={() => setActiveSummary(item.id)}
+            onClick={() => handleSummaryClick(item.id)}
           />
         ))}
       </div>
@@ -197,20 +276,10 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
             </div>
           ))}
         </div>
-        <div className="payroll-detail-list">
-          {summaryDetail.rows.length > 0 ? summaryDetail.rows.map((record) => (
-            <button type="button" key={record.id} onClick={() => setSelectedPayslip(record)}>
-              <span>{record.employeeName}</span>
-              <small>{record.employeeId} - {record.department}</small>
-              <strong>{formatCurrency(getNetSalary(record))}</strong>
-            </button>
-          )) : (
-            <p>No records available for this summary.</p>
-          )}
-        </div>
       </section>
 
-      <Section title="Employee Salary Table" action="Payroll">
+      <div ref={tableSectionRef}>
+        <Section title="Employee Salary Table">
         <div className="payroll-toolbar">
           <label className="field payroll-filter-field">
             <span>Month</span>
@@ -224,7 +293,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
               {years.map((year) => <option key={year} value={year}>{year}</option>)}
             </select>
           </label>
-          <button className="payroll-primary" type="button" onClick={() => setMessage(`${selectedMonth} ${selectedYear} payroll generated and saved.`)}>
+          <button className="payroll-primary" type="button" onClick={handleGeneratePayroll}>
             <i className="ri-file-list-3-line" aria-hidden="true" />
             Generate
           </button>
@@ -244,7 +313,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
                 </tr>
               </thead>
               <tbody>
-                {records.map((record) => (
+                {filteredRecords.map((record) => (
                   <tr key={record.id}>
                     <td data-label="Employee">
                       <div className="employee-cell payroll-employee-cell">
@@ -265,7 +334,17 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
                     <td data-label="Actions">
                       <div className="payroll-actions">
                         <button type="button" onClick={() => toggleStatus(record.id)}><i className="ri-exchange-dollar-line" aria-hidden="true" />{record.status === 'Paid' ? 'Unpaid' : 'Paid'}</button>
-                        <button type="button" onClick={() => setSelectedPayslip(record)}><i className="ri-file-download-line" aria-hidden="true" />Payslip</button>
+                        {isPayrollPeriodAvailable(record.month, record.year) ? (
+                          <button type="button" onClick={() => setSelectedPayslip(record)}>
+                            <i className="ri-file-download-line" aria-hidden="true" />
+                            Payslip
+                          </button>
+                        ) : (
+                          <button type="button" disabled aria-disabled="true">
+                            <i className="ri-lock-line" aria-hidden="true" />
+                            Locked
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -275,6 +354,7 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
           </div>
         </div>
       </Section>
+      </div>
 
       {selectedPayslip && (
         <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
@@ -283,13 +363,68 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
   );
 }
 
-function MyPayslip({ records, role, month, year, setMonth, setYear }) {
+function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMonth, setYear }) {
   const [selectedPayslip, setSelectedPayslip] = useState(null);
+  const [periodRecords, setPeriodRecords] = useState([]);
+  const [periodLoading, setPeriodLoading] = useState(false);
   const employeeId = getSessionValue('kavyaEmployeeId');
   const safeRecords = Array.isArray(records) ? records : [];
-  const payslip = safeRecords.find((record) => employeeId && record.employeeId === employeeId && record.month === month && record.year === year)
-    || safeRecords.find((record) => record.ownerRole === role && record.month === month && record.year === year)
-    || safeRecords.find((record) => record.id === roleEmployeeFallback[role])
+  const safeSavedPayrollRecords = Array.isArray(savedPayrollRecords) ? savedPayrollRecords : [];
+  const canDownloadPayslip = isPayrollPeriodAvailable(month, year);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPeriodPayroll = async () => {
+      setPeriodLoading(true);
+      try {
+        const rows = await apiRequest(`/payroll/${encodeURIComponent(month)}/${encodeURIComponent(year)}`);
+        if (!active) {
+          return;
+        }
+        setPeriodRecords(normalizePayrollRecords(rows));
+      } catch {
+        if (active) {
+          setPeriodRecords([]);
+        }
+      } finally {
+        if (active) {
+          setPeriodLoading(false);
+        }
+      }
+    };
+
+    loadPeriodPayroll();
+
+    const refreshPeriodPayroll = () => {
+      loadPeriodPayroll();
+    };
+
+    window.addEventListener('focus', refreshPeriodPayroll);
+    window.addEventListener('storage', refreshPeriodPayroll);
+    window.addEventListener('kavyaPayrollRecordsChanged', refreshPeriodPayroll);
+
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refreshPeriodPayroll);
+      window.removeEventListener('storage', refreshPeriodPayroll);
+      window.removeEventListener('kavyaPayrollRecordsChanged', refreshPeriodPayroll);
+    };
+  }, [month, year]);
+
+  const payrollRecordsForSelection = useMemo(() => {
+    const combined = [
+      ...periodRecords,
+      ...safeSavedPayrollRecords,
+      ...safeRecords,
+    ];
+
+    return normalizePayrollRecords(combined);
+  }, [periodRecords, safeRecords, safeSavedPayrollRecords]);
+
+  const payslip = payrollRecordsForSelection.find((record) => employeeId && record.employeeId === employeeId && record.month === month && record.year === year)
+    || payrollRecordsForSelection.find((record) => record.ownerRole === role && record.month === month && record.year === year)
+    || payrollRecordsForSelection.find((record) => record.id === roleEmployeeFallback[role])
     || getEmptyPayslip(role, month, year);
 
   return (
@@ -310,55 +445,73 @@ function MyPayslip({ records, role, month, year, setMonth, setYear }) {
               {years.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          <button className="payroll-primary" type="button" onClick={() => setSelectedPayslip(payslip)}>
-            <i className="ri-download-cloud-2-line" aria-hidden="true" />
-            Download Payslip
-          </button>
+          {canDownloadPayslip ? (
+            <button className="payroll-primary" type="button" onClick={() => setSelectedPayslip(payslip)} disabled={periodLoading}>
+              <i className="ri-download-cloud-2-line" aria-hidden="true" />
+              {periodLoading ? 'Loading...' : 'Download Payslip'}
+            </button>
+          ) : (
+            <div className="payroll-alert" role="status">
+              <i className="ri-lock-line" aria-hidden="true" />
+              <span>{getPayrollAvailabilityText(month, year)}</span>
+            </div>
+          )}
         </div>
       </Section>
 
-      <div className="payslip-layout">
-        <section className="payslip-card">
-          <div className="payslip-head">
-            <div>
-              <p className="eyebrow">Salary Slip</p>
-              <h3>{payslip.employeeName}</h3>
-              <span>{payslip.employeeId} - {payslip.role}</span>
-            </div>
-            <span className={`status status-${payslip.status.toLowerCase()}`}>{payslip.status}</span>
+      {canDownloadPayslip ? (
+        <>
+          <div className="payslip-layout">
+            <section className="payslip-card">
+              <div className="payslip-head">
+                <div>
+                  <p className="eyebrow">Salary Slip</p>
+                  <h3>{payslip.employeeName}</h3>
+                  <span>{payslip.employeeId} - {payslip.role}</span>
+                </div>
+                <span className={`status status-${payslip.status.toLowerCase()}`}>{payslip.status}</span>
+              </div>
+
+              <div className="payslip-info-grid">
+                <div><span>Department</span><strong>{payslip.department}</strong></div>
+                <div><span>Pay Period</span><strong>{payslip.month} {payslip.year}</strong></div>
+                <div><span>Gross Earnings</span><strong>{formatCurrency(getEarnings(payslip))}</strong></div>
+                <div><span>Total Deductions</span><strong>{formatCurrency(getDeductions(payslip))}</strong></div>
+              </div>
+
+              <div className="net-salary-box">
+                <span>Net Salary</span>
+                <strong>{formatCurrency(getNetSalary(payslip))}</strong>
+              </div>
+            </section>
+
+            <SalaryBreakdown title="Earnings" items={[
+              ['Monthly Package', payslip.basic],
+              ['HRA', payslip.hra],
+              ['Allowance', payslip.allowance],
+              ['Bonus', payslip.bonus],
+            ]} total={getEarnings(payslip)} tone="earnings" />
+
+            <SalaryBreakdown title="Deductions" items={[
+              ['PF', payslip.providentFund],
+              ['GRATUITY', payslip.gratuity],
+              ['PROF TAX', payslip.professionalTax],
+              ['Half Days', payslip.halfDayDeduction],
+              ['Other Deduction', payslip.otherDeduction],
+            ]} total={getDeductions(payslip)} tone="deductions" />
           </div>
 
-          <div className="payslip-info-grid">
-            <div><span>Department</span><strong>{payslip.department}</strong></div>
-            <div><span>Pay Period</span><strong>{payslip.month} {payslip.year}</strong></div>
-            <div><span>Gross Earnings</span><strong>{formatCurrency(getEarnings(payslip))}</strong></div>
-            <div><span>Total Deductions</span><strong>{formatCurrency(getDeductions(payslip))}</strong></div>
+          {selectedPayslip && (
+            <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
+          )}
+        </>
+      ) : (
+        <Section title="Payslip Locked">
+          <div className="payroll-alert" role="status">
+            <i className="ri-lock-line" aria-hidden="true" />
+            <span>{getPayrollAvailabilityText(month, year)}</span>
           </div>
-
-          <div className="net-salary-box">
-            <span>Net Salary</span>
-            <strong>{formatCurrency(getNetSalary(payslip))}</strong>
-          </div>
-        </section>
-
-        <SalaryBreakdown title="Earnings" items={[
-          ['Monthly Package', payslip.basic],
-          ['HRA', payslip.hra],
-          ['Allowance', payslip.allowance],
-          ['Bonus', payslip.bonus],
-        ]} total={getEarnings(payslip)} tone="earnings" />
-
-        <SalaryBreakdown title="Deductions" items={[
-          ['PF', payslip.providentFund],
-          ['GRATUITY', payslip.gratuity],
-          ['PROF TAX', payslip.professionalTax],
-          ['Half Days', payslip.halfDayDeduction],
-          ['Other Deduction', payslip.otherDeduction],
-        ]} total={getDeductions(payslip)} tone="deductions" />
-      </div>
-
-      {selectedPayslip && (
-        <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
+        </Section>
       )}
     </>
   );
@@ -793,7 +946,6 @@ function getPayrollSummaryDetail(summaryId, records) {
   return {
     title: 'Total Payroll Details',
     value: formatCurrency(totalNet),
-    rows: records,
     metrics: [
       { label: 'Gross Earnings', value: formatCurrency(totalEarnings) },
       { label: 'Total Deductions', value: formatCurrency(totalDeductions) },
@@ -810,6 +962,44 @@ function getPayrollRecordId(employeeId, month, year) {
   return `PAY-${employeeId}-${month}-${year}`;
 }
 
+function normalizePayrollRecords(rows = []) {
+  return (Array.isArray(rows) ? rows : []).map((record, index) => ({
+    ...record,
+    id: record.id || getPayrollRecordId(record.employeeId || `EMP-${index + 1}`, record.month || months[0], String(record.year || years[0])),
+    employeeId: String(record.employeeId || record.employeeCode || record.id || `EMP-${index + 1}`),
+    employeeName: record.employeeName || record.name || 'Employee',
+    role: record.role || record.designation || 'Employee',
+    ownerRole: record.ownerRole || 'employee',
+    department: record.department || '-',
+    month: String(record.month || months[0]),
+    year: String(record.year || years[0]),
+    basic: Number(record.basic || 0),
+    hra: Number(record.hra || 0),
+    allowance: Number(record.allowance || 0),
+    bonus: Number(record.bonus || 0),
+    tax: Number(record.tax || 0),
+    providentFund: Number(record.providentFund || 0),
+    gratuity: Number(record.gratuity || 0),
+    professionalTax: Number(record.professionalTax || 0),
+    absentDeduction: Number(record.absentDeduction || 0),
+    halfDayDeduction: Number(record.halfDayDeduction || 0),
+    otherDeduction: Number(record.otherDeduction || 0),
+    packageAmount: Number(record.packageAmount || 0),
+    daysInMonth: Number(record.daysInMonth || 0),
+    payableDays: Number(record.payableDays || 0),
+    lopDays: Number(record.lopDays || 0),
+    bankName: record.bankName || '-',
+    accountNo: record.accountNo || '-',
+    uanNo: record.uanNo || record.pfUanNo || '-',
+    aadhaarNo: record.aadhaarNo || record.aadhaarCardNo || '-',
+    panNo: record.panNo || record.panCardNo || '-',
+    location: record.location || '-',
+    status: record.status || 'Unpaid',
+    attendanceSummary: record.attendanceSummary || '',
+    deductionSummary: record.deductionSummary || '',
+  }));
+}
+
 function mergePayrollRecords(existingRecords, nextRecords) {
   const recordsById = new Map();
   existingRecords.forEach((record) => recordsById.set(record.id, record));
@@ -817,12 +1007,13 @@ function mergePayrollRecords(existingRecords, nextRecords) {
   return [...recordsById.values()];
 }
 
-function buildPayrollRecords(employees, attendance, statusOverrides, period, savedPayrollRecords = []) {
+function buildPayrollRecords(employees, attendance, leaveRequests, statusOverrides, period, savedPayrollRecords = []) {
   return employees.map((employee, index) => {
     const employeeId = employee.employeeCode || employee.employeeId || employee.id;
     const packageAmount = getPackageAmount(employee, employeeId);
     const monthlyGross = getMonthlyGrossFromPackage(packageAmount);
     const attendanceSummary = getMonthlyAttendanceSummary(attendance, employeeId, period);
+    const approvedLeaveDays = getApprovedLeaveDaysForPeriod(leaveRequests, employeeId, period);
     const daysInMonth = getDaysInMonth(period.year, period.monthIndex);
     const perDaySalary = monthlyGross / Math.max(daysInMonth, 1);
     const absentDeduction = Math.round(attendanceSummary.absentDays * perDaySalary);
@@ -857,7 +1048,7 @@ function buildPayrollRecords(employees, attendance, statusOverrides, period, sav
       otherDeduction,
       packageAmount,
       daysInMonth,
-      payableDays: Math.max(0, daysInMonth - attendanceSummary.lopDays),
+      payableDays: Math.max(0, attendanceSummary.payableDays + approvedLeaveDays),
       lopDays: attendanceSummary.lopDays,
       bankName: employee.bankName || '-',
       accountNo: employee.accountNo || '-',
@@ -866,7 +1057,7 @@ function buildPayrollRecords(employees, attendance, statusOverrides, period, sav
       panNo: employee.panCardNo || '-',
       location: employee.workingLocation || employee.presentCityDistrict || employee.permanentCityDistrict || '-',
       status: statusOverrides[id] || savedRecord?.status || (index % 2 === 0 ? 'Unpaid' : 'Paid'),
-      attendanceSummary: `${attendanceSummary.payableDays} paid days, ${attendanceSummary.absentDays} absent, ${attendanceSummary.halfDays} half day`,
+      attendanceSummary: `${attendanceSummary.payableDays + approvedLeaveDays} paid days, ${approvedLeaveDays} approved leave, ${attendanceSummary.absentDays} absent, ${attendanceSummary.halfDays} half day`,
       deductionSummary: `PF ${formatCurrency(providentFund)}, Gratuity ${formatCurrency(gratuity)}, Prof Tax ${formatCurrency(professionalTax)}, LOP ${formatCurrency(absentDeduction + halfDayDeduction)}`,
     };
   });
@@ -939,6 +1130,87 @@ function getMonthlyAttendanceSummary(attendance, employeeId, period) {
   return summary;
 }
 
+function getApprovedLeaveDaysForPeriod(leaveRequests, employeeId, period) {
+  return (Array.isArray(leaveRequests) ? leaveRequests : []).reduce((total, request) => {
+    if (!request || !isApprovedLeaveRequest(request) || !matchesEmployeeId(request, employeeId)) {
+      return total;
+    }
+
+    const leaveRange = getLeaveDateRange(request, period.year);
+    if (!leaveRange) {
+      return total + normalizeDays(request.days);
+    }
+
+    const monthStart = new Date(period.year, period.monthIndex, 1);
+    const monthEnd = new Date(period.year, period.monthIndex + 1, 0);
+    if (leaveRange.end < monthStart || leaveRange.start > monthEnd) {
+      return total;
+    }
+
+    return total + normalizeDays(request.days || getDateSpanDays(leaveRange.start, leaveRange.end));
+  }, 0);
+}
+
+function isApprovedLeaveRequest(request) {
+  return String(request?.status || '').trim().toLowerCase() === 'approved';
+}
+
+function matchesEmployeeId(request, employeeId) {
+  const target = String(employeeId || '').trim();
+  const requestEmployeeId = String(request?.employeeId || request?.employeeCode || '').trim();
+  return target && requestEmployeeId === target;
+}
+
+function getLeaveDateRange(request, fallbackYear) {
+  const start = parseFlexibleDate(request.from || request.fromDate, fallbackYear);
+  const end = parseFlexibleDate(request.to || request.toDate, fallbackYear);
+
+  if (!start && !end) {
+    return null;
+  }
+
+  const rangeStart = start || end;
+  const rangeEnd = end || start || rangeStart;
+  return {
+    start: rangeStart,
+    end: rangeEnd,
+  };
+}
+
+function parseFlexibleDate(value, fallbackYear) {
+  if (!value) {
+    return null;
+  }
+
+  const text = String(value).trim();
+  const isoDate = new Date(text);
+  if (!Number.isNaN(isoDate.getTime())) {
+    return isoDate;
+  }
+
+  const match = text.match(/^(\d{1,2})\s([A-Za-z]{3})(?:\s(\d{4}))?$/);
+  if (!match) {
+    return null;
+  }
+
+  const monthIndex = months.findIndex((month) => month.slice(0, 3).toLowerCase() === match[2].toLowerCase());
+  if (monthIndex < 0) {
+    return null;
+  }
+
+  return new Date(Number(match[3] || fallbackYear), monthIndex, Number(match[1]));
+}
+
+function getDateSpanDays(start, end) {
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.max(1, Math.round((new Date(end).setHours(0, 0, 0, 0) - new Date(start).setHours(0, 0, 0, 0)) / dayMs) + 1);
+}
+
+function normalizeDays(value) {
+  const numeric = Number.parseInt(value, 10);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
 function parseAttendanceDate(value) {
   const match = String(value || '').trim().match(/^(\d{1,2})\s([A-Za-z]{3})\s(\d{4})$/);
   if (!match) {
@@ -996,6 +1268,22 @@ function getPayslipDeductions(record) {
     { label: 'HALF DAYS', actual: record.halfDayDeduction },
     { label: 'OTHER DEDUCTION', actual: record.otherDeduction },
   ].filter((item) => item.actual > 0);
+}
+
+function getFilteredPayrollRecords(summaryId, records) {
+  if (summaryId === 'paid') {
+    return records.filter((record) => record.status === 'Paid');
+  }
+
+  if (summaryId === 'unpaid') {
+    return records.filter((record) => record.status !== 'Paid');
+  }
+
+  if (summaryId === 'average') {
+    return [...records].sort((first, second) => getNetSalary(second) - getNetSalary(first));
+  }
+
+  return records;
 }
 
 function getProvidentFund(monthlyGross, employee) {

@@ -1,10 +1,9 @@
-import { announcements as fallbackAnnouncements } from '../data/dummyData.js';
 import { apiRequest } from './api.js';
 
 let announcementsCache = [];
 
 export function getStoredAnnouncements() {
-  return announcementsCache.length > 0 ? announcementsCache : fallbackAnnouncements;
+  return announcementsCache;
 }
 
 export function setAnnouncementsCache(announcements) {
@@ -12,17 +11,20 @@ export function setAnnouncementsCache(announcements) {
   window.dispatchEvent(new Event('kavyaAnnouncementsChanged'));
 }
 
-export function saveStoredAnnouncements(announcements) {
-  announcementsCache = announcements;
-  apiRequest('/announcements/bulk', { method: 'POST', body: JSON.stringify(announcements.map(normalizeAnnouncementForSave)) }).catch(() => {});
+export async function saveStoredAnnouncements(announcements) {
+  const payload = (Array.isArray(announcements) ? announcements : []).map(normalizeAnnouncementForSave);
+  const savedAnnouncements = await apiRequest('/announcements/bulk', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  announcementsCache = Array.isArray(savedAnnouncements) ? savedAnnouncements.map(normalizeAnnouncementFromApi) : payload.map(normalizeAnnouncementFromApi);
   window.dispatchEvent(new Event('kavyaAnnouncementsChanged'));
+  return getStoredAnnouncements();
 }
 
 export async function refreshStoredAnnouncements() {
   const announcements = await apiRequest('/announcements');
-  if (Array.isArray(announcements) && announcements.length > 0) {
-    announcementsCache = announcements.map(normalizeAnnouncementFromApi);
-  }
+  announcementsCache = Array.isArray(announcements) ? announcements.map(normalizeAnnouncementFromApi) : [];
   return getStoredAnnouncements();
 }
 

@@ -14,6 +14,7 @@ export function normalizeTaskRows(rows = []) {
     assignedByRole: task.assignedByRole || '',
     priority: task.priority || 'Medium',
     due: task.due || task.dueDate || '-',
+    dueDate: task.dueDate || task.due || '',
     status: task.status || 'Pending',
     projectId: task.projectId || '',
   }));

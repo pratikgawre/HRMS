@@ -1,38 +1,69 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { apiRequest } from '../utils/api.js';
+import { safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 
-// Hardcoded team IDs removed
-
-
 function MyTeam() {
+  const navigate = useNavigate();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isTeamLead = role === 'teamLead';
-  const currentEmployeeId = getSessionValue('employeeId');
+  const roleBasePath = {
+    teamLead: '/team-lead',
+    projectManager: '/project-manager',
+  }[role] || '/team-lead';
+  const currentEmployeeId = getSessionValue('kavyaEmployeeId');
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
-    Promise.all([
-      apiRequest('/employees').catch(() => []),
-      apiRequest('/attendance').catch(() => []),
-      apiRequest('/tasks').catch(() => []),
-    ]).then(([employeeRows, attendanceRows, taskRows]) => {
-      setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
-      setAttendance(Array.isArray(attendanceRows) ? attendanceRows : []);
-      setTasks(Array.isArray(taskRows) ? taskRows : []);
-    });
+    let active = true;
+
+    const refreshTeamData = () => {
+      Promise.all([
+        safeApiRequest('/employees', []),
+        safeApiRequest('/attendance', []),
+        safeApiRequest('/tasks', []),
+      ]).then(([employeeRows, attendanceRows, taskRows]) => {
+        if (!active) {
+          return;
+        }
+
+        setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
+        setAttendance(Array.isArray(attendanceRows) ? attendanceRows : []);
+        setTasks(Array.isArray(taskRows) ? taskRows : []);
+      });
+    };
+
+    refreshTeamData();
+    const intervalId = window.setInterval(refreshTeamData, 15000);
+    window.addEventListener('focus', refreshTeamData);
+    window.addEventListener('kavyaEmployeesChanged', refreshTeamData);
+    window.addEventListener('kavyaAttendanceRowsChanged', refreshTeamData);
+    window.addEventListener('kavyaTasksChanged', refreshTeamData);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshTeamData);
+      window.removeEventListener('kavyaEmployeesChanged', refreshTeamData);
+      window.removeEventListener('kavyaAttendanceRowsChanged', refreshTeamData);
+      window.removeEventListener('kavyaTasksChanged', refreshTeamData);
+    };
   }, []);
 
-  const rows = useMemo(() => {
-    const visibleEmployees = employees.filter((employee) => (
-      isTeamLead ? teamLeadMemberIds.includes(employee.employeeId || employee.id) : !isAdminEmployee(employee)
-    ));
+  const visibleEmployees = useMemo(() => (
+    employees.filter((employee) => (
+      isTeamLead
+        ? isVisibleToTeamLead(employee, currentEmployeeId)
+        : !isAdminEmployee(employee)
+    ))
+  ), [currentEmployeeId, employees, isTeamLead]);
 
+  const rows = useMemo(() => {
     return visibleEmployees.map((employee) => {
       const attendanceSummary = getAttendanceSummary(attendance, employee.employeeId || employee.id);
       const workload = tasks.filter((task) => String(task.owner || '').toLowerCase() === String(employee.displayName || employee.name || '').toLowerCase()).length;
@@ -48,22 +79,26 @@ function MyTeam() {
         workload: `${workload} tasks`,
       };
     });
-  }, [attendance, employees, isTeamLead, tasks]);
+  }, [attendance, tasks, visibleEmployees]);
 
-  const visibleAttendance = isTeamLead
-    ? attendance.filter((row) => teamLeadMemberIds.includes(row.employeeId))
-    : attendance;
+  const visibleAttendance = useMemo(() => (
+    isTeamLead
+      ? attendance.filter((row) => visibleEmployees.some((employee) => String(employee.employeeId || employee.id || '').trim() === String(row.employeeId || '').trim()))
+      : attendance
+  ), [attendance, isTeamLead, visibleEmployees]);
+
   const teamMemberNames = useMemo(() => (
-    employees
-      .filter((employee) => teamLeadMemberIds.includes(employee.employeeId || employee.id))
-      .map((employee) => String(employee.displayName || employee.name || '').toLowerCase())
-  ), [employees]);
-  const visibleTasks = isTeamLead
-    ? tasks.filter((task) => teamMemberNames.includes(String(task.owner || '').toLowerCase()))
-    : tasks;
+    visibleEmployees.map((employee) => String(employee.displayName || employee.name || '').toLowerCase())
+  ), [visibleEmployees]);
+
+  const visibleTasks = useMemo(() => (
+    isTeamLead
+      ? tasks.filter((task) => teamMemberNames.includes(String(task.owner || task.assignedToName || '').toLowerCase()))
+      : tasks
+  ), [isTeamLead, tasks, teamMemberNames]);
 
   const cards = [
-    { label: 'Team Members', value: String(rows.length).padStart(2, '0'), delta: 'Live from database', tone: 'blue', icon: 'ri-team-line' },
+    { label: 'Team Members', value: String(visibleEmployees.length).padStart(2, '0'), delta: 'Live from database', tone: 'blue', icon: 'ri-team-line' },
     {
       label: 'Attendance Marked',
       value: String(visibleAttendance.length).padStart(2, '0'),
@@ -78,8 +113,15 @@ function MyTeam() {
       tone: 'orange',
       icon: 'ri-task-line',
     },
-    { label: 'Departments', value: String(new Set(employees.map((employee) => employee.department).filter(Boolean)).size).padStart(2, '0'), delta: 'Reporting groups', tone: 'pink', icon: 'ri-building-2-line' },
+    { label: 'Departments', value: String(new Set(visibleEmployees.map((employee) => employee.department).filter(Boolean)).size).padStart(2, '0'), delta: 'Reporting groups', tone: 'pink', icon: 'ri-building-2-line' },
   ];
+
+  const cardRoutes = {
+    'Team Members': `${roleBasePath}/team`,
+    'Attendance Marked': `${roleBasePath}/attendance`,
+    'Open Workload': `${roleBasePath}/tasks`,
+    Departments: role === 'projectManager' ? `${roleBasePath}/departments` : `${roleBasePath}/team`,
+  };
 
   const columns = [
     {
@@ -112,7 +154,13 @@ function MyTeam() {
       />
 
       <section className="dashboard-card-grid">
-        {cards.map((card) => <DashboardCard key={card.label} {...card} />)}
+        {cards.map((card) => (
+          <DashboardCard
+            key={card.label}
+            {...card}
+            onClick={() => navigate(cardRoutes[card.label] || `${roleBasePath}/team`)}
+          />
+        ))}
       </section>
 
       <Section title={isTeamLead ? 'Assigned Team' : 'Team Members'} action="Team Summary">
@@ -149,6 +197,19 @@ function isAdminEmployee(employee) {
   const email = String(employee.email || '').trim().toLowerCase();
 
   return employeeId === 'admin-001' || email === 'admin@gmail.com';
+}
+
+function isVisibleToTeamLead(employee, currentEmployeeId) {
+  if (isAdminEmployee(employee)) {
+    return false;
+  }
+
+  const managerId = String(employee.managerId || employee.teamLeadId || employee.reportingManagerId || '').trim();
+  if (currentEmployeeId && managerId) {
+    return managerId === String(currentEmployeeId).trim();
+  }
+
+  return true;
 }
 
 export default MyTeam;

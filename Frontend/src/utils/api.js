@@ -5,10 +5,12 @@ const API_BASE = '/api';
 export async function apiRequest(path, options = {}) {
   const token = getSessionValue('kavyaAuthToken');
   const accessRole = getSessionValue('kavyaAccessRole') || getSessionValue('kavyaRole');
+  const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId');
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(accessRole ? { 'X-Kavya-Access-Role': accessRole } : {}),
+    ...(userId ? { 'X-Kavya-User-Id': userId } : {}),
     ...(options.headers || {}),
   };
 

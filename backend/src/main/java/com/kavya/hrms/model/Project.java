@@ -1,5 +1,6 @@
 package com.kavya.hrms.model;
 
+import java.util.List;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -12,6 +13,8 @@ public class Project {
   private String manager;
   private String managerId;
   private String team;
+  private List<String> teamMembers;
+  private List<ProjectMember> teamMemberDetails;
   private String milestone;
   private String startDate;
   private String endDate;
@@ -30,6 +33,10 @@ public class Project {
   public void setManagerId(String managerId) { this.managerId = managerId; }
   public String getTeam() { return team; }
   public void setTeam(String team) { this.team = team; }
+  public List<String> getTeamMembers() { return teamMembers; }
+  public void setTeamMembers(List<String> teamMembers) { this.teamMembers = teamMembers; }
+  public List<ProjectMember> getTeamMemberDetails() { return teamMemberDetails; }
+  public void setTeamMemberDetails(List<ProjectMember> teamMemberDetails) { this.teamMemberDetails = teamMemberDetails; }
   public String getMilestone() { return milestone; }
   public void setMilestone(String milestone) { this.milestone = milestone; }
   public String getStartDate() { return startDate; }

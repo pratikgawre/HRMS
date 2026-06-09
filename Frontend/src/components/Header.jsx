@@ -1,17 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { announcements } from '../data/dummyData.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { clearSession } from '../utils/auth.js';
+import { apiRequest } from '../utils/api.js';
+import { getSessionValue } from '../utils/appSession.js';
 
 function Header({ role, onMenuClick }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [notificationItems, setNotificationItems] = useState(() =>
-    announcements.map((item) => ({ ...item, read: false })),
-  );
+  const [notificationItems, setNotificationItems] = useState([]);
   const today = new Intl.DateTimeFormat('en-IN', {
     weekday: 'short',
     day: '2-digit',
@@ -28,7 +27,8 @@ function Header({ role, onMenuClick }) {
   const employeeIdentity = getCurrentEmployeeIdentity();
   const userInitials = employeeIdentity?.avatar || displayRole.slice(0, 2);
   const displayName = role === 'admin' ? 'Admin' : employeeIdentity?.employee || displayRole;
-  const unreadCount = useMemo(() => notificationItems.filter((item) => !item.read).length, [notificationItems]);
+  const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId');
+  const unreadCount = useMemo(() => notificationItems.filter((item) => !item.readStatus).length, [notificationItems]);
 
   const roleBasePath = {
     admin: '/admin',
@@ -52,6 +52,34 @@ function Header({ role, onMenuClick }) {
     { segment: '/dashboard', keywords: ['dashboard', 'overview', 'home'] },
   ];
 
+  useEffect(() => {
+    let active = true;
+
+    const refreshNotifications = async () => {
+      try {
+        const rows = await apiRequest(`/notifications?role=${encodeURIComponent(role)}&userId=${encodeURIComponent(userId || '')}`);
+        if (!active) {
+          return;
+        }
+        setNotificationItems(normalizeNotifications(rows));
+      } catch {
+        if (active) {
+          setNotificationItems([]);
+        }
+      }
+    };
+
+    refreshNotifications();
+    window.addEventListener('storage', refreshNotifications);
+    window.addEventListener('kavyaNotificationsChanged', refreshNotifications);
+
+    return () => {
+      active = false;
+      window.removeEventListener('storage', refreshNotifications);
+      window.removeEventListener('kavyaNotificationsChanged', refreshNotifications);
+    };
+  }, [role, userId]);
+
   const runSearch = () => {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;
@@ -71,18 +99,44 @@ function Header({ role, onMenuClick }) {
     navigate(`${roleBasePath}${targetSegment}?search=${encodeURIComponent(searchQuery.trim())}`);
   };
 
-  const handleNotificationClick = (id) => {
+  const handleNotificationClick = async (id) => {
     setNotificationItems((current) =>
-      current.map((item) => (item.id === id ? { ...item, read: true } : item)),
+      current.map((item) => (item.id === id ? { ...item, readStatus: true } : item)),
     );
+
+    try {
+      await apiRequest(`/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT' });
+      window.dispatchEvent(new Event('kavyaNotificationsChanged'));
+    } catch {
+      setNotificationItems((current) =>
+        current.map((item) => (item.id === id ? { ...item, readStatus: false } : item)),
+      );
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotificationItems((current) => current.map((item) => ({ ...item, read: true })));
+  const markAllAsRead = async () => {
+    const unreadItems = notificationItems.filter((item) => !item.readStatus);
+    if (!unreadItems.length) {
+      return;
+    }
+
+    try {
+      await Promise.all(unreadItems.map((item) => apiRequest(`/notifications/${encodeURIComponent(item.id)}/read`, { method: 'PUT' })));
+      setNotificationItems((current) => current.map((item) => ({ ...item, readStatus: true })));
+      window.dispatchEvent(new Event('kavyaNotificationsChanged'));
+    } catch {
+      // Keep the current UI state if the batch update fails.
+    }
   };
 
-  const clearAll = () => {
-    setNotificationItems([]);
+  const clearAll = async () => {
+    try {
+      await apiRequest(`/notifications?userId=${encodeURIComponent(userId || '')}`, { method: 'DELETE' });
+      setNotificationItems([]);
+      window.dispatchEvent(new Event('kavyaNotificationsChanged'));
+    } catch {
+      // Leave the current notifications visible if the delete fails.
+    }
   };
 
   const logout = () => {
@@ -146,12 +200,12 @@ function Header({ role, onMenuClick }) {
                   <button
                     key={item.id}
                     type="button"
-                    className={`notification-item ${item.read ? 'is-read' : 'is-unread'}`}
+                    className={`notification-item ${item.readStatus ? 'is-read' : 'is-unread'}`}
                     onClick={() => handleNotificationClick(item.id)}
                   >
                     <strong>{item.title}</strong>
-                    <p>{item.body}</p>
-                    <small>{item.date} - Posted by {item.postedBy}</small>
+                    <p>{item.message}</p>
+                    <small>{formatNotificationMeta(item)}</small>
                   </button>
                 ))}
                 {!notificationItems.length && <p className="notification-empty">No notifications available.</p>}
@@ -181,6 +235,41 @@ function Header({ role, onMenuClick }) {
       </div>
     </header>
   );
+}
+
+function normalizeNotifications(rows) {
+  return (Array.isArray(rows) ? rows : []).map((item) => ({
+    id: item.id,
+    title: item.title || 'Notification',
+    message: item.message || item.body || '',
+    readStatus: Boolean(item.readStatus),
+    createdAt: item.createdAt || '',
+    createdByRole: item.createdByRole || '',
+    createdByName: item.createdByName || '',
+  }));
+}
+
+function formatNotificationMeta(item) {
+  const createdAtLabel = formatNotificationDate(item.createdAt);
+  const createdBy = item.createdByName || item.createdByRole || 'System';
+  return createdAtLabel ? `${createdAtLabel} - Posted by ${createdBy}` : `Posted by ${createdBy}`;
+}
+
+function formatNotificationDate(value) {
+  if (!value) {
+    return '';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(parsed);
 }
 
 export default Header;

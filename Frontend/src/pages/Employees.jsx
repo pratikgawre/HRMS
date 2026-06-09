@@ -313,7 +313,7 @@ function Employees() {
       key: 'actions',
       label: 'Actions',
       render: (employee) => (
-        <div className="table-actions">
+        <div className="table-actions table-actions-inline">
           <button type="button" onClick={() => openEmployeePreview(employee)}>
             <i className="ri-eye-line" aria-hidden="true" />
             View

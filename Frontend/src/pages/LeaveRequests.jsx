@@ -164,7 +164,7 @@ function LeaveRequests() {
     reader.readAsDataURL(file);
   };
 
-  const submitLeaveRequest = (event) => {
+  const submitLeaveRequest = async (event) => {
     event.preventDefault();
     const needsMedicalReport = form.type === 'Sick Leave' && Number(form.days) > 2;
     if (needsMedicalReport && !form.medicalReport) {
@@ -188,26 +188,32 @@ function LeaveRequests() {
       medicalReport: form.medicalReport || null,
     };
 
-    setRequests((current) => {
-      const next = [newRequest, ...current];
-      saveLeaveRequests(next);
-      return next;
-    });
-    setForm(getEmptyLeaveForm(currentEmployee, leaveTypes));
-    setFileErrors({});
-    setShowForm(false);
-    setMessage('Leave request created successfully.');
+    const next = [newRequest, ...requests];
+    setRequests(next);
+
+    try {
+      await saveLeaveRequests(next);
+      setForm(getEmptyLeaveForm(currentEmployee, leaveTypes));
+      setFileErrors({});
+      setShowForm(false);
+      setMessage('Leave request created successfully.');
+    } catch (error) {
+      setMessage(error.message || 'Failed to save leave request.');
+    }
   };
 
-  const updateLeaveStatus = (requestId, nextStatus) => {
-    setRequests((current) => {
-      const next = current.map((request) => (
-        request.id === requestId ? { ...request, status: nextStatus } : request
-      ));
-      saveLeaveRequests(next);
-      return next;
-    });
-    setMessage(`Leave request ${nextStatus.toLowerCase()} successfully.`);
+  const updateLeaveStatus = async (requestId, nextStatus) => {
+    const next = requests.map((request) => (
+      request.id === requestId ? { ...request, status: nextStatus } : request
+    ));
+    setRequests(next);
+
+    try {
+      await saveLeaveRequests(next);
+      setMessage(`Leave request ${nextStatus.toLowerCase()} successfully.`);
+    } catch (error) {
+      setMessage(error.message || 'Failed to update leave request.');
+    }
   };
 
   return (
@@ -226,13 +232,18 @@ function LeaveRequests() {
           <div className="leave-balance-strip" aria-label="Leave balances">
             {leaveSummary.balances.map((item) => (
               <article key={item.name} className="leave-balance-card">
-                <span>Leave balance</span>
-                <strong>{item.name}</strong>
-                <div className="leave-balance-card-value">
-                  <b>{item.remaining}</b>
-                  <small>of {item.days} days</small>
+                <span className={`leave-balance-card-icon tone-${getLeaveBalanceTone(item.name)}`}>
+                  <i className={getLeaveBalanceIcon(item.name)} aria-hidden="true" />
+                </span>
+                <div className="leave-balance-card-content">
+                  <span>Leave balance</span>
+                  <strong>{item.name}</strong>
+                  <div className="leave-balance-card-value">
+                    <b>{item.remaining}</b>
+                    <small>of {item.days} days</small>
+                  </div>
+                  <p>{item.used > 0 ? `${item.used} days used` : 'Unused so far'}</p>
                 </div>
-                <p>{item.used > 0 ? `${item.used} days used` : 'Unused so far'}</p>
               </article>
             ))}
           </div>
@@ -398,6 +409,22 @@ function formatRequesterRole(role) {
     .filter(Boolean)
     .map((part) => part[0].toUpperCase() + part.slice(1).toLowerCase())
     .join(' ');
+}
+
+function getLeaveBalanceIcon(name) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized.includes('sick')) return 'ri-first-aid-kit-line';
+  if (normalized.includes('work from home')) return 'ri-home-office-line';
+  if (normalized.includes('earned')) return 'ri-award-line';
+  return 'ri-calendar-check-line';
+}
+
+function getLeaveBalanceTone(name) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized.includes('sick')) return 'orange';
+  if (normalized.includes('work from home')) return 'pink';
+  if (normalized.includes('earned')) return 'green';
+  return 'blue';
 }
 
 export default LeaveRequests;
