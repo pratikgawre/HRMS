@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import { Section, Hero } from './AdminDashboard.jsx';
@@ -26,14 +26,19 @@ function EmployeeAttendance() {
   const isTeamLeadView = role === 'teamLead';
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
   const [status, setStatus] = useState('All');
+  const [dateRange, setDateRange] = useState('day');
   const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(new Date()));
+  const [selectedMonth, setSelectedMonth] = useState(() => getMonthInputValue(new Date()));
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [customDraftMonth, setCustomDraftMonth] = useState(() => String(new Date().getMonth()));
+  const [customDraftYear, setCustomDraftYear] = useState(() => String(new Date().getFullYear()));
   const [message, setMessage] = useState('');
   const [editingRecord, setEditingRecord] = useState(null);
   const [correctionForm, setCorrectionForm] = useState(() => getEmptyCorrectionForm());
+  const customSelectionSnapshot = useRef({ dateRange: 'day', selectedMonth: getMonthInputValue(new Date()) });
   const attendanceEmployee = getAttendanceEmployee();
   const todayLabel = getTodayLabel();
   const todayInputValue = getDateInputValue(new Date());
-  const selectedDateLabel = getTodayLabel(getDateFromInputValue(selectedDate));
   const attendanceEmployeeRows = useMemo(() => (
     attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId)
   ), [attendance, attendanceEmployee.employeeId]);
@@ -50,14 +55,16 @@ function EmployeeAttendance() {
   ), [attendance, attendanceEmployeeRows, isEmployeeView, isTeamLeadView, teamLeadRows]);
 
   const rows = useMemo(() => scopedRows.filter((row) => {
-    const matchesDate = row.date === selectedDateLabel;
     const matchesStatus = status === 'All' || row.status === status;
+    const matchesRange = isRowWithinSelectedRange(row, dateRange, selectedDate, selectedMonth);
 
-    return matchesDate && matchesStatus;
-  }), [scopedRows, selectedDateLabel, status]);
+    return matchesStatus && matchesRange;
+  }), [dateRange, scopedRows, selectedDate, selectedMonth, status]);
   const todayRecord = attendance.find((row) => row.employeeId === attendanceEmployee.employeeId && row.date === todayLabel);
   const canCheckIn = (isEmployeeView || isTeamLeadView) && !todayRecord;
   const canCheckOut = (isEmployeeView || isTeamLeadView) && Boolean(todayRecord?.checkInAt && !todayRecord?.checkOutAt);
+  const rangeLabel = getRangeLabel(dateRange, selectedDate, selectedMonth);
+  const yearOptions = useMemo(() => buildYearOptions(), []);
 
   useEffect(() => {
     let mounted = true;
@@ -120,6 +127,49 @@ function EmployeeAttendance() {
         : row
     )));
     setMessage('Checked out successfully. Attendance status updated by office timing policy.');
+  };
+
+  const openCustomMonthPicker = () => {
+    customSelectionSnapshot.current = {
+      dateRange,
+      selectedMonth,
+    };
+
+    const currentMonth = getMonthFromInputValue(selectedMonth);
+    setCustomDraftMonth(String(currentMonth.getMonth()));
+    setCustomDraftYear(String(currentMonth.getFullYear()));
+    setDateRange('custom');
+    setIsCustomModalOpen(true);
+  };
+
+  const closeCustomMonthPicker = () => {
+    setDateRange(customSelectionSnapshot.current.dateRange);
+    setSelectedMonth(customSelectionSnapshot.current.selectedMonth);
+    setIsCustomModalOpen(false);
+  };
+
+  const applyCustomMonthPicker = (event) => {
+    event.preventDefault();
+    const monthIndex = Number.parseInt(customDraftMonth, 10);
+    const year = Number.parseInt(customDraftYear, 10);
+
+    if (!Number.isFinite(monthIndex) || !Number.isFinite(year)) {
+      return;
+    }
+
+    setSelectedMonth(getMonthInputValue(new Date(year, monthIndex, 1)));
+    setDateRange('custom');
+    setIsCustomModalOpen(false);
+  };
+
+  const handleRangeChange = (event) => {
+    const nextRange = event.target.value;
+    if (nextRange === 'custom') {
+      openCustomMonthPicker();
+      return;
+    }
+
+    setDateRange(nextRange);
   };
 
   const openCorrection = (row) => {
@@ -268,16 +318,49 @@ function EmployeeAttendance() {
           </div>
         )}
         <div className="page-toolbar compact">
-          <label className="toolbar-date">
-            <i className="ri-calendar-line" aria-hidden="true" />
-            <input
-              type="date"
-              value={selectedDate}
-              max={todayInputValue}
-              onChange={(event) => setSelectedDate(event.target.value || todayInputValue)}
-              aria-label="Select attendance date"
-            />
-          </label>
+          <select value={dateRange} onChange={handleRangeChange} aria-label="Filter attendance range">
+            <option value="day">Day</option>
+            <option value="last7">Last 7 Days</option>
+            <option value="last15">Last 15 Days</option>
+            <option value="month">Month</option>
+            <option value="custom">Custom</option>
+            <option value="all">All</option>
+          </select>
+          {(dateRange === 'day' || dateRange === 'last7' || dateRange === 'last15') && (
+            <label className="toolbar-date">
+              <i className="ri-calendar-line" aria-hidden="true" />
+              <input
+                type="date"
+                value={selectedDate}
+                max={todayInputValue}
+                onChange={(event) => setSelectedDate(event.target.value || todayInputValue)}
+                aria-label="Select reference attendance date"
+              />
+            </label>
+          )}
+          {dateRange === 'month' && (
+            <label className="toolbar-date">
+              <i className="ri-calendar-line" aria-hidden="true" />
+              <input
+                type="month"
+                value={selectedMonth}
+                max={getMonthInputValue(new Date())}
+                onChange={(event) => setSelectedMonth(event.target.value || getMonthInputValue(new Date()))}
+                aria-label="Select attendance month"
+              />
+            </label>
+          )}
+          {dateRange === 'custom' && (
+            <button
+              type="button"
+              className="toolbar-chip toolbar-chip-button"
+              onClick={openCustomMonthPicker}
+              aria-label="Edit custom attendance month"
+            >
+              <span>{getMonthLabel(selectedMonth)}</span>
+              <i className="ri-pencil-line" aria-hidden="true" />
+            </button>
+          )}
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter attendance status">
             <option>All</option>
             <option>Present</option>
@@ -287,8 +370,20 @@ function EmployeeAttendance() {
             <option>Leave</option>
           </select>
         </div>
-        <DataTable columns={columns} rows={rows} emptyMessage={`No attendance records found for ${selectedDateLabel}.`} />
+        <DataTable columns={columns} rows={rows} emptyMessage={`No attendance records found for ${rangeLabel}.`} />
       </Section>
+
+      {isCustomModalOpen && (
+        <CustomMonthPickerModal
+          month={customDraftMonth}
+          year={customDraftYear}
+          yearOptions={yearOptions}
+          onMonthChange={setCustomDraftMonth}
+          onYearChange={setCustomDraftYear}
+          onClose={closeCustomMonthPicker}
+          onSubmit={applyCustomMonthPicker}
+        />
+      )}
 
       {editingRow && !isTeamLeadView && (
         <AttendanceCorrectionModal
@@ -343,6 +438,50 @@ function AttendanceCorrectionModal({ row, form, onChange, onClose, onSubmit }) {
   );
 }
 
+function CustomMonthPickerModal({ month, year, yearOptions, onMonthChange, onYearChange, onClose, onSubmit }) {
+  return (
+    <div className="payroll-modal-backdrop" role="presentation">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Custom attendance month picker">
+        <div className="payroll-modal-head">
+          <h3>Select Month</h3>
+          <button type="button" onClick={onClose} aria-label="Close custom month picker">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+        </div>
+
+        <form className="salary-form" onSubmit={onSubmit}>
+          <label className="field">
+            <span>Month</span>
+            <select value={month} onChange={(event) => onMonthChange(event.target.value)}>
+              {MONTH_OPTIONS.map((item, index) => (
+                <option key={item.value} value={String(index)}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Year</span>
+            <select value={year} onChange={(event) => onYearChange(event.target.value)}>
+              {yearOptions.map((item) => (
+                <option key={item} value={String(item)}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="salary-form-actions">
+            <button className="payroll-primary" type="submit">Apply</button>
+            <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function getEmptyCorrectionForm() {
   return {
     checkIn: '',
@@ -359,6 +498,18 @@ function getDateInputValue(date) {
   return `${year}-${month}-${day}`;
 }
 
+function getMonthInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+
+  return `${year}-${month}`;
+}
+
+function getMonthLabel(monthValue) {
+  const monthDate = getMonthFromInputValue(monthValue);
+  return new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' }).format(monthDate);
+}
+
 function getDateFromInputValue(value) {
   const [yearText, monthText, dayText] = String(value || '').split('-');
   const year = Number.parseInt(yearText, 10);
@@ -370,6 +521,18 @@ function getDateFromInputValue(value) {
   }
 
   return new Date(year, month - 1, day);
+}
+
+function getMonthFromInputValue(value) {
+  const [yearText, monthText] = String(value || '').split('-');
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return new Date();
+  }
+
+  return new Date(year, month - 1, 1);
 }
 
 function getTimeInputValue(isoValue, labelValue) {
@@ -457,6 +620,112 @@ function parseAttendanceDateLabel(value) {
     year: fallback.getFullYear(),
   };
 }
+
+function getAttendanceDateValue(row) {
+  const label = row?.date || row?.dateLabel;
+  const parts = parseAttendanceDateLabel(label);
+  if (!parts) {
+    return null;
+  }
+
+  return new Date(parts.year, parts.month, parts.day);
+}
+
+function isRowWithinSelectedRange(row, dateRange, selectedDate, selectedMonth) {
+  if (dateRange === 'all') {
+    return true;
+  }
+
+  const rowDate = getAttendanceDateValue(row);
+  if (!rowDate) {
+    return false;
+  }
+
+  const selectedDay = getDateFromInputValue(selectedDate);
+  const normalizedRowDate = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate());
+
+  if (dateRange === 'day') {
+    return isSameDate(normalizedRowDate, selectedDay);
+  }
+
+  if (dateRange === 'last7' || dateRange === 'last15') {
+    const daysBack = dateRange === 'last7' ? 6 : 14;
+    const startDate = new Date(selectedDay);
+    startDate.setDate(startDate.getDate() - daysBack);
+    return normalizedRowDate >= startDate && normalizedRowDate <= selectedDay;
+  }
+
+  if (dateRange === 'month' || dateRange === 'custom') {
+    const selectedMonthDate = getMonthFromInputValue(selectedMonth);
+    const monthStart = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), 1);
+    const monthEnd = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 0);
+    return normalizedRowDate >= monthStart && normalizedRowDate <= monthEnd;
+  }
+
+  return true;
+}
+
+function isSameDate(firstDate, secondDate) {
+  return firstDate.getFullYear() === secondDate.getFullYear()
+    && firstDate.getMonth() === secondDate.getMonth()
+    && firstDate.getDate() === secondDate.getDate();
+}
+
+function getRangeLabel(dateRange, selectedDate, selectedMonth) {
+  const selectedDayLabel = getTodayLabel(getDateFromInputValue(selectedDate));
+
+  if (dateRange === 'day') {
+    return selectedDayLabel;
+  }
+
+  if (dateRange === 'last7') {
+    const startDate = getDateFromInputValue(selectedDate);
+    startDate.setDate(startDate.getDate() - 6);
+    return `${getTodayLabel(startDate)} to ${selectedDayLabel}`;
+  }
+
+  if (dateRange === 'last15') {
+    const startDate = getDateFromInputValue(selectedDate);
+    startDate.setDate(startDate.getDate() - 14);
+    return `${getTodayLabel(startDate)} to ${selectedDayLabel}`;
+  }
+
+  if (dateRange === 'month') {
+    return getMonthLabel(selectedMonth);
+  }
+
+  if (dateRange === 'custom') {
+    return `${getMonthLabel(selectedMonth)} attendance`;
+  }
+
+  return 'all attendance records';
+}
+
+function buildYearOptions() {
+  const currentYear = new Date().getFullYear();
+  const years = [];
+
+  for (let year = currentYear + 1; year >= currentYear - 5; year -= 1) {
+    years.push(year);
+  }
+
+  return years;
+}
+
+const MONTH_OPTIONS = [
+  { value: '0', label: 'January' },
+  { value: '1', label: 'February' },
+  { value: '2', label: 'March' },
+  { value: '3', label: 'April' },
+  { value: '4', label: 'May' },
+  { value: '5', label: 'June' },
+  { value: '6', label: 'July' },
+  { value: '7', label: 'August' },
+  { value: '8', label: 'September' },
+  { value: '9', label: 'October' },
+  { value: '10', label: 'November' },
+  { value: '11', label: 'December' },
+];
 
 function getMonthIndex(shortMonth) {
   const monthMap = {

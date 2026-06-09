@@ -28,6 +28,37 @@ const roleEmployeeFallback = {
   employee: 'PAY-1005',
 };
 
+function isPayrollPeriodAvailable(month, year, referenceDate = new Date()) {
+  const monthIndex = months.indexOf(String(month || ''));
+  const targetYear = Number.parseInt(year, 10);
+
+  if (monthIndex < 0 || !Number.isFinite(targetYear)) {
+    return false;
+  }
+
+  const selectedStart = new Date(targetYear, monthIndex, 1);
+  const currentStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+  return selectedStart < currentStart;
+}
+
+function getPayrollAvailabilityText(month, year) {
+  const monthIndex = months.indexOf(String(month || ''));
+  const targetYear = Number.parseInt(year, 10);
+
+  if (monthIndex < 0 || !Number.isFinite(targetYear)) {
+    return 'Payslip is not available for the selected period.';
+  }
+
+  const monthEnd = new Date(targetYear, monthIndex + 1, 0);
+  const formattedEndDate = new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(monthEnd);
+
+  return `This payslip will be available after ${formattedEndDate}.`;
+}
+
 function Payroll() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const canManagePayroll = role === 'admin' || role === 'hr';
@@ -303,7 +334,17 @@ function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMo
                     <td data-label="Actions">
                       <div className="payroll-actions">
                         <button type="button" onClick={() => toggleStatus(record.id)}><i className="ri-exchange-dollar-line" aria-hidden="true" />{record.status === 'Paid' ? 'Unpaid' : 'Paid'}</button>
-                        <button type="button" onClick={() => setSelectedPayslip(record)}><i className="ri-file-download-line" aria-hidden="true" />Payslip</button>
+                        {isPayrollPeriodAvailable(record.month, record.year) ? (
+                          <button type="button" onClick={() => setSelectedPayslip(record)}>
+                            <i className="ri-file-download-line" aria-hidden="true" />
+                            Payslip
+                          </button>
+                        ) : (
+                          <button type="button" disabled aria-disabled="true">
+                            <i className="ri-lock-line" aria-hidden="true" />
+                            Locked
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -329,6 +370,7 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
   const employeeId = getSessionValue('kavyaEmployeeId');
   const safeRecords = Array.isArray(records) ? records : [];
   const safeSavedPayrollRecords = Array.isArray(savedPayrollRecords) ? savedPayrollRecords : [];
+  const canDownloadPayslip = isPayrollPeriodAvailable(month, year);
 
   useEffect(() => {
     let active = true;
@@ -403,55 +445,73 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
               {years.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          <button className="payroll-primary" type="button" onClick={() => setSelectedPayslip(payslip)}>
-            <i className="ri-download-cloud-2-line" aria-hidden="true" />
-            {periodLoading ? 'Loading...' : 'Download Payslip'}
-          </button>
+          {canDownloadPayslip ? (
+            <button className="payroll-primary" type="button" onClick={() => setSelectedPayslip(payslip)} disabled={periodLoading}>
+              <i className="ri-download-cloud-2-line" aria-hidden="true" />
+              {periodLoading ? 'Loading...' : 'Download Payslip'}
+            </button>
+          ) : (
+            <div className="payroll-alert" role="status">
+              <i className="ri-lock-line" aria-hidden="true" />
+              <span>{getPayrollAvailabilityText(month, year)}</span>
+            </div>
+          )}
         </div>
       </Section>
 
-      <div className="payslip-layout">
-        <section className="payslip-card">
-          <div className="payslip-head">
-            <div>
-              <p className="eyebrow">Salary Slip</p>
-              <h3>{payslip.employeeName}</h3>
-              <span>{payslip.employeeId} - {payslip.role}</span>
-            </div>
-            <span className={`status status-${payslip.status.toLowerCase()}`}>{payslip.status}</span>
+      {canDownloadPayslip ? (
+        <>
+          <div className="payslip-layout">
+            <section className="payslip-card">
+              <div className="payslip-head">
+                <div>
+                  <p className="eyebrow">Salary Slip</p>
+                  <h3>{payslip.employeeName}</h3>
+                  <span>{payslip.employeeId} - {payslip.role}</span>
+                </div>
+                <span className={`status status-${payslip.status.toLowerCase()}`}>{payslip.status}</span>
+              </div>
+
+              <div className="payslip-info-grid">
+                <div><span>Department</span><strong>{payslip.department}</strong></div>
+                <div><span>Pay Period</span><strong>{payslip.month} {payslip.year}</strong></div>
+                <div><span>Gross Earnings</span><strong>{formatCurrency(getEarnings(payslip))}</strong></div>
+                <div><span>Total Deductions</span><strong>{formatCurrency(getDeductions(payslip))}</strong></div>
+              </div>
+
+              <div className="net-salary-box">
+                <span>Net Salary</span>
+                <strong>{formatCurrency(getNetSalary(payslip))}</strong>
+              </div>
+            </section>
+
+            <SalaryBreakdown title="Earnings" items={[
+              ['Monthly Package', payslip.basic],
+              ['HRA', payslip.hra],
+              ['Allowance', payslip.allowance],
+              ['Bonus', payslip.bonus],
+            ]} total={getEarnings(payslip)} tone="earnings" />
+
+            <SalaryBreakdown title="Deductions" items={[
+              ['PF', payslip.providentFund],
+              ['GRATUITY', payslip.gratuity],
+              ['PROF TAX', payslip.professionalTax],
+              ['Half Days', payslip.halfDayDeduction],
+              ['Other Deduction', payslip.otherDeduction],
+            ]} total={getDeductions(payslip)} tone="deductions" />
           </div>
 
-          <div className="payslip-info-grid">
-            <div><span>Department</span><strong>{payslip.department}</strong></div>
-            <div><span>Pay Period</span><strong>{payslip.month} {payslip.year}</strong></div>
-            <div><span>Gross Earnings</span><strong>{formatCurrency(getEarnings(payslip))}</strong></div>
-            <div><span>Total Deductions</span><strong>{formatCurrency(getDeductions(payslip))}</strong></div>
+          {selectedPayslip && (
+            <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
+          )}
+        </>
+      ) : (
+        <Section title="Payslip Locked">
+          <div className="payroll-alert" role="status">
+            <i className="ri-lock-line" aria-hidden="true" />
+            <span>{getPayrollAvailabilityText(month, year)}</span>
           </div>
-
-          <div className="net-salary-box">
-            <span>Net Salary</span>
-            <strong>{formatCurrency(getNetSalary(payslip))}</strong>
-          </div>
-        </section>
-
-        <SalaryBreakdown title="Earnings" items={[
-          ['Monthly Package', payslip.basic],
-          ['HRA', payslip.hra],
-          ['Allowance', payslip.allowance],
-          ['Bonus', payslip.bonus],
-        ]} total={getEarnings(payslip)} tone="earnings" />
-
-        <SalaryBreakdown title="Deductions" items={[
-          ['PF', payslip.providentFund],
-          ['GRATUITY', payslip.gratuity],
-          ['PROF TAX', payslip.professionalTax],
-          ['Half Days', payslip.halfDayDeduction],
-          ['Other Deduction', payslip.otherDeduction],
-        ]} total={getDeductions(payslip)} tone="deductions" />
-      </div>
-
-      {selectedPayslip && (
-        <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
+        </Section>
       )}
     </>
   );
