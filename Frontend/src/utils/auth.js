@@ -68,6 +68,7 @@ export async function authenticateUser(email, password, twoFactorCode = '') {
   }).catch(() => null);
 
   if (response) {
+    const isServerError = response.status >= 500;
     const text = await response.text();
     let result = null;
     try {
@@ -100,8 +101,24 @@ export async function authenticateUser(email, password, twoFactorCode = '') {
       return { ok: false, twoFactorRequired: true, message: result.message || 'Two-factor verification code required.' };
     }
 
+    if (isServerError) {
+      const localUser = findLocalUser(normalizedEmail, password);
+      if (localUser) {
+        return { ok: true, user: localUser };
+      }
+
+      return { ok: false, message: result?.message || 'Login service is temporarily unavailable. Please try again.' };
+    }
+
     if (result?.message) {
       return { ok: false, message: result.message };
+    }
+  }
+
+  if (!response) {
+    const localUser = findLocalUser(normalizedEmail, password);
+    if (localUser) {
+      return { ok: true, user: localUser };
     }
   }
 

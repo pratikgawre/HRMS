@@ -165,6 +165,7 @@ function Payroll() {
     return (
       <PayrollManagement
         records={records}
+        savedPayrollRecords={savedPayrollRecords}
         selectedMonth={selectedMonth}
         selectedYear={selectedYear}
         setSelectedMonth={setSelectedMonth}
@@ -187,7 +188,7 @@ function Payroll() {
   );
 }
 
-function PayrollManagement({ records, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear, setStatusOverrides }) {
+function PayrollManagement({ records, savedPayrollRecords, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear, setStatusOverrides }) {
   const [message, setMessage] = useState('');
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [activeSummary, setActiveSummary] = useState('total');

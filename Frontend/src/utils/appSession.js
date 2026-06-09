@@ -1,5 +1,6 @@
 const TOKEN_STORAGE_KEY = 'kavyaAuthToken';
-const API_BASE = 'http://localhost:8080/api';
+// Keep session bootstrap on the same API origin as the rest of the app.
+const API_BASE = '/api';
 
 let session = {};
 const storage = typeof window !== 'undefined' ? window.sessionStorage : null;

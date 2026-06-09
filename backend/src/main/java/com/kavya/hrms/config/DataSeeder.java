@@ -12,6 +12,8 @@ import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
 import com.kavya.hrms.repository.TaskRepository;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -129,7 +131,13 @@ public class DataSeeder {
       String role,
       String employeeId,
       String employeeName) {
-    AppUser user = appUserRepository.findByEmailIgnoreCase(email).orElseGet(AppUser::new);
+    List<AppUser> usersWithEmail = new ArrayList<>(appUserRepository.findAllByEmailIgnoreCase(email));
+    AppUser user = usersWithEmail.isEmpty() ? new AppUser() : usersWithEmail.get(0);
+
+    if (usersWithEmail.size() > 1) {
+      appUserRepository.deleteAll(usersWithEmail.subList(1, usersWithEmail.size()));
+    }
+
     user.setEmail(email);
     user.setPassword(password);
     user.setRole(role);
