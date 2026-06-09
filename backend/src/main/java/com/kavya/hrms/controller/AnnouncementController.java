@@ -1,8 +1,7 @@
 package com.kavya.hrms.controller;
 
-import com.kavya.hrms.model.Announcement;
-import com.kavya.hrms.repository.AnnouncementRepository;
 import java.util.List;
+
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,6 +11,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.kavya.hrms.model.Announcement;
+import com.kavya.hrms.repository.AnnouncementRepository;
 
 @RestController
 @RequestMapping("/api/announcements")
@@ -23,11 +25,16 @@ public class AnnouncementController {
   }
 
   @GetMapping
-  public List<Announcement> list(@RequestParam(required = false) String category) {
-    if (category == null || category.isBlank()) {
-      return announcementRepository.findAll();
+  public List<Announcement> list(
+      @RequestParam(required = false) String category,
+      @RequestParam(required = false) String excludeCategory) {
+    if (category != null && !category.isBlank()) {
+      return announcementRepository.findByCategoryIgnoreCase(category);
     }
-    return announcementRepository.findByCategoryIgnoreCase(category);
+    if (excludeCategory != null && !excludeCategory.isBlank()) {
+      return announcementRepository.findByCategoryNotIgnoreCase(excludeCategory);
+    }
+    return announcementRepository.findAll();
   }
 
   @PostMapping

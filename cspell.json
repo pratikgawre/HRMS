@@ -1,0 +1,33 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "kavya",
+    "Kavya",
+    "hrms",
+    "HRMS",
+    "Hrms",
+    "IFSC",
+    "Ifsc",
+    "Aadhaar",
+    "aadhaar",
+    "ESIC",
+    "esic",
+    "qrcode",
+    "QRCode",
+    "otpauth",
+    "totp",
+    "twofactor",
+    "two-factor",
+    "Authy",
+    "INFOWEB",
+    "Aarav",
+    "Sharma",
+    "KAVYA"
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/target/**",
+    "**/dist/**"
+  ]
+}

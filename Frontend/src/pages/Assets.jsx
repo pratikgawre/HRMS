@@ -2,12 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
+import AssetDetailsModal from '../components/assets/AssetDetailsModal.jsx';
+import AssetToast from '../components/assets/AssetToast.jsx';
+import MyAssetsTable from '../components/assets/MyAssetsTable.jsx';
+import { ReplacementRequestTable, RepairRequestTable, ReturnRequestTable } from '../components/assets/RequestHistoryTable.jsx';
+import { ReplacementRequestModal, RepairRequestModal, ReturnRequestModal, buildRequestPayload } from '../components/assets/AssetRequestModal.jsx';
 import { apiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
+import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { useLocation } from 'react-router-dom';
 
 function Assets() {
   const role = getSessionValue('kavyaRole') || 'employee';
+  if (role === 'employee') {
+    return <EmployeeAssetsView />;
+  }
   const canManage = role === 'admin' || role === 'hr';
   const isProjectManager = role === 'projectManager';
   const canRaiseRepair = role === 'employee';
@@ -609,6 +618,504 @@ function Assets() {
 }
 
 export default Assets;
+
+function EmployeeAssetsView() {
+  const currentEmployee = getCurrentEmployeeIdentity();
+  const [assets, setAssets] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [selectedAsset, setSelectedAsset] = useState(null);
+  const [activeRequest, setActiveRequest] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    const refreshAssets = async () => {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const employeeId = String(currentEmployee.employeeId || '').trim();
+        const assetRows = await apiRequest(employeeId ? `/assets/my-assets?employeeId=${encodeURIComponent(employeeId)}` : '/assets/my-assets');
+        if (!active) {
+          return;
+        }
+
+        const normalizedAssets = normalizeEmployeeAssetRows(Array.isArray(assetRows) ? assetRows : []);
+        setAssets(normalizedAssets);
+      } catch {
+        if (active) {
+          setAssets([]);
+          setLoadError('Unable to load your assigned assets right now.');
+        }
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    const refreshRequests = async () => {
+      try {
+        const employeeId = String(currentEmployee.employeeId || '').trim();
+        const requestRows = await apiRequest(employeeId ? `/asset-requests?employeeId=${encodeURIComponent(employeeId)}` : '/asset-requests');
+        if (!active) {
+          return;
+        }
+
+        setRequests(normalizeAssetRequests(Array.isArray(requestRows) ? requestRows : []));
+      } catch {
+        if (active) {
+          setRequests([]);
+        }
+      }
+    };
+
+    refreshAssets();
+    refreshRequests();
+    window.addEventListener('focus', refreshAssets);
+    window.addEventListener('focus', refreshRequests);
+    window.addEventListener('kavyaAssetsChanged', refreshAssets);
+    window.addEventListener('kavyaAssetRequestsChanged', refreshRequests);
+
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refreshAssets);
+      window.removeEventListener('focus', refreshRequests);
+      window.removeEventListener('kavyaAssetsChanged', refreshAssets);
+      window.removeEventListener('kavyaAssetRequestsChanged', refreshRequests);
+    };
+  }, [currentEmployee.employeeId]);
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setToast(null);
+    }, 3200);
+
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const myAssets = useMemo(
+    () => assets.filter((asset) => isCurrentEmployeeAsset(asset, currentEmployee)),
+    [assets, currentEmployee.employeeId, currentEmployee.employee],
+  );
+  const replacementRequests = useMemo(() => requests.filter((request) => request.requestType === 'replacement'), [requests]);
+  const repairRequests = useMemo(() => requests.filter((request) => request.requestType === 'repair'), [requests]);
+  const returnRequests = useMemo(() => requests.filter((request) => request.requestType === 'return'), [requests]);
+  const openRequestCount = useMemo(() => requests.filter((request) => isOpenRequestStatus(request.status)).length, [requests]);
+  const returnedCount = useMemo(() => returnRequests.filter((request) => request.status === 'Returned').length, [returnRequests]);
+
+  const dashboardCards = useMemo(() => ([{
+    label: 'My Assets',
+    value: String(myAssets.length).padStart(2, '0'),
+    delta: 'Assigned to you',
+    tone: 'blue',
+    icon: 'ri-briefcase-4-line',
+  }, {
+    label: 'Pending Requests',
+    value: String(openRequestCount).padStart(2, '0'),
+    delta: 'Awaiting action',
+    tone: 'orange',
+    icon: 'ri-time-line',
+  }, {
+    label: 'Repair Requests',
+    value: String(repairRequests.length).padStart(2, '0'),
+    delta: 'Issue history',
+    tone: 'pink',
+    icon: 'ri-tools-line',
+  }, {
+    label: 'Returned Assets',
+    value: String(returnedCount).padStart(2, '0'),
+    delta: 'Completed returns',
+    tone: 'green',
+    icon: 'ri-loop-right-line',
+  }]), [myAssets.length, openRequestCount, repairRequests.length, returnRequests.length, returnedCount]);
+
+  const assetRequestsMap = useMemo(() => {
+    const map = new Map();
+    requests.forEach((request) => {
+      const key = String(request.assetId || '').trim();
+      if (!key) {
+        return;
+      }
+
+      const existing = map.get(key) || [];
+      existing.unshift(request);
+      map.set(key, existing);
+    });
+    return map;
+  }, [requests]);
+
+  const showToast = (message, type = 'success') => {
+    setToast({
+      message,
+      type,
+      title: type === 'success' ? 'Success' : 'Notice',
+      icon: type === 'success' ? 'ri-checkbox-circle-line' : 'ri-alert-line',
+    });
+  };
+
+  const closeRequestModal = () => setActiveRequest(null);
+
+  const openRequestModal = (type, asset) => {
+    setSelectedAsset(null);
+    setActiveRequest({ type, asset });
+  };
+
+  const handleRequestSubmit = ({ requestType, asset, ...draft }) => {
+    const requestId = generateRequestId(requestType, requests);
+    const requestDate = getTodayLabel();
+    const requestPayload = buildRequestPayload({
+      type: requestType,
+      asset,
+      draft,
+      requestId,
+      requestDate,
+    });
+
+    const payload = {
+      ...requestPayload,
+      employeeId: currentEmployee.employeeId || '',
+      employeeName: currentEmployee.employee || '',
+    };
+
+    apiRequest('/asset-requests', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+      .then((savedRequest) => {
+        setRequests((current) => [normalizeAssetRequest(savedRequest || payload), ...current]);
+        window.dispatchEvent(new Event('kavyaAssetRequestsChanged'));
+        setActiveRequest(null);
+        showToast(`${asset.assetName} request submitted successfully.`);
+      })
+      .catch(() => {
+        setRequests((current) => [normalizeAssetRequest(payload), ...current]);
+        setActiveRequest(null);
+        showToast(`${asset.assetName} request submitted successfully.`);
+      });
+  };
+
+  const handleViewDetails = (asset) => {
+    setActiveRequest(null);
+    setSelectedAsset(asset);
+  };
+
+  const selectedAssetRequests = selectedAsset ? (assetRequestsMap.get(selectedAsset.id) || []) : [];
+
+  return (
+    <>
+      <Hero
+        title="My Assets"
+        copy="View your assigned assets, raise service requests, and follow each request through the full workflow."
+      />
+
+      <section className="dashboard-card-grid">
+        {dashboardCards.map((item) => <DashboardCard key={item.label} {...item} />)}
+      </section>
+
+      <Section title="My Assets">
+        {isLoading && <p className="notification-empty">Loading your assigned assets...</p>}
+        {!isLoading && loadError && <p className="notification-empty">{loadError}</p>}
+        {!isLoading && !loadError && (
+          <MyAssetsTable
+            rows={myAssets}
+            onViewDetails={handleViewDetails}
+            onRequestReplacement={(asset) => openRequestModal('replacement', asset)}
+            onRequestRepair={(asset) => openRequestModal('repair', asset)}
+            onRequestReturn={(asset) => openRequestModal('return', asset)}
+          />
+        )}
+      </Section>
+
+      <div className="assets-stack">
+        <Section title="Replacement Requests">
+          <ReplacementRequestTable
+            rows={replacementRequests}
+            emptyMessage="No replacement requests found."
+            renderAsset={(request) => renderAssetCell(request)}
+          />
+        </Section>
+        <Section title="Repair Requests">
+          <RepairRequestTable
+            rows={repairRequests}
+            emptyMessage="No repair requests found."
+            renderAsset={(request) => renderAssetCell(request)}
+          />
+        </Section>
+        <Section title="Return Requests">
+          <ReturnRequestTable
+            rows={returnRequests}
+            emptyMessage="No return requests found."
+            renderAsset={(request) => renderAssetCell(request)}
+          />
+        </Section>
+      </div>
+
+      {selectedAsset && (
+        <AssetDetailsModal
+          asset={selectedAsset}
+          requests={selectedAssetRequests}
+          onClose={() => setSelectedAsset(null)}
+        />
+      )}
+
+      {activeRequest?.type === 'replacement' && (
+        <ReplacementRequestModal
+          asset={activeRequest.asset}
+          onClose={closeRequestModal}
+          onSubmit={handleRequestSubmit}
+        />
+      )}
+
+      {activeRequest?.type === 'repair' && (
+        <RepairRequestModal
+          asset={activeRequest.asset}
+          onClose={closeRequestModal}
+          onSubmit={handleRequestSubmit}
+        />
+      )}
+
+      {activeRequest?.type === 'return' && (
+        <ReturnRequestModal
+          asset={activeRequest.asset}
+          onClose={closeRequestModal}
+          onSubmit={handleRequestSubmit}
+        />
+      )}
+
+      <AssetToast toast={toast} />
+    </>
+  );
+}
+
+function renderAssetCell(request) {
+  return (
+    <div className="asset-request-asset">
+      <strong>{request.assetName}</strong>
+      <small>{request.assetCode}</small>
+    </div>
+  );
+}
+
+function createSeedAssets(employee) {
+  const name = employee.employee || 'Aarav Sharma';
+  const employeeId = employee.employeeId || 'KV001';
+
+  return [
+    {
+      id: 'AST-201',
+      assetCode: 'AST-201',
+      assetName: 'MacBook Pro 14',
+      category: 'Laptop',
+      brand: 'Apple',
+      model: 'M3 Pro',
+      serialNo: 'MBP-201-64',
+      assignedDate: '12 Mar 2026',
+      condition: 'Good',
+      status: 'Assigned',
+      assignedTo: name,
+      assignedToEmployeeId: employeeId,
+      location: 'Office',
+      imageUrl: createPlaceholderAssetImage('MacBook Pro 14', '#0f9f9a'),
+    },
+    {
+      id: 'AST-214',
+      assetCode: 'AST-214',
+      assetName: 'Logitech MX Master 3',
+      category: 'Peripheral',
+      brand: 'Logitech',
+      model: 'MX Master 3S',
+      serialNo: 'LGT-214-31',
+      assignedDate: '27 Feb 2026',
+      condition: 'Excellent',
+      status: 'Assigned',
+      assignedTo: name,
+      assignedToEmployeeId: employeeId,
+      location: 'Remote',
+      imageUrl: createPlaceholderAssetImage('MX Master 3', '#1b75d0'),
+    },
+    {
+      id: 'AST-228',
+      assetCode: 'AST-228',
+      assetName: 'Dell UltraSharp 27',
+      category: 'Monitor',
+      brand: 'Dell',
+      model: 'U2723QE',
+      serialNo: 'DUL-228-90',
+      assignedDate: '04 Jan 2026',
+      condition: 'Good',
+      status: 'Assigned',
+      assignedTo: name,
+      assignedToEmployeeId: employeeId,
+      location: 'Office',
+      imageUrl: createPlaceholderAssetImage('UltraSharp 27', '#6a4fe3'),
+    },
+  ];
+}
+
+function createSeedRequests(employee, assets) {
+  const employeeId = employee.employeeId || 'KV001';
+  return [
+    {
+      id: 'REP-101',
+      requestId: 'REP-101',
+      assetId: assets[0].id,
+      assetCode: assets[0].assetCode,
+      assetName: assets[0].assetName,
+      requestType: 'replacement',
+      requestTypeLabel: 'Replacement',
+      reason: 'Damaged',
+      description: 'The keyboard area is getting hot and the lid is showing visible wear.',
+      requestDate: '24 Apr 2026',
+      status: 'Pending',
+      employeeId,
+    },
+    {
+      id: 'RPR-102',
+      requestId: 'RPR-102',
+      assetId: assets[1].id,
+      assetCode: assets[1].assetCode,
+      assetName: assets[1].assetName,
+      requestType: 'repair',
+      requestTypeLabel: 'Repair',
+      issue: 'Battery Issue',
+      description: 'Bluetooth keeps disconnecting and the battery drains much faster than normal.',
+      requestDate: '22 Apr 2026',
+      status: 'In Progress',
+      employeeId,
+    },
+    {
+      id: 'RET-103',
+      requestId: 'RET-103',
+      assetId: assets[2].id,
+      assetCode: assets[2].assetCode,
+      assetName: assets[2].assetName,
+      requestType: 'return',
+      requestTypeLabel: 'Return',
+      reason: 'Project completed and the device is no longer required.',
+      remarks: 'Please collect this week. I will keep the device ready at the reception desk.',
+      requestDate: '20 Apr 2026',
+      status: 'Returned',
+      employeeId,
+    },
+  ];
+}
+
+function normalizeAssetRequests(rows) {
+  return (Array.isArray(rows) ? rows : []).map((request, index) => normalizeAssetRequest(request, index));
+}
+
+function normalizeAssetRequest(request, index = 0) {
+  return {
+    id: request.id || request.requestId || `AR-${String(index + 101).padStart(3, '0')}`,
+    requestId: request.requestId || request.id || `AR-${String(index + 101).padStart(3, '0')}`,
+    employeeId: request.employeeId || '',
+    employeeName: request.employeeName || '',
+    assetId: request.assetId || '',
+    assetCode: request.assetCode || '',
+    assetName: request.assetName || '-',
+    requestType: request.requestType || 'replacement',
+    requestTypeLabel: request.requestTypeLabel || capitalizeFirst(request.requestType || 'request'),
+    reason: request.reason || request.issue || '',
+    issue: request.issue || '',
+    description: request.description || '',
+    remarks: request.remarks || '',
+    screenshot: request.screenshot || '',
+    requestDate: request.requestDate || request.createdDate || '',
+    status: request.status || 'Pending',
+    resolution: request.resolution || '',
+    handledBy: request.handledBy || '',
+    asset: request.asset || null,
+  };
+}
+
+function normalizeEmployeeAssetRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((asset, index) => ({
+    id: asset.id || asset.asset_id || asset.assetId || `AST-${String(index + 1)}`,
+    assetCode: asset.asset_code || asset.assetCode || asset.id || `AST-${String(index + 1)}`,
+    assetName: asset.asset_name || asset.assetName || '-',
+    category: asset.category || '-',
+    brand: asset.brand || '',
+    model: asset.model || '',
+    assignedDate: asset.assigned_date || asset.assignedDate || '',
+    condition: asset.condition || 'Good',
+    status: asset.status || 'Assigned',
+    assignedToEmployeeId: asset.employee_id || asset.employeeId || '',
+    assignedTo: asset.employee_name || asset.employeeName || '',
+    imageUrl: asset.imageUrl || createPlaceholderAssetImage(asset.asset_name || asset.assetName || 'Asset', '#0f9f9a'),
+  }));
+}
+
+function createPlaceholderAssetImage(label, color) {
+  const safeLabel = String(label || 'Asset').replace(/[<>&]/g, '');
+  const initials = safeLabel
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'AS';
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.96" />
+          <stop offset="100%" stop-color="#f4fbfa" stop-opacity="1" />
+        </linearGradient>
+      </defs>
+      <rect width="320" height="220" rx="28" fill="url(#g)" />
+      <circle cx="258" cy="46" r="40" fill="#ffffff" fill-opacity="0.12" />
+      <circle cx="44" cy="180" r="34" fill="#ffffff" fill-opacity="0.18" />
+      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="56" font-weight="700">${initials}</text>
+      <text x="50%" y="72%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" fill-opacity="0.88" font-family="Arial, sans-serif" font-size="20" font-weight="700">${safeLabel}</text>
+    </svg>
+  `.trim();
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function generateRequestId(type, existingRequests) {
+  const prefix = type === 'replacement' ? 'REP' : type === 'repair' ? 'RPR' : 'RET';
+  const sequence = String(existingRequests.length + 101).padStart(3, '0');
+  return `${prefix}-${sequence}`;
+}
+
+function getTodayLabel() {
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date());
+}
+
+function isCurrentEmployeeAsset(asset, employeeIdentity) {
+  const employeeId = String(employeeIdentity.employeeId || '').trim().toLowerCase();
+  const employeeName = String(employeeIdentity.employee || '').trim().toLowerCase();
+  const assetEmployeeId = String(asset.assignedToEmployeeId || '').trim().toLowerCase();
+  const assignedTo = String(asset.assignedTo || '').trim().toLowerCase();
+
+  return Boolean(
+    (employeeId && assetEmployeeId && assetEmployeeId === employeeId)
+    || (employeeName && assignedTo === employeeName),
+  );
+}
+
+function isOpenRequestStatus(status) {
+  const normalized = String(status || '').toLowerCase();
+  return normalized.includes('pending') || normalized.includes('progress');
+}
+
+function capitalizeFirst(value) {
+  const text = String(value || '').trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase() : 'Request';
+}
 
 function normalizeAssetRows(rows, employees = []) {
   const employeeByName = new Map();

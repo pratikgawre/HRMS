@@ -58,12 +58,55 @@ export async function fetchAttendanceRows() {
   return dedupeAttendanceRows(rows.map(normalizeAttendanceRow));
 }
 
+export async function fetchAttendanceRowsByEmployee(employeeId) {
+  const rows = await apiRequest(`/attendance/employee/${employeeId}`);
+  const normalizedRows = dedupeAttendanceRows(rows.map(normalizeAttendanceRow));
+  if (normalizedRows.length > 0) {
+    attendanceRowsCache = normalizedRows;
+  }
+  return normalizedRows;
+}
+
+export async function refreshEmployeeAttendanceRows(employeeId) {
+  const rows = await fetchAttendanceRowsByEmployee(employeeId);
+  if (rows.length > 0) {
+    attendanceRowsCache = rows;
+  }
+  return rows.length > 0 ? rows : getInitialAttendanceRows();
+}
+
 export async function refreshStoredAttendanceRows() {
   const rows = await fetchAttendanceRows();
   if (rows.length > 0) {
     attendanceRowsCache = rows;
   }
   return rows.length > 0 ? rows : getInitialAttendanceRows();
+}
+
+export async function saveAttendanceRecord(row) {
+  const normalized = normalizeAttendanceRow(row);
+  const payload = {
+    id: normalized.id ? String(normalized.id) : null,
+    employeeId: normalized.employeeId,
+    employeeName: normalized.employee || normalized.employeeName,
+    dateLabel: normalized.date || normalized.dateLabel,
+    checkIn: normalized.checkIn,
+    checkOut: normalized.checkOut,
+    checkInAt: normalized.checkInAt,
+    checkOutAt: normalized.checkOutAt,
+    checkInBand: normalized.checkInBand,
+    workedHours: normalized.hours || normalized.workedHours,
+    status: normalized.status,
+  };
+
+  const saved = await apiRequest('/attendance', { method: 'POST', body: JSON.stringify(payload) });
+  const savedNormalized = normalizeAttendanceRow(saved);
+  attendanceRowsCache = dedupeAttendanceRows([
+    ...attendanceRowsCache.filter((current) => getAttendanceDayKey(current) !== getAttendanceDayKey(savedNormalized)),
+    savedNormalized,
+  ]);
+  window.dispatchEvent(new Event('kavyaAttendanceRowsChanged'));
+  return savedNormalized;
 }
 
 export function saveAttendanceRows(rows) {
@@ -76,6 +119,9 @@ export function saveAttendanceRows(rows) {
     dateLabel: row.date || row.dateLabel,
     checkIn: row.checkIn,
     checkOut: row.checkOut,
+    checkInAt: row.checkInAt,
+    checkOutAt: row.checkOutAt,
+    checkInBand: row.checkInBand,
     workedHours: row.hours || row.workedHours,
     status: row.status,
   }));

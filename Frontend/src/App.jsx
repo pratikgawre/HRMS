@@ -9,18 +9,18 @@ import EmployeeAttendance from './pages/EmployeeAttendance.jsx';
 import LeaveRequests from './pages/LeaveRequests.jsx';
 import Announcements from './pages/Announcements.jsx';
 import Profile from './pages/Profile.jsx';
+import Assets from './pages/Assets.jsx';
+import Tasks from './pages/Tasks.jsx';
+import SupportTickets from './pages/SupportTickets.jsx';
+import Payroll from './pages/Payroll.jsx';
 import Employees from './pages/Employees.jsx';
 import UserManagement from './pages/UserManagement.jsx';
 import Settings from './pages/Settings.jsx';
-import Assets from './pages/Assets.jsx';
 import TeamLeadDashboard from './pages/TeamLeadDashboard.jsx';
 import ProjectManagerDashboard from './pages/ProjectManagerDashboard.jsx';
-import Tasks from './pages/Tasks.jsx';
 import Projects from './pages/Projects.jsx';
 import MyTeam from './pages/MyTeam.jsx';
 import Departments from './pages/Departments.jsx';
-import SupportTickets from './pages/SupportTickets.jsx';
-import Payroll from './pages/Payroll.jsx';
 import AnnouncementTextView from './pages/AnnouncementTextView.jsx';
 import { getSessionValue } from './utils/appSession.js';
 
@@ -116,6 +116,8 @@ function App() {
             <Route path="/employee/attendance" element={<EmployeeAttendance />} />
             <Route path="/employee/leave-requests" element={<LeaveRequests />} />
             <Route path="/employee/payroll" element={<Payroll />} />
+            <Route path="/employee/tasks" element={<Tasks />} />
+            <Route path="/employee/assets" element={<Assets />} />
             <Route path="/employee/announcements" element={<Announcements />} />
             <Route path="/employee/support" element={<SupportTickets />} />
             <Route path="/employee/settings" element={<Settings />} />
