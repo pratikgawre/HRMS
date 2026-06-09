@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { attendanceRows, dashboardStats, leaveRequests, people, tasks } from '../data/dummyData.js';
@@ -56,6 +57,7 @@ const teamLeadResponsibilities = [
 ];
 
 function TeamLeadDashboard() {
+  const navigate = useNavigate();
   const [liveTasks, setLiveTasks] = useState([]);
 
   useEffect(() => {
@@ -123,7 +125,7 @@ function TeamLeadDashboard() {
       </Section>
 
       <div className="dashboard-grid">
-        <Section title="Team Tasks" action="Assign Task">
+        <Section title="Team Tasks" action="Assign Task" actionOnClick={() => navigate('/tasks')}>
           <DataTable columns={taskColumns} rows={teamTasks.slice(0, 3)} emptyMessage="No tasks available." />
         </Section>
         <Section title="Leave Review" action="Review">

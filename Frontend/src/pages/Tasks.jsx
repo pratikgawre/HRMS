@@ -3,9 +3,8 @@ import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people, tasks } from '../data/dummyData.js';
 import { getSessionValue } from '../utils/appSession.js';
-import { apiRequest } from '../utils/api.js';
 import { getInitials } from '../utils/user-management.js';
-import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
+import { getNextTaskCode, loadTasksWithSeed, normalizeTaskRows, saveTaskToDatabase } from '../utils/taskStorage.js';
 
 export const taskColumns = [
   { key: 'id', label: 'Task ID' },
@@ -16,12 +15,36 @@ export const taskColumns = [
   { key: 'status', label: 'Status' },
 ];
 
-const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
+
+
+
+
+
 const priorityOptions = ['Low', 'Medium', 'High', 'Urgent'];
 
 function Tasks() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const isTeamLead = role === 'teamLead';
+
+const loggedInUser = JSON.parse(
+  localStorage.getItem('kavyaUser') || '{}'
+);
+
+const teamMembers = useMemo(() => (
+  people
+    .filter(
+      (employee) =>
+        employee.teamLeadId === loggedInUser.id
+    )
+    .map((employee) => ({
+      id: employee.id,
+      name: employee.name,
+      role: employee.role,
+      avatar: employee.avatar || getInitials(employee.name),
+    }))
+), [loggedInUser.id]);
+
+
   const [taskRows, setTaskRows] = useState([]);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(() => getEmptyTaskForm());
@@ -40,16 +63,7 @@ function Tasks() {
     };
   }, []);
 
-  const teamMembers = useMemo(() => (
-    people
-      .filter((employee) => teamLeadMemberIds.includes(employee.id))
-      .map((employee) => ({
-        id: employee.id,
-        name: employee.name,
-        role: employee.role,
-        avatar: employee.avatar || getInitials(employee.name),
-      }))
-  ), []);
+ 
 
   const teamTasks = useMemo(() => {
     if (!isTeamLead) {
@@ -67,7 +81,7 @@ function Tasks() {
     setMessage('');
   };
 
-  const assignTask = (event) => {
+  const assignTask = async (event) => {
     event.preventDefault();
 
     if (!form.title.trim()) {
@@ -95,15 +109,18 @@ function Tasks() {
       status: 'Pending',
     };
 
-    const nextRows = [nextTask, ...taskRows];
-    setTaskRows(nextRows);
-    setMessage(`Task assigned to ${assignee.name}.`);
-    setForm(getEmptyTaskForm(assignee.id));
-
-    apiRequest('/tasks/bulk', {
-      method: 'POST',
-      body: JSON.stringify(nextRows.map(serializeTaskForApi)),
-    }).catch(() => {});
+    try {
+      const savedTask = await saveTaskToDatabase(nextTask);
+      setTaskRows((current) => normalizeTaskRows([
+        savedTask,
+        ...current.filter((task) => task.id !== savedTask.id),
+      ]));
+      setMessage(`Task assigned to ${assignee.name}.`);
+      setForm(getEmptyTaskForm(assignee.id));
+    } catch (error) {
+      console.error('Task assignment save failed.', error);
+      setMessage('Task assignment could not be saved to the database. Please try again.');
+    }
   };
 
   return (
@@ -218,3 +235,7 @@ function formatDueDate(value) {
 }
 
 export default Tasks;
+
+console.log(
+  JSON.parse(localStorage.getItem('kavyaUser'))
+);

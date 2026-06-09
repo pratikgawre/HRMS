@@ -1,13 +1,3 @@
 {
-    "java.compile.nullAnalysis.mode": "disabled",
-    "java.configuration.updateBuildConfiguration": "automatic",
-    "java.import.maven.enabled": true,
-    "java.jdt.ls.java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.18.8-hotspot",
-    "java.configuration.runtimes": [
-        {
-            "name": "JavaSE-17",
-            "path": "C:\\Program Files\\Microsoft\\jdk-17.0.18.8-hotspot",
-            "default": true
-        }
-    ]
+    "java.compile.nullAnalysis.mode": "disabled"
 }

@@ -1,5 +1,5 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import { StrictMode } from 'react';
+import * as ReactDOMClient from 'react-dom/client';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'remixicon/fonts/remixicon.css';
 import './styles.css';
@@ -8,11 +8,11 @@ import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { bootstrapData } from './utils/bootstrapData.js';
 
 bootstrapData().finally(() => {
-  ReactDOM.createRoot(document.getElementById('root')).render(
-    <React.StrictMode>
+  ReactDOMClient.createRoot(document.getElementById('root')).render(
+    <StrictMode>
       <ErrorBoundary>
         <App />
       </ErrorBoundary>
-    </React.StrictMode>,
+    </StrictMode>,
   );
 });

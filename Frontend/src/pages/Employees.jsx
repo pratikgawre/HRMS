@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { getAllStatesWithDistricts } from 'india-state-district';
+import * as indiaStateDistrict from 'india-state-district';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
@@ -64,7 +64,9 @@ const bankNameGroups = [
   },
 ];
 const bankNameOptionSet = new Set(bankNameGroups.flatMap((group) => group.options));
-const indiaStateDistrictData = getAllStatesWithDistricts();
+const indiaStateDistrictData = indiaStateDistrict.getAllStatesWithDistricts?.()
+  || indiaStateDistrict.default?.getAllStatesWithDistricts?.()
+  || [];
 const indianStates = indiaStateDistrictData.map((item) => item.name);
 const indianDistrictsByState = Object.fromEntries(
   indiaStateDistrictData.map((item) => [item.name, item.districts])

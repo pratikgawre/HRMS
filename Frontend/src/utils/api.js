@@ -1,6 +1,6 @@
 import { getSessionValue } from './appSession.js';
 
-const API_BASE = 'http://localhost:8080/api';
+const API_BASE = '/api';
 
 export async function apiRequest(path, options = {}) {
   const token = getSessionValue('kavyaAuthToken');

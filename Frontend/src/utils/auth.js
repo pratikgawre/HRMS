@@ -3,7 +3,7 @@ import { getUsers, saveUsers } from './user-management.js';
 import { getStoredEmployees } from './employeeStorage.js';
 import { clearSessionValues, getSessionValue, setSessionValue } from './appSession.js';
 
-const API_BASE = 'http://localhost:8080/api';
+const API_BASE = '/api';
 
 const legacyUsers = {
   'admin@gmail.com': { password: 'admin123', role: 'Super Admin', employeeId: 'ADMIN-001', employeeName: 'Admin Kavya', avatar: 'AK', department: 'Platform', designation: 'System Admin' },
@@ -197,7 +197,9 @@ export function syncSessionFromAccessUser() {
 
     return (employeeId && profileEmployeeId === employeeId) || profileEmail === email;
   });
-  const accessRole = normalizeAccessRole(employeeProfile?.accessRole || accessUser.role);
+  const accessUserRole = normalizeAccessRole(accessUser.role);
+  const storedEmployeeRole = normalizeAccessRole(employeeProfile?.accessRole || accessUser.role);
+  const accessRole = accessUserRole !== 'Employee' ? accessUserRole : storedEmployeeRole;
   const appRole = getAppRole(accessRole);
 
   if (normalizeAccessRole(accessUser.role) !== accessRole) {

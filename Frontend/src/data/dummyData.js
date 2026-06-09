@@ -1,9 +1,62 @@
 export const people = [
-  { id: 'KV001', name: 'Aarav Sharma', role: 'Product Designer', department: 'Design', status: 'Active', avatar: 'AS' },
-  { id: 'KV002', name: 'Meera Nair', role: 'HR Executive', department: 'People Ops', status: 'Active', avatar: 'MN' },
-  { id: 'KV003', name: 'Kabir Khan', role: 'Frontend Engineer', department: 'Engineering', status: 'On Leave', avatar: 'KK' },
-  { id: 'KV004', name: 'Isha Patel', role: 'Finance Analyst', department: 'Finance', status: 'Active', avatar: 'IP' },
-  { id: 'KV005', name: 'Rohan Das', role: 'QA Lead', department: 'Quality', status: 'Active', avatar: 'RD' },
+  {
+    id: 'TL001',
+    name: 'Rohan Das',
+    role: 'Team Lead',
+    department: 'Engineering',
+    status: 'Active',
+    avatar: 'RD'
+  },
+
+  {
+    id: 'KV001',
+    name: 'Aarav Sharma',
+    role: 'Product Designer',
+    department: 'Design',
+    status: 'Active',
+    avatar: 'AS',
+    teamLeadId: 'TL001'
+  },
+
+  {
+    id: 'KV002',
+    name: 'Meera Nair',
+    role: 'HR Executive',
+    department: 'People Ops',
+    status: 'Active',
+    avatar: 'MN',
+    teamLeadId: 'TL001'
+  },
+
+  {
+    id: 'KV003',
+    name: 'Kabir Khan',
+    role: 'Frontend Engineer',
+    department: 'Engineering',
+    status: 'On Leave',
+    avatar: 'KK',
+    teamLeadId: 'TL001'
+  },
+
+  {
+    id: 'KV004',
+    name: 'Isha Patel',
+    role: 'Finance Analyst',
+    department: 'Finance',
+    status: 'Active',
+    avatar: 'IP',
+    teamLeadId: 'TL001'
+  },
+
+  {
+    id: 'KV005',
+    name: 'Rohan Das',
+    role: 'QA Engineer',
+    department: 'Quality',
+    status: 'Active',
+    avatar: 'RD',
+    teamLeadId: 'TL001'
+  }
 ];
 
 export const attendanceRows = [

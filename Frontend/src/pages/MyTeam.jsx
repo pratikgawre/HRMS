@@ -5,11 +5,13 @@ import { Hero, Section } from './AdminDashboard.jsx';
 import { apiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 
-const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
+// Hardcoded team IDs removed
+
 
 function MyTeam() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const isTeamLead = role === 'teamLead';
+  const currentEmployeeId = getSessionValue('employeeId');
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [tasks, setTasks] = useState([]);
