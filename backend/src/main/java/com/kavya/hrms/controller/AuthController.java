@@ -96,7 +96,7 @@ public class AuthController {
     response.setOk(true);
     response.setUserId(user.getUserId());
     response.setLastLogin(lastLogin);
-    response.setRole(user.getRole());
+    response.setRole(normalizeRole(user.getRole()));
     response.setEmail(user.getEmail());
     response.setEmployeeId(user.getEmployeeId());
     response.setEmployeeName(user.getEmployeeName());
@@ -111,7 +111,7 @@ public class AuthController {
     response.setOk(true);
     response.setUserId(session.getUserId());
     response.setLastLogin(session.getLastLogin());
-    response.setRole(session.getRole());
+    response.setRole(normalizeRole(session.getRole()));
     response.setEmail(session.getEmail());
     response.setEmployeeId(session.getEmployeeId());
     response.setEmployeeName(session.getEmployeeName());
@@ -119,6 +119,18 @@ public class AuthController {
     response.setTwoFactorRequired(false);
     response.setMessage("Session active");
     return response;
+  }
+
+  private String normalizeRole(String role) {
+    if (role == null) return "Employee";
+    switch (role.trim().toLowerCase().replaceAll("\\s+", "")) {
+      case "superadmin": case "admin": return "Super Admin";
+      case "hrmanager": case "hr": return "HR Manager";
+      case "projectmanager": return "Project Manager";
+      case "teamlead": return "Team Lead";
+      case "employee": return "Employee";
+      default: return role.trim();
+    }
   }
 
   private LoginResponse failed(String message) {

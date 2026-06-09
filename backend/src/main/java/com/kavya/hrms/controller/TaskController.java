@@ -31,6 +31,21 @@ public class TaskController {
     return taskRepository.findAll();
   }
 
+  @GetMapping("/assigned-to/{assignedToId}")
+  public List<TaskItem> listByAssignee(@PathVariable String assignedToId) {
+    return taskRepository.findByAssignedToId(assignedToId);
+  }
+
+  @GetMapping("/owner/{owner}")
+  public List<TaskItem> listByOwner(@PathVariable String owner) {
+    return taskRepository.findByOwnerIgnoreCase(owner);
+  }
+
+  @GetMapping("/assignee-name/{assignedToName}")
+  public List<TaskItem> listByAssigneeName(@PathVariable String assignedToName) {
+    return taskRepository.findByAssignedToNameIgnoreCase(assignedToName);
+  }
+
   @PostMapping
   public TaskItem create(
       @RequestBody TaskItem task,

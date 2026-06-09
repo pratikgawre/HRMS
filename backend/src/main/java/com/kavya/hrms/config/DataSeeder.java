@@ -29,6 +29,7 @@ public class DataSeeder {
     return args -> {
       seedUser(appUserRepository, "admin@gmail.com", "admin123", "admin", "ADMIN-001", "Admin Kavya");
       seedUser(appUserRepository, "hr@gmail.com", "hr123", "hr", "HR-001", "Meera Nair");
+      seedUser(appUserRepository, "teamlead@gmail.com", "teamlead123", "teamLead", "KV003", "Kabir Khan");
       seedUser(appUserRepository, "employee@gmail.com", "employee123", "employee", "KV001", "Aarav Sharma");
 
       if (leaveRequestRepository.count() == 0) {

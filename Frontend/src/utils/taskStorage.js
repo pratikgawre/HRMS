@@ -40,6 +40,13 @@ export function serializeTaskForApi(task) {
   };
 }
 
+export async function saveTaskToDatabase(task) {
+  return apiRequest('/tasks', {
+    method: 'POST',
+    body: JSON.stringify(serializeTaskForApi(task)),
+  });
+}
+
 export function getNextTaskCode(tasks = []) {
   const highest = tasks.reduce((max, task) => {
     const match = String(task.id || '').match(/^TSK-(\d+)$/i);
@@ -54,7 +61,19 @@ export function getNextTaskCode(tasks = []) {
   return `TSK-${String(highest + 1)}`;
 }
 
-export async function loadTasksWithSeed() {
+export async function loadTasksWithSeed(seedTasks = []) {
   const records = await apiRequest('/tasks').catch(() => []);
-  return normalizeTaskRows(Array.isArray(records) ? records : []);
+  if (Array.isArray(records) && records.length > 0) {
+    return normalizeTaskRows(records);
+  }
+
+  const normalizedSeed = normalizeTaskRows(seedTasks);
+  if (normalizedSeed.length > 0) {
+    await apiRequest('/tasks/bulk', {
+      method: 'POST',
+      body: JSON.stringify(normalizedSeed.map(serializeTaskForApi)),
+    }).catch(() => {});
+  }
+
+  return normalizedSeed;
 }

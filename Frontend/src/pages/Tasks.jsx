@@ -7,7 +7,7 @@ import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitials } from '../utils/user-management.js';
-import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
+import { getNextTaskCode, loadTasksWithSeed, normalizeTaskRows, serializeTaskForApi } from '../utils/taskStorage.js';
 
 export const taskColumns = [
   { key: 'id', label: 'Task ID' },
@@ -18,7 +18,11 @@ export const taskColumns = [
   { key: 'status', label: 'Status' },
 ];
 
-const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
+
+
+
+
+
 const priorityOptions = ['Low', 'Medium', 'High', 'Urgent'];
 const taskStatusOptions = ['Pending', 'Active', 'Approved', 'Completed'];
 const taskAssignableRoles = ['admin', 'projectManager', 'teamLead'];
@@ -538,3 +542,7 @@ function isAdminEmployee(employee) {
 }
 
 export default Tasks;
+
+console.log(
+  JSON.parse(localStorage.getItem('kavyaUser'))
+);
