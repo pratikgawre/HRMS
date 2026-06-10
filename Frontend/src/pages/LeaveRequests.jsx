@@ -105,7 +105,7 @@ function LeaveRequests() {
             <i className="ri-checkbox-circle-line" aria-hidden="true" />
             {role === 'admin' || role === 'hr' ? 'Approve' : 'Recommend'}
           </button>
-          {row.status === 'Pending' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
+          {row.status === 'Pending' && role !== 'teamLead' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
         </div>
       ),
     }] : []),

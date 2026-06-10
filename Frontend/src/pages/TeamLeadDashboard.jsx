@@ -6,7 +6,13 @@ import { CardGrid, Hero, InsightGrid, QuickActions, Section, leaveColumns } from
 import { attendanceColumns } from './EmployeeDashboard.jsx';
 import { taskColumns } from './Tasks.jsx';
 import { safeApiRequest } from '../utils/api.js';
+<<<<<<< HEAD
 import { getAttendanceEmployee, getTodayLabel } from '../utils/attendanceStorage.js';
+=======
+import { getTodayLabel } from '../utils/attendanceStorage.js';
+import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
+import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, normalizeLeaveTypes } from '../utils/leaveBalance.js';
+>>>>>>> e36d43f (TL-updated-code)
 import { loadTasksWithSeed } from '../utils/taskStorage.js';
 import { getInitials } from '../utils/user-management.js';
 
@@ -57,12 +63,21 @@ const teamLeadResponsibilities = [
 
 function TeamLeadDashboard() {
   const navigate = useNavigate();
+  const currentEmployee = getCurrentEmployeeIdentity();
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [liveTasks, setLiveTasks] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+<<<<<<< HEAD
   const attendanceEmployee = getAttendanceEmployee();
+=======
+  const [employeeLeaveSummary, setEmployeeLeaveSummary] = useState({
+    totalAllotted: 0,
+    totalTaken: 0,
+    totalRemaining: 0,
+  });
+>>>>>>> e36d43f (TL-updated-code)
 
   const refreshDashboard = () => {
     Promise.all([
@@ -70,12 +85,15 @@ function TeamLeadDashboard() {
       safeApiRequest('/attendance', []),
       safeApiRequest('/leaves', fallbackLeaveRequests),
       safeApiRequest('/announcements', fallbackAnnouncements),
+      safeApiRequest('/settings', { leaveTypes: DEFAULT_LEAVE_TYPES }),
+      safeApiRequest('/leaves/summary/current', null),
       loadTasksWithSeed(fallbackTasks),
-    ]).then(([employeeRows, attendanceRows, leaveRows, announcementRows, taskRows]) => {
+    ]).then(([employeeRows, attendanceRows, leaveRows, announcementRows, settingsPayload, summaryPayload, taskRows]) => {
       setEmployees(normalizeEmployees(employeeRows));
       setAttendance(normalizeAttendanceRows(attendanceRows));
       setLeaveRequests(normalizeLeaveRows(leaveRows));
       setAnnouncements(normalizeAnnouncementRows(announcementRows));
+      setEmployeeLeaveSummary(normalizeEmployeeLeaveSummary(summaryPayload, settingsPayload, leaveRows, currentEmployee));
       setLiveTasks(Array.isArray(taskRows) ? taskRows : []);
     });
   };
@@ -99,6 +117,7 @@ function TeamLeadDashboard() {
     window.addEventListener('kavyaLeaveRequestsChanged', refresh);
     window.addEventListener('kavyaAnnouncementsChanged', refresh);
     window.addEventListener('kavyaTasksChanged', refresh);
+    window.addEventListener('kavyaSettingsChanged', refresh);
 
     return () => {
       active = false;
@@ -109,6 +128,7 @@ function TeamLeadDashboard() {
       window.removeEventListener('kavyaLeaveRequestsChanged', refresh);
       window.removeEventListener('kavyaAnnouncementsChanged', refresh);
       window.removeEventListener('kavyaTasksChanged', refresh);
+      window.removeEventListener('kavyaSettingsChanged', refresh);
     };
   }, []);
 
@@ -130,6 +150,7 @@ function TeamLeadDashboard() {
   const urgentLeaves = pendingLeaves.filter((request) => Number(request.days) >= 3).length;
   const highPriorityTasks = openTasks.filter((task) => String(task.priority || '').toLowerCase() === 'high').length;
   const activeAnnouncements = announcements.filter((item) => String(item.status || 'active').toLowerCase() !== 'inactive');
+  const employeeLeaveDetail = `Total: ${employeeLeaveSummary.totalAllotted} | Taken: ${employeeLeaveSummary.totalTaken} | Remaining: ${employeeLeaveSummary.totalRemaining}`;
 
   const summaryCards = [
     {
@@ -167,10 +188,19 @@ function TeamLeadDashboard() {
   ];
 
   const quickActionDetails = {
-    'Add Employee': `${teamMembers.length} profiles`,
-    'Approve Leave': `${pendingLeaves.length} pending`,
+    'Add Employee': '',
+    'Approve Leave': employeeLeaveDetail,
     'Run Payroll': `${departments.size} departments`,
     'Post Notice': `${activeAnnouncements.length} published`,
+  };
+
+  const quickActionLabels = {
+    'Add Employee': 'My Profile',
+    'Approve Leave': 'Leaves',
+  };
+
+  const quickActionPaths = {
+    'Add Employee': '/team-lead/profile',
   };
 
   const reviewLink = '/team-lead/leave-review?status=Pending';
@@ -179,8 +209,9 @@ function TeamLeadDashboard() {
   return (
     <>
       <Hero title="Team Lead Dashboard" copy="Coordinate team attendance, task ownership, leave requests, and day-to-day delivery updates." />
-      <QuickActions detailOverrides={quickActionDetails} />
+      <QuickActions detailOverrides={quickActionDetails} labelOverrides={quickActionLabels} pathOverrides={quickActionPaths} />
       <CardGrid stats={summaryCards} />
+<<<<<<< HEAD
       <div className="dashboard-grid">
         <Section title="Team Tasks" action="Assign Task" actionTo={tasksLink}>
           <DataTable columns={taskColumns} rows={liveTasks.slice(0, 3)} emptyMessage="No tasks available." />
@@ -202,6 +233,16 @@ function TeamLeadDashboard() {
           rows={myTodayRecord ? [myTodayRecord] : []}
           emptyMessage="No attendance record found for today. Check in from My Attendance."
         />
+=======
+      <Section title="Leave Review" action="Review" actionTo={reviewLink}>
+        <DataTable columns={leaveColumns} rows={leaveRequests} />
+      </Section>
+      <Section title="Today Attendance" action="View Team" actionTo={attendanceLink}>
+        <DataTable columns={attendanceColumns} rows={todayAttendance} emptyMessage="No attendance records found for today." />
+>>>>>>> e36d43f (TL-updated-code)
+      </Section>
+      <Section title="Team Tasks" action="Assign Task" actionTo={tasksLink}>
+        <DataTable columns={taskColumns} rows={liveTasks.slice(0, 3)} emptyMessage="No tasks available." />
       </Section>
       <InsightGrid
         pendingLeaves={pendingLeaves.length}
@@ -257,6 +298,41 @@ function isAdminEmployee(employee) {
   const email = String(employee.email || '').trim().toLowerCase();
 
   return employeeId === 'admin-001' || email === 'admin@gmail.com';
+}
+
+function normalizeEmployeeLeaveSummary(summaryPayload, settingsPayload, leaveRows, currentEmployee) {
+  if (summaryPayload && typeof summaryPayload === 'object') {
+    const totalAllotted = normalizeNumber(summaryPayload.totalAllotted);
+    const totalTaken = normalizeNumber(summaryPayload.totalTaken);
+    const hasRemaining = summaryPayload.totalRemaining !== undefined && summaryPayload.totalRemaining !== null;
+    const totalRemaining = hasRemaining ? normalizeNumber(summaryPayload.totalRemaining) : Math.max(totalAllotted - totalTaken, 0);
+
+    return {
+      totalAllotted,
+      totalTaken,
+      totalRemaining,
+    };
+  }
+
+  const fallbackSummary = getEmployeeLeaveSummary(
+    normalizeLeaveTypes(settingsPayload?.leaveTypes, DEFAULT_LEAVE_TYPES),
+    Array.isArray(leaveRows) ? leaveRows : [],
+    {
+      employeeId: currentEmployee.employeeId,
+      employee: currentEmployee.employee,
+    },
+  );
+
+  return {
+    totalAllotted: fallbackSummary.totalAllocated,
+    totalTaken: fallbackSummary.totalUsed,
+    totalRemaining: fallbackSummary.totalRemaining,
+  };
+}
+
+function normalizeNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
 }
 
 export default TeamLeadDashboard;
