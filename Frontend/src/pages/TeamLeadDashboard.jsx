@@ -6,13 +6,9 @@ import { CardGrid, Hero, InsightGrid, QuickActions, Section, leaveColumns } from
 import { attendanceColumns } from './EmployeeDashboard.jsx';
 import { taskColumns } from './Tasks.jsx';
 import { safeApiRequest } from '../utils/api.js';
-<<<<<<< HEAD
-import { getAttendanceEmployee, getTodayLabel } from '../utils/attendanceStorage.js';
-=======
 import { getTodayLabel } from '../utils/attendanceStorage.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, normalizeLeaveTypes } from '../utils/leaveBalance.js';
->>>>>>> e36d43f (TL-updated-code)
 import { loadTasksWithSeed } from '../utils/taskStorage.js';
 import { getInitials } from '../utils/user-management.js';
 
@@ -69,15 +65,11 @@ function TeamLeadDashboard() {
   const [liveTasks, setLiveTasks] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
-<<<<<<< HEAD
-  const attendanceEmployee = getAttendanceEmployee();
-=======
   const [employeeLeaveSummary, setEmployeeLeaveSummary] = useState({
     totalAllotted: 0,
     totalTaken: 0,
     totalRemaining: 0,
   });
->>>>>>> e36d43f (TL-updated-code)
 
   const refreshDashboard = () => {
     Promise.all([
@@ -136,14 +128,6 @@ function TeamLeadDashboard() {
   const todayLabel = getTodayLabel();
   const teamTodayAttendance = useMemo(() => attendance.filter((row) => row.date === todayLabel), [attendance, todayLabel]);
   const presentToday = teamTodayAttendance.filter((row) => String(row.status || '').toLowerCase() === 'present');
-  const myAttendanceRows = useMemo(
-    () => attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId),
-    [attendance, attendanceEmployee.employeeId]
-  );
-  const myTodayRecord = useMemo(
-    () => myAttendanceRows.find((row) => row.date === todayLabel),
-    [myAttendanceRows, todayLabel]
-  );
   const pendingLeaves = leaveRequests.filter((request) => String(request.status || '').toLowerCase() === 'pending');
   const openTasks = liveTasks.filter((task) => String(task.status || '').toLowerCase() !== 'completed');
   const departments = new Set(teamMembers.map((employee) => employee.department).filter(Boolean));
@@ -151,6 +135,8 @@ function TeamLeadDashboard() {
   const highPriorityTasks = openTasks.filter((task) => String(task.priority || '').toLowerCase() === 'high').length;
   const activeAnnouncements = announcements.filter((item) => String(item.status || 'active').toLowerCase() !== 'inactive');
   const employeeLeaveDetail = `Total: ${employeeLeaveSummary.totalAllotted} | Taken: ${employeeLeaveSummary.totalTaken} | Remaining: ${employeeLeaveSummary.totalRemaining}`;
+  const attendanceLink = '/team-lead/attendance';
+  const todayAttendance = teamTodayAttendance;
 
   const summaryCards = [
     {
@@ -211,35 +197,11 @@ function TeamLeadDashboard() {
       <Hero title="Team Lead Dashboard" copy="Coordinate team attendance, task ownership, leave requests, and day-to-day delivery updates." />
       <QuickActions detailOverrides={quickActionDetails} labelOverrides={quickActionLabels} pathOverrides={quickActionPaths} />
       <CardGrid stats={summaryCards} />
-<<<<<<< HEAD
-      <div className="dashboard-grid">
-        <Section title="Team Tasks" action="Assign Task" actionTo={tasksLink}>
-          <DataTable columns={taskColumns} rows={liveTasks.slice(0, 3)} emptyMessage="No tasks available." />
-        </Section>
-        <Section title="Leave Review" action="Review" actionTo={reviewLink}>
-          <DataTable columns={leaveColumns} rows={leaveRequests} />
-        </Section>
-      </div>
-      <Section title="Today Attendance" action="My Attendance" actionTo="/team-lead/attendance">
-        <div className="attendance-action-panel">
-          <div>
-            <span>Today</span>
-            <strong>{myTodayRecord?.checkIn || 'Not checked in'}</strong>
-            <small>{myTodayRecord?.checkOut && myTodayRecord.checkOut !== '-' ? `Checked out at ${myTodayRecord.checkOut}` : 'Use My Attendance to update your day'}</small>
-          </div>
-        </div>
-        <DataTable
-          columns={attendanceColumns}
-          rows={myTodayRecord ? [myTodayRecord] : []}
-          emptyMessage="No attendance record found for today. Check in from My Attendance."
-        />
-=======
       <Section title="Leave Review" action="Review" actionTo={reviewLink}>
         <DataTable columns={leaveColumns} rows={leaveRequests} />
       </Section>
       <Section title="Today Attendance" action="View Team" actionTo={attendanceLink}>
         <DataTable columns={attendanceColumns} rows={todayAttendance} emptyMessage="No attendance records found for today." />
->>>>>>> e36d43f (TL-updated-code)
       </Section>
       <Section title="Team Tasks" action="Assign Task" actionTo={tasksLink}>
         <DataTable columns={taskColumns} rows={liveTasks.slice(0, 3)} emptyMessage="No tasks available." />
