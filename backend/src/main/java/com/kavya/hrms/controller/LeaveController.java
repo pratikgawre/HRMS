@@ -42,6 +42,9 @@ public class LeaveController {
       @RequestBody LeaveRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    if (accessRole != null && !accessRole.isBlank()) {
+      request.setOwnerRole(accessRole);
+    }
     LeaveRequest saved = leaveRequestRepository.save(request);
     notifyLeaveChange(saved, "Leave request submitted", accessRole, userId, "submitted");
     return saved;

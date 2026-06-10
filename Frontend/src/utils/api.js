@@ -38,3 +38,11 @@ export async function safeApiRequest(path, fallback, options = {}) {
     return fallback;
   }
 }
+
+export async function deleteEmployee(employeeId) {
+  return apiRequest(`/employees/${employeeId}`, { method: 'DELETE' });
+}
+
+export async function deleteUser(userId) {
+  return apiRequest(`/users/${userId}`, { method: 'DELETE' });
+}

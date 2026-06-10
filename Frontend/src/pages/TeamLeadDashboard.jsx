@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
-import { attendanceRows as fallbackAttendanceRows, announcements as fallbackAnnouncements, leaveRequests as fallbackLeaveRequests, people as fallbackPeople, tasks as fallbackTasks } from '../data/dummyData.js';
+import { announcements as fallbackAnnouncements, leaveRequests as fallbackLeaveRequests, people as fallbackPeople, tasks as fallbackTasks } from '../data/dummyData.js';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section, leaveColumns } from './AdminDashboard.jsx';
 import { attendanceColumns } from './EmployeeDashboard.jsx';
 import { taskColumns } from './Tasks.jsx';
 import { safeApiRequest } from '../utils/api.js';
-import { getTodayLabel } from '../utils/attendanceStorage.js';
+import { getAttendanceEmployee, getTodayLabel } from '../utils/attendanceStorage.js';
 import { loadTasksWithSeed } from '../utils/taskStorage.js';
 import { getInitials } from '../utils/user-management.js';
-
-const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 
 const teamLeadResponsibilities = [
   {
@@ -64,11 +62,12 @@ function TeamLeadDashboard() {
   const [liveTasks, setLiveTasks] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const attendanceEmployee = getAttendanceEmployee();
 
   const refreshDashboard = () => {
     Promise.all([
       safeApiRequest('/employees', fallbackPeople),
-      safeApiRequest('/attendance', fallbackAttendanceRows),
+      safeApiRequest('/attendance', []),
       safeApiRequest('/leaves', fallbackLeaveRequests),
       safeApiRequest('/announcements', fallbackAnnouncements),
       loadTasksWithSeed(fallbackTasks),
@@ -115,8 +114,16 @@ function TeamLeadDashboard() {
 
   const teamMembers = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee)), [employees]);
   const todayLabel = getTodayLabel();
-  const todayAttendance = useMemo(() => attendance.filter((row) => row.date === todayLabel), [attendance, todayLabel]);
-  const presentToday = todayAttendance.filter((row) => String(row.status || '').toLowerCase() === 'present');
+  const teamTodayAttendance = useMemo(() => attendance.filter((row) => row.date === todayLabel), [attendance, todayLabel]);
+  const presentToday = teamTodayAttendance.filter((row) => String(row.status || '').toLowerCase() === 'present');
+  const myAttendanceRows = useMemo(
+    () => attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId),
+    [attendance, attendanceEmployee.employeeId]
+  );
+  const myTodayRecord = useMemo(
+    () => myAttendanceRows.find((row) => row.date === todayLabel),
+    [myAttendanceRows, todayLabel]
+  );
   const pendingLeaves = leaveRequests.filter((request) => String(request.status || '').toLowerCase() === 'pending');
   const openTasks = liveTasks.filter((task) => String(task.status || '').toLowerCase() !== 'completed');
   const departments = new Set(teamMembers.map((employee) => employee.department).filter(Boolean));
@@ -168,7 +175,6 @@ function TeamLeadDashboard() {
 
   const reviewLink = '/team-lead/leave-review?status=Pending';
   const tasksLink = '/team-lead/tasks?status=Pending';
-  const attendanceLink = '/team-lead/attendance?status=Present';
 
   return (
     <>
@@ -183,8 +189,19 @@ function TeamLeadDashboard() {
           <DataTable columns={leaveColumns} rows={leaveRequests} />
         </Section>
       </div>
-      <Section title="Today Attendance" action="View Team" actionTo={attendanceLink}>
-        <DataTable columns={attendanceColumns} rows={todayAttendance} emptyMessage="No attendance records found for today." />
+      <Section title="Today Attendance" action="My Attendance" actionTo="/team-lead/attendance">
+        <div className="attendance-action-panel">
+          <div>
+            <span>Today</span>
+            <strong>{myTodayRecord?.checkIn || 'Not checked in'}</strong>
+            <small>{myTodayRecord?.checkOut && myTodayRecord.checkOut !== '-' ? `Checked out at ${myTodayRecord.checkOut}` : 'Use My Attendance to update your day'}</small>
+          </div>
+        </div>
+        <DataTable
+          columns={attendanceColumns}
+          rows={myTodayRecord ? [myTodayRecord] : []}
+          emptyMessage="No attendance record found for today. Check in from My Attendance."
+        />
       </Section>
       <InsightGrid
         pendingLeaves={pendingLeaves.length}

@@ -3,6 +3,7 @@ package com.kavya.hrms.controller;
 import com.kavya.hrms.model.AttendanceRecord;
 import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.AttendanceRecordRepository;
+import com.kavya.hrms.service.AttendanceAutoCheckoutService;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.List;
@@ -23,23 +24,27 @@ public class AttendanceController {
   private final AttendanceRecordRepository attendanceRecordRepository;
   private final AppUserRepository appUserRepository;
   private final NotificationService notificationService;
+  private final AttendanceAutoCheckoutService attendanceAutoCheckoutService;
 
   public AttendanceController(
       AttendanceRecordRepository attendanceRecordRepository,
       AppUserRepository appUserRepository,
-      NotificationService notificationService) {
+      NotificationService notificationService,
+      AttendanceAutoCheckoutService attendanceAutoCheckoutService) {
     this.attendanceRecordRepository = attendanceRecordRepository;
     this.appUserRepository = appUserRepository;
     this.notificationService = notificationService;
+    this.attendanceAutoCheckoutService = attendanceAutoCheckoutService;
   }
 
   @GetMapping
   public List<AttendanceRecord> list() {
-    return attendanceRecordRepository.findAll();
+    return attendanceAutoCheckoutService.finalizeOpenAttendanceRecords();
   }
 
   @GetMapping("/employee/{employeeId}")
   public List<AttendanceRecord> byEmployee(@PathVariable String employeeId) {
+    attendanceAutoCheckoutService.finalizeOpenAttendanceRecords();
     return attendanceRecordRepository.findByEmployeeId(employeeId);
   }
 
@@ -48,6 +53,7 @@ public class AttendanceController {
       @RequestBody AttendanceRecord record,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    attendanceAutoCheckoutService.finalizeOpenAttendanceRecords();
     AttendanceRecord saved = attendanceRecordRepository.save(record);
     notifyAttendanceChange(List.of(saved), "Attendance updated", accessRole, userId, "updated");
     return saved;
@@ -58,6 +64,7 @@ public class AttendanceController {
       @RequestBody List<AttendanceRecord> records,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    attendanceAutoCheckoutService.finalizeOpenAttendanceRecords();
     long existingCount = attendanceRecordRepository.count();
     attendanceRecordRepository.deleteAll();
     List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(records);

@@ -38,19 +38,7 @@ function Header({ role, onMenuClick }) {
     employee: '/employee',
   }[role] || '/employee';
 
-  const searchRoutes = [
-    { segment: '/employees', keywords: ['employee', 'staff', 'member', 'people', 'team'] },
-    { segment: '/users', keywords: ['user', 'access', 'role', 'account'] },
-    { segment: '/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'late', 'present'] },
-    { segment: '/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
-    { segment: '/announcements', keywords: ['announcement', 'notice', 'policy', 'update'] },
-    { segment: '/leave-management', keywords: ['leave', 'vacation', 'absence'] },
-    { segment: '/leave-approval', keywords: ['leave', 'vacation', 'absence'] },
-    { segment: '/leave-review', keywords: ['leave', 'vacation', 'absence'] },
-    { segment: '/leave-requests', keywords: ['leave', 'vacation', 'absence'] },
-    { segment: '/support', keywords: ['support', 'ticket', 'help'] },
-    { segment: '/dashboard', keywords: ['dashboard', 'overview', 'home'] },
-  ];
+  const searchRoutes = getSearchRoutes(role);
 
   useEffect(() => {
     let active = true;
@@ -84,19 +72,11 @@ function Header({ role, onMenuClick }) {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;
 
-    const activeSegment = location.pathname.slice(roleBasePath.length);
-    const currentSearchPages = ['/employees', '/users', '/attendance', '/announcements', '/payroll'];
-    if (currentSearchPages.includes(activeSegment)) {
-      navigate(`${location.pathname}?search=${encodeURIComponent(searchQuery.trim())}`);
-      return;
-    }
-
     const directMatch = searchRoutes.find((entry) => {
-      const routeMatchesRole = entry.segment === '/dashboard' || location.pathname.startsWith(roleBasePath);
-      return routeMatchesRole && entry.keywords.some((keyword) => normalized.includes(keyword));
+      return entry.keywords.some((keyword) => normalized.includes(keyword));
     });
-    const targetSegment = directMatch?.segment || '/employees';
-    navigate(`${roleBasePath}${targetSegment}?search=${encodeURIComponent(searchQuery.trim())}`);
+    const targetPath = directMatch?.path || `${roleBasePath}/dashboard`;
+    navigate(`${targetPath}?search=${encodeURIComponent(searchQuery.trim())}`);
   };
 
   const handleNotificationClick = async (id) => {
@@ -235,6 +215,76 @@ function Header({ role, onMenuClick }) {
       </div>
     </header>
   );
+}
+
+function getSearchRoutes(role) {
+  const baseRoutes = {
+    admin: [
+      { path: '/admin/dashboard', keywords: ['dashboard', 'overview', 'home'] },
+      { path: '/admin/employees', keywords: ['employee', 'employees', 'staff', 'member', 'people', 'team'] },
+      { path: '/admin/users', keywords: ['user', 'users', 'access', 'role', 'account'] },
+      { path: '/admin/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/admin/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
+      { path: '/admin/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
+      { path: '/admin/leave-management', keywords: ['leave', 'vacation', 'absence'] },
+      { path: '/admin/support', keywords: ['support', 'ticket', 'help'] },
+      { path: '/admin/assets', keywords: ['asset', 'assets', 'inventory'] },
+      { path: '/admin/projects', keywords: ['project', 'projects', 'delivery'] },
+      { path: '/admin/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
+      { path: '/admin/profile', keywords: ['profile', 'account', 'me'] },
+    ],
+    hr: [
+      { path: '/hr/dashboard', keywords: ['dashboard', 'overview', 'home'] },
+      { path: '/hr/employees', keywords: ['employee', 'employees', 'staff', 'member', 'people', 'team'] },
+      { path: '/hr/users', keywords: ['user', 'users', 'access', 'role', 'account'] },
+      { path: '/hr/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/hr/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
+      { path: '/hr/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
+      { path: '/hr/leave-approval', keywords: ['leave', 'vacation', 'absence'] },
+      { path: '/hr/tasks', keywords: ['task', 'tasks', 'assignment'] },
+      { path: '/hr/projects', keywords: ['project', 'projects', 'delivery'] },
+      { path: '/hr/assets', keywords: ['asset', 'assets', 'inventory'] },
+      { path: '/hr/support', keywords: ['support', 'ticket', 'help'] },
+      { path: '/hr/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
+      { path: '/hr/profile', keywords: ['profile', 'account', 'me'] },
+    ],
+    teamLead: [
+      { path: '/team-lead/dashboard', keywords: ['dashboard', 'overview', 'home'] },
+      { path: '/team-lead/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
+      { path: '/team-lead/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/team-lead/leave-review', keywords: ['leave', 'vacation', 'absence'] },
+      { path: '/team-lead/tasks', keywords: ['task', 'tasks', 'assignment'] },
+      { path: '/team-lead/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
+      { path: '/team-lead/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
+      { path: '/team-lead/support', keywords: ['support', 'ticket', 'help'] },
+      { path: '/team-lead/profile', keywords: ['profile', 'account', 'me'] },
+    ],
+    projectManager: [
+      { path: '/project-manager/dashboard', keywords: ['dashboard', 'overview', 'home'] },
+      { path: '/project-manager/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
+      { path: '/project-manager/projects', keywords: ['project', 'projects', 'delivery', 'milestone'] },
+      { path: '/project-manager/tasks', keywords: ['task', 'tasks', 'assignment'] },
+      { path: '/project-manager/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/project-manager/leave-review', keywords: ['leave', 'vacation', 'absence'] },
+      { path: '/project-manager/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
+      { path: '/project-manager/assets', keywords: ['asset', 'assets', 'inventory'] },
+      { path: '/project-manager/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
+      { path: '/project-manager/support', keywords: ['support', 'ticket', 'help'] },
+      { path: '/project-manager/profile', keywords: ['profile', 'account', 'me'] },
+    ],
+    employee: [
+      { path: '/employee/dashboard', keywords: ['dashboard', 'overview', 'home'] },
+      { path: '/employee/leave-requests', keywords: ['leave', 'vacation', 'absence', 'request'] },
+      { path: '/employee/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/employee/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
+      { path: '/employee/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
+      { path: '/employee/support', keywords: ['support', 'ticket', 'help'] },
+      { path: '/employee/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
+      { path: '/employee/profile', keywords: ['profile', 'account', 'me'] },
+    ],
+  };
+
+  return baseRoutes[role] || baseRoutes.employee;
 }
 
 function normalizeNotifications(rows) {

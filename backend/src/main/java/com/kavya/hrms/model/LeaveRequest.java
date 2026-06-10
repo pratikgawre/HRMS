@@ -24,6 +24,7 @@ public class LeaveRequest {
   private String finalActionRole;
   private String finalActionNote;
   private String approvedBy;
+  private String ownerRole;
 
   public String getId() { return id; }
   public void setId(String id) { this.id = id; }
@@ -61,4 +62,6 @@ public class LeaveRequest {
   public void setFinalActionNote(String finalActionNote) { this.finalActionNote = finalActionNote; }
   public String getApprovedBy() { return approvedBy; }
   public void setApprovedBy(String approvedBy) { this.approvedBy = approvedBy; }
+  public String getOwnerRole() { return ownerRole; }
+  public void setOwnerRole(String ownerRole) { this.ownerRole = ownerRole; }
 }
