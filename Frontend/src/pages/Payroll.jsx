@@ -217,9 +217,13 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
         return current;
       }
 
+      if (record.status === 'Paid') {
+        return current;
+      }
+
       return {
         ...current,
-        [recordId]: record.status === 'Paid' ? 'Unpaid' : 'Paid',
+        [recordId]: 'Paid',
       };
     });
     setMessage('Payroll payment status updated successfully');
@@ -334,16 +338,19 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
                     <td data-label="Status"><span className={`status status-${record.status.toLowerCase()}`}>{record.status}</span></td>
                     <td data-label="Actions">
                       <div className="payroll-actions">
-                        <button type="button" onClick={() => toggleStatus(record.id)}><i className="ri-exchange-dollar-line" aria-hidden="true" />{record.status === 'Paid' ? 'Unpaid' : 'Paid'}</button>
-                        {isPayrollPeriodAvailable(record.month, record.year) ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleStatus(record.id)}
+                          disabled={record.status === 'Paid'}
+                          aria-disabled={record.status === 'Paid'}
+                        >
+                          <i className="ri-exchange-dollar-line" aria-hidden="true" />
+                          {record.status === 'Paid' ? 'Paid' : 'Mark Paid'}
+                        </button>
+                        {isPayrollPeriodAvailable(record.month, record.year) && (
                           <button type="button" onClick={() => setSelectedPayslip(record)}>
                             <i className="ri-file-download-line" aria-hidden="true" />
                             Payslip
-                          </button>
-                        ) : (
-                          <button type="button" disabled aria-disabled="true">
-                            <i className="ri-lock-line" aria-hidden="true" />
-                            Locked
                           </button>
                         )}
                       </div>
@@ -889,10 +896,16 @@ function getInitials(name) {
 }
 
 function getInitialPayrollStatuses(storedRecords = []) {
-  return {
-    ...Object.fromEntries(salaryRecords.map((record) => [record.id, record.status])),
-    ...Object.fromEntries(storedRecords.map((record) => [record.id, record.status || 'Unpaid'])),
-  };
+  const initialStatuses = Object.fromEntries(salaryRecords.map((record) => [record.id, record.status]));
+
+  storedRecords.forEach((record) => {
+    const storedStatus = record.status || 'Unpaid';
+    initialStatuses[record.id] = initialStatuses[record.id] === 'Paid' || storedStatus === 'Paid'
+      ? 'Paid'
+      : storedStatus;
+  });
+
+  return initialStatuses;
 }
 
 function getPayrollSummaryDetail(summaryId, records) {
@@ -1057,7 +1070,9 @@ function buildPayrollRecords(employees, attendance, leaveRequests, statusOverrid
       aadhaarNo: employee.aadhaarCardNo || '-',
       panNo: employee.panCardNo || '-',
       location: employee.workingLocation || employee.presentCityDistrict || employee.permanentCityDistrict || '-',
-      status: statusOverrides[id] || savedRecord?.status || (index % 2 === 0 ? 'Unpaid' : 'Paid'),
+      status: savedRecord?.status === 'Paid' || statusOverrides[id] === 'Paid'
+        ? 'Paid'
+        : statusOverrides[id] || savedRecord?.status || (index % 2 === 0 ? 'Unpaid' : 'Paid'),
       attendanceSummary: `${attendanceSummary.payableDays + approvedLeaveDays} paid days, ${approvedLeaveDays} approved leave, ${attendanceSummary.absentDays} absent, ${attendanceSummary.halfDays} half day`,
       deductionSummary: `PF ${formatCurrency(providentFund)}, Gratuity ${formatCurrency(gratuity)}, Prof Tax ${formatCurrency(professionalTax)}, LOP ${formatCurrency(absentDeduction + halfDayDeduction)}`,
     };
