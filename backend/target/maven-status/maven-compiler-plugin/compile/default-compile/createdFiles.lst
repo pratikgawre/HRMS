@@ -5,6 +5,7 @@ com\kavya\hrms\repository\AssetAssignmentRepository.class
 com\kavya\hrms\model\Designation.class
 com\kavya\hrms\controller\ProjectController.class
 com\kavya\hrms\controller\SupportController$StatusUpdateRequest.class
+com\kavya\hrms\repository\AuthSessionRepository.class
 com\kavya\hrms\controller\AssetAssignmentController$ReturnAssetRequest.class
 com\kavya\hrms\controller\PayrollController.class
 com\kavya\hrms\repository\SystemSettingsRepository.class
@@ -22,7 +23,9 @@ com\kavya\hrms\repository\PayrollRecordRepository.class
 com\kavya\hrms\model\Employee.class
 com\kavya\hrms\repository\AppUserRepository.class
 com\kavya\hrms\controller\AttendanceController.class
+com\kavya\hrms\model\ProjectMember.class
 com\kavya\hrms\model\TaskItem.class
+com\kavya\hrms\service\NotificationAudience.class
 com\kavya\hrms\model\AssetRequest.class
 com\kavya\hrms\repository\TaskRepository.class
 com\kavya\hrms\repository\LeaveRequestRepository.class
@@ -37,6 +40,8 @@ com\kavya\hrms\model\SystemSettings$LeaveTypeSetting.class
 com\kavya\hrms\model\Notification.class
 com\kavya\hrms\model\LeaveRequest.class
 com\kavya\hrms\repository\AnnouncementRepository.class
+com\kavya\hrms\repository\NotificationRepository.class
+com\kavya\hrms\service\NotificationService.class
 com\kavya\hrms\dto\AdminDashboardSummary.class
 com\kavya\hrms\model\Asset.class
 com\kavya\hrms\model\Project.class
@@ -51,10 +56,13 @@ com\kavya\hrms\repository\AssetRepository.class
 com\kavya\hrms\model\PayrollRecord.class
 com\kavya\hrms\dto\LoginRequest.class
 com\kavya\hrms\model\SupportTicket.class
+com\kavya\hrms\model\AuthSession.class
 com\kavya\hrms\config\WebSocketConfig.class
 com\kavya\hrms\repository\AssetRequestRepository.class
+com\kavya\hrms\controller\InterviewController.class
 com\kavya\hrms\model\Department.class
 com\kavya\hrms\controller\AssetAssignmentController.class
+com\kavya\hrms\controller\NotificationController.class
 com\kavya\hrms\controller\AssetRequestController$RequestStatusUpdate.class
 com\kavya\hrms\controller\EmployeeController.class
 com\kavya\hrms\config\DataSeeder.class

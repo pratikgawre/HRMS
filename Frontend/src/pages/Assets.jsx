@@ -16,6 +16,7 @@ function Assets() {
   const [assets, setAssets] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [searchText, setSearchText] = useState('');
+  const [assetStatusFilter, setAssetStatusFilter] = useState('All');
   const [assignedEmployeeQuery, setAssignedEmployeeQuery] = useState('');
   const [isEmployeePickerOpen, setIsEmployeePickerOpen] = useState(false);
   const [assetForm, setAssetForm] = useState({
@@ -104,6 +105,12 @@ function Assets() {
   }), [scopedAssets]);
 
   const activeSummary = isProjectManager ? scopedSummary : summary;
+  const assetFilterActions = {
+    'Total Assets': 'All',
+    Assigned: 'Assigned',
+    'Needs Attention': 'Needs Attention',
+    Available: 'Available',
+  };
 
   const stats = useMemo(() => ([
     {
@@ -112,6 +119,7 @@ function Assets() {
       delta: 'Tracked items',
       tone: 'blue',
       icon: 'ri-briefcase-4-line',
+      onClick: () => handleAssetSummaryClick('Total Assets'),
     },
     {
       label: 'Assigned',
@@ -119,6 +127,7 @@ function Assets() {
       delta: 'In use',
       tone: 'green',
       icon: 'ri-user-follow-line',
+      onClick: () => handleAssetSummaryClick('Assigned'),
     },
     {
       label: 'Needs Attention',
@@ -126,6 +135,7 @@ function Assets() {
       delta: 'Replacement or repair',
       tone: 'orange',
       icon: 'ri-alert-line',
+      onClick: () => handleAssetSummaryClick('Needs Attention'),
     },
     {
       label: 'Available',
@@ -133,6 +143,7 @@ function Assets() {
       delta: 'Ready to assign',
       tone: 'pink',
       icon: 'ri-checkbox-circle-line',
+      onClick: () => handleAssetSummaryClick('Available'),
     },
   ]), [activeSummary]);
 
@@ -237,6 +248,13 @@ function Assets() {
 
     element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     element.focus?.({ preventScroll: true });
+  };
+
+  const handleAssetSummaryClick = (label) => {
+    setAssetStatusFilter(assetFilterActions[label] || 'All');
+    requestAnimationFrame(() => {
+      scrollToSection('manage-assets');
+    });
   };
 
   const updateAssetForm = (field, value) => {
@@ -418,17 +436,29 @@ function Assets() {
 
   const filteredAssets = useMemo(() => {
     const query = searchText.trim().toLowerCase();
+    const byStatus = scopedAssets.filter((asset) => {
+      if (assetStatusFilter === 'All') {
+        return true;
+      }
+
+      if (assetStatusFilter === 'Needs Attention') {
+        return ['Replacement Requested', 'Repair Needed', 'Pending Return'].includes(asset.status);
+      }
+
+      return asset.status === assetStatusFilter;
+    });
+
     if (!query) {
-      return scopedAssets;
+      return byStatus;
     }
 
-    return scopedAssets.filter((asset) => {
+    return byStatus.filter((asset) => {
       const employeeId = String(asset.assignedToEmployeeId || '').toLowerCase();
       const assignedTo = String(asset.assignedTo || '').toLowerCase();
       const assetName = String(asset.assetName || '').toLowerCase();
       return assetName.includes(query) || assignedTo.includes(query) || employeeId.includes(query);
     });
-  }, [scopedAssets, searchText]);
+  }, [assetStatusFilter, scopedAssets, searchText]);
 
   const assignedAssets = filteredAssets.filter((asset) => asset.status === 'Assigned');
   const replacementRequests = filteredAssets.filter((asset) => asset.status === 'Replacement Requested');
@@ -578,6 +608,18 @@ function Assets() {
               placeholder="Search by asset name or employee ID..."
             />
           </label>
+          {assetStatusFilter !== 'All' && (
+            <button
+              type="button"
+              className="asset-filter-clear"
+              onClick={() => {
+                setAssetStatusFilter('All');
+                requestAnimationFrame(() => scrollToSection('manage-assets'));
+              }}
+            >
+              Clear status filter
+            </button>
+          )}
         </div>
         <DataTable columns={assetColumns} rows={displayedAssets} emptyMessage="No assets found." />
       </Section>
