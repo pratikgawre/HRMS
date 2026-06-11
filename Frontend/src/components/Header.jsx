@@ -1,17 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { announcements } from '../data/dummyData.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { clearSession } from '../utils/auth.js';
+import { apiRequest } from '../utils/api.js';
+import { getSessionValue } from '../utils/appSession.js';
 
 function Header({ role, onMenuClick }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [notificationItems, setNotificationItems] = useState(() =>
-    announcements.map((item) => ({ ...item, read: false })),
-  );
+  const [notificationItems, setNotificationItems] = useState([]);
   const today = new Intl.DateTimeFormat('en-IN', {
     weekday: 'short',
     day: '2-digit',
@@ -28,7 +27,8 @@ function Header({ role, onMenuClick }) {
   const employeeIdentity = getCurrentEmployeeIdentity();
   const userInitials = employeeIdentity?.avatar || displayRole.slice(0, 2);
   const displayName = role === 'admin' ? 'Admin' : employeeIdentity?.employee || displayRole;
-  const unreadCount = useMemo(() => notificationItems.filter((item) => !item.read).length, [notificationItems]);
+  const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId');
+  const unreadCount = useMemo(() => notificationItems.filter((item) => !item.readStatus).length, [notificationItems]);
 
   const roleBasePath = {
     admin: '/admin',
@@ -38,51 +38,85 @@ function Header({ role, onMenuClick }) {
     employee: '/employee',
   }[role] || '/employee';
 
-  const searchRoutes = [
-    { segment: '/employees', keywords: ['employee', 'staff', 'member', 'people', 'team'] },
-    { segment: '/users', keywords: ['user', 'access', 'role', 'account'] },
-    { segment: '/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'late', 'present'] },
-    { segment: '/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
-    { segment: '/announcements', keywords: ['announcement', 'notice', 'policy', 'update'] },
-    { segment: '/leave-management', keywords: ['leave', 'vacation', 'absence'] },
-    { segment: '/leave-approval', keywords: ['leave', 'vacation', 'absence'] },
-    { segment: '/leave-review', keywords: ['leave', 'vacation', 'absence'] },
-    { segment: '/leave-requests', keywords: ['leave', 'vacation', 'absence'] },
-    { segment: '/support', keywords: ['support', 'ticket', 'help'] },
-    { segment: '/dashboard', keywords: ['dashboard', 'overview', 'home'] },
-  ];
+  const searchRoutes = getSearchRoutes(role);
+
+  useEffect(() => {
+    let active = true;
+
+    const refreshNotifications = async () => {
+      try {
+        const rows = await apiRequest(`/notifications?role=${encodeURIComponent(role)}&userId=${encodeURIComponent(userId || '')}`);
+        if (!active) {
+          return;
+        }
+        setNotificationItems(normalizeNotifications(rows));
+      } catch {
+        if (active) {
+          setNotificationItems([]);
+        }
+      }
+    };
+
+    refreshNotifications();
+    window.addEventListener('storage', refreshNotifications);
+    window.addEventListener('kavyaNotificationsChanged', refreshNotifications);
+
+    return () => {
+      active = false;
+      window.removeEventListener('storage', refreshNotifications);
+      window.removeEventListener('kavyaNotificationsChanged', refreshNotifications);
+    };
+  }, [role, userId]);
 
   const runSearch = () => {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;
 
-    const activeSegment = location.pathname.slice(roleBasePath.length);
-    const currentSearchPages = ['/employees', '/users', '/attendance', '/announcements', '/payroll'];
-    if (currentSearchPages.includes(activeSegment)) {
-      navigate(`${location.pathname}?search=${encodeURIComponent(searchQuery.trim())}`);
+    const directMatch = searchRoutes.find((entry) => {
+      return entry.keywords.some((keyword) => normalized.includes(keyword));
+    });
+    const targetPath = directMatch?.path || `${roleBasePath}/dashboard`;
+    navigate(`${targetPath}?search=${encodeURIComponent(searchQuery.trim())}`);
+  };
+
+  const handleNotificationClick = async (id) => {
+    setNotificationItems((current) =>
+      current.map((item) => (item.id === id ? { ...item, readStatus: true } : item)),
+    );
+
+    try {
+      await apiRequest(`/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT' });
+      window.dispatchEvent(new Event('kavyaNotificationsChanged'));
+    } catch {
+      setNotificationItems((current) =>
+        current.map((item) => (item.id === id ? { ...item, readStatus: false } : item)),
+      );
+    }
+  };
+
+  const markAllAsRead = async () => {
+    const unreadItems = notificationItems.filter((item) => !item.readStatus);
+    if (!unreadItems.length) {
       return;
     }
 
-    const directMatch = searchRoutes.find((entry) => {
-      const routeMatchesRole = entry.segment === '/dashboard' || location.pathname.startsWith(roleBasePath);
-      return routeMatchesRole && entry.keywords.some((keyword) => normalized.includes(keyword));
-    });
-    const targetSegment = directMatch?.segment || '/employees';
-    navigate(`${roleBasePath}${targetSegment}?search=${encodeURIComponent(searchQuery.trim())}`);
+    try {
+      await Promise.all(unreadItems.map((item) => apiRequest(`/notifications/${encodeURIComponent(item.id)}/read`, { method: 'PUT' })));
+      setNotificationItems((current) => current.map((item) => ({ ...item, readStatus: true })));
+      window.dispatchEvent(new Event('kavyaNotificationsChanged'));
+    } catch {
+      // Keep the current UI state if the batch update fails.
+    }
   };
 
-  const handleNotificationClick = (id) => {
-    setNotificationItems((current) =>
-      current.map((item) => (item.id === id ? { ...item, read: true } : item)),
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotificationItems((current) => current.map((item) => ({ ...item, read: true })));
-  };
-
-  const clearAll = () => {
-    setNotificationItems([]);
+  const clearAll = async () => {
+    try {
+      await apiRequest(`/notifications?userId=${encodeURIComponent(userId || '')}`, { method: 'DELETE' });
+      setNotificationItems([]);
+      window.dispatchEvent(new Event('kavyaNotificationsChanged'));
+    } catch {
+      // Leave the current notifications visible if the delete fails.
+    }
   };
 
   const logout = () => {
@@ -146,12 +180,12 @@ function Header({ role, onMenuClick }) {
                   <button
                     key={item.id}
                     type="button"
-                    className={`notification-item ${item.read ? 'is-read' : 'is-unread'}`}
+                    className={`notification-item ${item.readStatus ? 'is-read' : 'is-unread'}`}
                     onClick={() => handleNotificationClick(item.id)}
                   >
                     <strong>{item.title}</strong>
-                    <p>{item.body}</p>
-                    <small>{item.date} - Posted by {item.postedBy}</small>
+                    <p>{item.message}</p>
+                    <small>{formatNotificationMeta(item)}</small>
                   </button>
                 ))}
                 {!notificationItems.length && <p className="notification-empty">No notifications available.</p>}
@@ -181,6 +215,111 @@ function Header({ role, onMenuClick }) {
       </div>
     </header>
   );
+}
+
+function getSearchRoutes(role) {
+  const baseRoutes = {
+    admin: [
+      { path: '/admin/dashboard', keywords: ['dashboard', 'overview', 'home'] },
+      { path: '/admin/employees', keywords: ['employee', 'employees', 'staff', 'member', 'people', 'team'] },
+      { path: '/admin/users', keywords: ['user', 'users', 'access', 'role', 'account'] },
+      { path: '/admin/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/admin/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
+      { path: '/admin/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
+      { path: '/admin/leave-management', keywords: ['leave', 'vacation', 'absence'] },
+      { path: '/admin/support', keywords: ['support', 'ticket', 'help'] },
+      { path: '/admin/assets', keywords: ['asset', 'assets', 'inventory'] },
+      { path: '/admin/projects', keywords: ['project', 'projects', 'delivery'] },
+      { path: '/admin/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
+      { path: '/admin/profile', keywords: ['profile', 'account', 'me'] },
+    ],
+    hr: [
+      { path: '/hr/dashboard', keywords: ['dashboard', 'overview', 'home'] },
+      { path: '/hr/employees', keywords: ['employee', 'employees', 'staff', 'member', 'people', 'team'] },
+      { path: '/hr/users', keywords: ['user', 'users', 'access', 'role', 'account'] },
+      { path: '/hr/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/hr/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
+      { path: '/hr/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
+      { path: '/hr/leave-approval', keywords: ['leave', 'vacation', 'absence'] },
+      { path: '/hr/tasks', keywords: ['task', 'tasks', 'assignment'] },
+      { path: '/hr/projects', keywords: ['project', 'projects', 'delivery'] },
+      { path: '/hr/assets', keywords: ['asset', 'assets', 'inventory'] },
+      { path: '/hr/support', keywords: ['support', 'ticket', 'help'] },
+      { path: '/hr/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
+      { path: '/hr/profile', keywords: ['profile', 'account', 'me'] },
+    ],
+    teamLead: [
+      { path: '/team-lead/dashboard', keywords: ['dashboard', 'overview', 'home'] },
+      { path: '/team-lead/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
+      { path: '/team-lead/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/team-lead/leave-review', keywords: ['leave', 'vacation', 'absence'] },
+      { path: '/team-lead/tasks', keywords: ['task', 'tasks', 'assignment'] },
+      { path: '/team-lead/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
+      { path: '/team-lead/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
+      { path: '/team-lead/support', keywords: ['support', 'ticket', 'help'] },
+      { path: '/team-lead/profile', keywords: ['profile', 'account', 'me'] },
+    ],
+    projectManager: [
+      { path: '/project-manager/dashboard', keywords: ['dashboard', 'overview', 'home'] },
+      { path: '/project-manager/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
+      { path: '/project-manager/projects', keywords: ['project', 'projects', 'delivery', 'milestone'] },
+      { path: '/project-manager/tasks', keywords: ['task', 'tasks', 'assignment'] },
+      { path: '/project-manager/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/project-manager/leave-review', keywords: ['leave', 'vacation', 'absence'] },
+      { path: '/project-manager/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
+      { path: '/project-manager/assets', keywords: ['asset', 'assets', 'inventory'] },
+      { path: '/project-manager/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
+      { path: '/project-manager/support', keywords: ['support', 'ticket', 'help'] },
+      { path: '/project-manager/profile', keywords: ['profile', 'account', 'me'] },
+    ],
+    employee: [
+      { path: '/employee/dashboard', keywords: ['dashboard', 'overview', 'home'] },
+      { path: '/employee/leave-requests', keywords: ['leave', 'vacation', 'absence', 'request'] },
+      { path: '/employee/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/employee/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
+      { path: '/employee/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
+      { path: '/employee/support', keywords: ['support', 'ticket', 'help'] },
+      { path: '/employee/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
+      { path: '/employee/profile', keywords: ['profile', 'account', 'me'] },
+    ],
+  };
+
+  return baseRoutes[role] || baseRoutes.employee;
+}
+
+function normalizeNotifications(rows) {
+  return (Array.isArray(rows) ? rows : []).map((item) => ({
+    id: item.id,
+    title: item.title || 'Notification',
+    message: item.message || item.body || '',
+    readStatus: Boolean(item.readStatus),
+    createdAt: item.createdAt || '',
+    createdByRole: item.createdByRole || '',
+    createdByName: item.createdByName || '',
+  }));
+}
+
+function formatNotificationMeta(item) {
+  const createdAtLabel = formatNotificationDate(item.createdAt);
+  const createdBy = item.createdByName || item.createdByRole || 'System';
+  return createdAtLabel ? `${createdAtLabel} - Posted by ${createdBy}` : `Posted by ${createdBy}`;
+}
+
+function formatNotificationDate(value) {
+  if (!value) {
+    return '';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(parsed);
 }
 
 export default Header;

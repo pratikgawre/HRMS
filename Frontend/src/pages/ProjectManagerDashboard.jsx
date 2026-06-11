@@ -15,9 +15,9 @@ const dashboardProjectColumns = [
     key: 'name',
     label: 'Project',
     render: (row) => (
-      <div className="project-cell project-cell--compact">
-        <span className="project-badge">{getProjectInitials(row.name)}</span>
-        <div className="project-cell-copy project-cell-copy--inline">
+      <div className="employee-cell">
+        <span>{getProjectInitials(row.name)}</span>
+        <div>
           <strong title={row.name}>{row.name}</strong>
         </div>
       </div>
@@ -160,7 +160,7 @@ function ProjectManagerDashboard() {
       <QuickActions detailOverrides={quickActionDetails} labelOverrides={quickActionLabels} />
       <CardGrid stats={dashboardStats} />
       <div className="project-manager-stack">
-        <Section title="Active Projects" action="Manage Projects" actionOnClick={() => navigate('/project-manager/projects')}>
+        <Section className="active-projects-table-section" title="Active Projects" action="Manage Projects" actionOnClick={() => navigate('/project-manager/projects')}>
           <DataTable columns={dashboardProjectColumns} rows={liveProjects} emptyMessage="No projects available." />
         </Section>
         <Section className="compact-table-section" title="Delivery Tasks" action="Assign" actionOnClick={() => navigate('/project-manager/tasks')}>

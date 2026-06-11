@@ -586,8 +586,8 @@ export function Hero({ title, copy }) {
   );
 }
 
-export function CardGrid({ stats }) {
-  return <div className="card-grid">{stats.map((stat) => <DashboardCard key={stat.label} {...stat} />)}</div>;
+export function CardGrid({ stats, className = '' }) {
+  return <div className={`card-grid ${className}`.trim()}>{stats.map((stat) => <DashboardCard key={stat.label} {...stat} />)}</div>;
 }
 
 export function Section({
@@ -612,22 +612,30 @@ export function Section({
   );
 }
 
-export function QuickActions({ detailOverrides = {}, labelOverrides = {} }) {
+export function QuickActions({ detailOverrides = {}, labelOverrides = {}, pathOverrides = {} }) {
   const navigate = useNavigate();
   const role = getSessionValue('kavyaRole') || 'employee';
 
   return (
     <section className="quick-actions" aria-label="Quick actions">
-      {quickActions.map((item) => (
-        <button key={item.label} type="button" onClick={() => navigate(item[`${role}Path`] || item.employeePath || item.adminPath)} aria-label={labelOverrides[item.label] || item.label}>
-          <i className={item.icon} aria-hidden="true" />
-          <span>{labelOverrides[item.label] || item.label}</span>
-          {(detailOverrides[item.label] || item.detail) ? <small>{detailOverrides[item.label] || item.detail}</small> : null}
-          <i className="ri-arrow-right-line quick-action-arrow" aria-hidden="true" />
-        </button>
+      {quickActions.map((item) => {
+        const hasCustomDetail = Object.prototype.hasOwnProperty.call(detailOverrides, item.label);
+        const detail = hasCustomDetail ? detailOverrides[item.label] : item.detail;
 
-        
-      ))}
+        return (
+          <button
+            key={item.label}
+            type="button"
+            onClick={() => navigate(pathOverrides[item.label] || item[`${role}Path`] || item.employeePath || item.adminPath)}
+            aria-label={labelOverrides[item.label] || item.label}
+          >
+            <i className={item.icon} aria-hidden="true" />
+            <span>{labelOverrides[item.label] || item.label}</span>
+            {detail != null && String(detail).trim() !== '' ? <small>{detail}</small> : null}
+            <i className="ri-arrow-right-line quick-action-arrow" aria-hidden="true" />
+          </button>
+        );
+      })}
     </section>
   );
 }

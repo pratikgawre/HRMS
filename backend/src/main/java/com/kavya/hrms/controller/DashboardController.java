@@ -1,13 +1,26 @@
 package com.kavya.hrms.controller;
 
 import com.kavya.hrms.dto.AdminDashboardSummary;
+import com.kavya.hrms.dto.EmployeeDashboardSummary;
+import com.kavya.hrms.model.AttendanceRecord;
+import com.kavya.hrms.model.LeaveRequest;
+import com.kavya.hrms.model.SystemSettings;
 import com.kavya.hrms.repository.AnnouncementRepository;
 import com.kavya.hrms.repository.AttendanceRecordRepository;
+import com.kavya.hrms.repository.AssetAssignmentRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.repository.LeaveRequestRepository;
+import com.kavya.hrms.repository.SystemSettingsRepository;
+import com.kavya.hrms.repository.TaskRepository;
 import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -18,16 +31,25 @@ public class DashboardController {
   private final LeaveRequestRepository leaveRequestRepository;
   private final AnnouncementRepository announcementRepository;
   private final AttendanceRecordRepository attendanceRecordRepository;
+  private final AssetAssignmentRepository assetAssignmentRepository;
+  private final TaskRepository taskRepository;
+  private final SystemSettingsRepository systemSettingsRepository;
 
   public DashboardController(
       EmployeeRepository employeeRepository,
       LeaveRequestRepository leaveRequestRepository,
       AnnouncementRepository announcementRepository,
-      AttendanceRecordRepository attendanceRecordRepository) {
+      AttendanceRecordRepository attendanceRecordRepository,
+      AssetAssignmentRepository assetAssignmentRepository,
+      TaskRepository taskRepository,
+      SystemSettingsRepository systemSettingsRepository) {
     this.employeeRepository = employeeRepository;
     this.leaveRequestRepository = leaveRequestRepository;
     this.announcementRepository = announcementRepository;
     this.attendanceRecordRepository = attendanceRecordRepository;
+    this.assetAssignmentRepository = assetAssignmentRepository;
+    this.taskRepository = taskRepository;
+    this.systemSettingsRepository = systemSettingsRepository;
   }
 
   @GetMapping("/admin/summary")
@@ -49,6 +71,126 @@ public class DashboardController {
     response.setPresentToday(presentToday);
     return response;
   }
+
+  @GetMapping("/employee/summary/{employeeId}")
+  public EmployeeDashboardSummary employeeSummary(@PathVariable String employeeId) {
+    EmployeeDashboardSummary response = new EmployeeDashboardSummary();
+    response.setEmployeeId(employeeId);
+    response.setEmployeeName(resolveEmployeeName(employeeId));
+
+    List<AttendanceRecord> attendanceRecords = attendanceRecordRepository.findByEmployeeId(employeeId);
+    long presentDays = attendanceRecords.stream().filter(r -> "Present".equalsIgnoreCase(r.getStatus())).count();
+    long halfDays = attendanceRecords.stream().filter(r -> "Half Day".equalsIgnoreCase(r.getStatus())).count();
+    long consideredDays = attendanceRecords.stream()
+        .filter(r -> Set.of("present", "half day", "absent", "late").contains(normalize(r.getStatus())))
+        .count();
+    double weightedPresence = presentDays + (halfDays * 0.5);
+    int attendanceRate = consideredDays > 0 ? (int) Math.round((weightedPresence * 100.0) / consideredDays) : 0;
+
+    EmployeeDashboardSummary.CardMetric attendance = new EmployeeDashboardSummary.CardMetric();
+    attendance.setLabel("Attendance");
+    attendance.setValue(attendanceRate + "%");
+    attendance.setDelta(presentDays + " present days");
+    attendance.setTone("blue");
+    attendance.setIcon("ri-time-line");
+    attendance.setNavigateTo(List.of("/employee/attendance"));
+    response.setAttendance(attendance);
+
+    LeaveTotals leaveTotals = resolveLeaveTotals(employeeId);
+    EmployeeDashboardSummary.CardMetric leaveBalance = new EmployeeDashboardSummary.CardMetric();
+    leaveBalance.setLabel("Leave Balance");
+    leaveBalance.setValue(String.valueOf(leaveTotals.remaining()));
+    leaveBalance.setDelta(leaveTotals.used() + " used");
+    leaveBalance.setTone("green");
+    leaveBalance.setIcon("ri-suitcase-line");
+    leaveBalance.setNavigateTo(List.of("/employee/leave-requests"));
+    response.setLeaveBalance(leaveBalance);
+
+    List<String> assignedTasks = taskRepository.findAll().stream()
+        .filter(task -> employeeId.equals(task.getAssignedToId()) || employeeId.equalsIgnoreCase(Optional.ofNullable(task.getAssignedTo()).orElse("")))
+        .map(task -> task.getId())
+        .collect(Collectors.toList());
+    long taskCount = assignedTasks.size();
+    long dueToday = taskRepository.findAll().stream()
+        .filter(task -> employeeId.equals(task.getAssignedToId()) || employeeId.equalsIgnoreCase(Optional.ofNullable(task.getAssignedTo()).orElse("")))
+        .filter(task -> isDueToday(task.getDueDate()))
+        .count();
+    EmployeeDashboardSummary.CardMetric tasks = new EmployeeDashboardSummary.CardMetric();
+    tasks.setLabel("Tasks");
+    tasks.setValue(String.format("%02d", taskCount));
+    tasks.setDelta(dueToday + " due today");
+    tasks.setTone("orange");
+    tasks.setIcon("ri-task-line");
+    tasks.setNavigateTo(List.of("/employee/tasks"));
+    response.setTasks(tasks);
+
+    long assetCount = assetAssignmentRepository.findByEmployeeIdOrderByAssignedDateDesc(employeeId).stream()
+        .filter(asset -> asset.getStatus() == null || !"Returned".equalsIgnoreCase(asset.getStatus()))
+        .count();
+    EmployeeDashboardSummary.CardMetric assets = new EmployeeDashboardSummary.CardMetric();
+    assets.setLabel("My Assets");
+    assets.setValue(String.format("%02d", assetCount));
+    assets.setDelta("Assigned to you");
+    assets.setTone("green");
+    assets.setIcon("ri-briefcase-4-line");
+    assets.setNavigateTo(List.of("/employee/assets"));
+    response.setAssets(assets);
+
+    long announcementCount = announcementRepository.findAll().size();
+    EmployeeDashboardSummary.CardMetric announcements = new EmployeeDashboardSummary.CardMetric();
+    announcements.setLabel("Announcements");
+    announcements.setValue(String.format("%02d", announcementCount));
+    announcements.setDelta("Latest updates");
+    announcements.setTone("pink");
+    announcements.setIcon("ri-megaphone-line");
+    announcements.setNavigateTo(List.of("/employee/announcements"));
+    response.setAnnouncements(announcements);
+
+    return response;
+  }
+
+  private String resolveEmployeeName(String employeeId) {
+    return employeeRepository.findAll().stream()
+        .filter(employee -> employeeId.equals(employee.getEmployeeCode()) || employeeId.equals(employee.getEmployeeId()) || employeeId.equals(employee.getId()))
+        .map(employee -> Optional.ofNullable(employee.getDisplayName()).orElse(employee.getName()))
+        .findFirst()
+        .orElse(employeeId);
+  }
+
+  private LeaveTotals resolveLeaveTotals(String employeeId) {
+    List<LeaveRequest> requests = leaveRequestRepository.findAll().stream()
+        .filter(request -> employeeId.equals(request.getEmployeeId()))
+        .collect(Collectors.toList());
+
+    int used = requests.stream()
+        .filter(request -> "Approved".equalsIgnoreCase(request.getStatus()))
+        .mapToInt(request -> request.getDays() != null ? request.getDays() : 0)
+        .sum();
+
+    int allocated = systemSettingsRepository.findAll().stream()
+        .findFirst()
+        .map(SystemSettings::getLeaveTypes)
+        .map(types -> types == null ? 0 : types.stream().mapToInt(type -> type.getDays() != null ? type.getDays() : 0).sum())
+        .orElse(0);
+
+    int remaining = Math.max(allocated - used, 0);
+    return new LeaveTotals(remaining, used);
+  }
+
+  private String normalize(String value) {
+    return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+  }
+
+  private boolean isDueToday(String dueDate) {
+    if (dueDate == null || dueDate.isBlank()) {
+      return false;
+    }
+
+    String normalized = dueDate.trim().toLowerCase(Locale.ROOT);
+    return normalized.contains("today");
+  }
+
+  private record LeaveTotals(int remaining, int used) {}
 
   @GetMapping("/interviews/today")
   public Map<String, Long> interviewsToday() {

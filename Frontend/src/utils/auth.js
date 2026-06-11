@@ -3,7 +3,7 @@ import { getUsers, saveUsers } from './user-management.js';
 import { getStoredEmployees } from './employeeStorage.js';
 import { clearSessionValues, getSessionValue, setSessionValue } from './appSession.js';
 
-const API_BASE = 'http://localhost:8080/api';
+const API_BASE = '/api';
 
 const legacyUsers = {
   'admin@gmail.com': { password: 'admin123', role: 'Super Admin', employeeId: 'ADMIN-001', employeeName: 'Admin Kavya', avatar: 'AK', department: 'Platform', designation: 'System Admin' },
@@ -68,6 +68,7 @@ export async function authenticateUser(email, password, twoFactorCode = '') {
   }).catch(() => null);
 
   if (response) {
+    const isServerError = response.status >= 500;
     const text = await response.text();
     let result = null;
     try {
@@ -100,14 +101,25 @@ export async function authenticateUser(email, password, twoFactorCode = '') {
       return { ok: false, twoFactorRequired: true, message: result.message || 'Two-factor verification code required.' };
     }
 
+    if (isServerError) {
+      const localUser = findLocalUser(normalizedEmail, password);
+      if (localUser) {
+        return { ok: true, user: localUser };
+      }
+
+      return { ok: false, message: result?.message || 'Login service is temporarily unavailable. Please try again.' };
+    }
+
     if (result?.message) {
       return { ok: false, message: result.message };
     }
   }
 
-  const fallbackUser = findLocalUser(normalizedEmail, password);
-  if (fallbackUser) {
-    return { ok: true, user: fallbackUser };
+  if (!response) {
+    const localUser = findLocalUser(normalizedEmail, password);
+    if (localUser) {
+      return { ok: true, user: localUser };
+    }
   }
 
   return { ok: false, message: 'Please enter a valid email and password.' };
@@ -150,20 +162,16 @@ function findLocalUser(email, password) {
 
 export function startSession(user) {
   const appRole = getAppRole(user.role);
-  const now = new Date().toISOString();
-  const users = getUsers().map((item) => (
-    item.userId === user.userId ? { ...item, lastLogin: now } : item
-  ));
-  saveUsers(users);
-
   setSessionValue('kavyaRole', appRole);
   setSessionValue('kavyaAccessRole', user.role);
   setSessionValue('kavyaUserEmail', user.email);
-  setSessionValue('kavyaUserStatus', user.status);
+  setSessionValue('kavyaUserStatus', user.status || 'Active');
   setSessionValue('kavyaEmployeeId', user.employeeId || '');
   setSessionValue('kavyaEmployeeName', user.employeeName || '');
   setSessionValue('kavyaEmployeeAvatar', user.avatar || '');
   setSessionValue('kavyaEmployeePhoto', user.profilePicture || '');
+  setSessionValue('kavyaUserId', user.userId || '');
+  setSessionValue('kavyaLastLogin', user.lastLogin || '');
   setSessionValue('kavyaAuthToken', user.token || '');
   setSessionValue('kavyaLoginSuccess', 'true');
 
@@ -171,57 +179,36 @@ export function startSession(user) {
 }
 
 export function clearSession() {
-  clearSessionValues(['kavyaRole', 'kavyaAccessRole', 'kavyaUserEmail', 'kavyaUserStatus', 'kavyaEmployeeId', 'kavyaEmployeeName', 'kavyaEmployeeAvatar', 'kavyaEmployeePhoto', 'kavyaAuthToken', 'kavyaLoginSuccess']);
+  const token = String(getSessionValue('kavyaAuthToken') || '').trim();
+  if (token) {
+    fetch(`${API_BASE}/auth/session`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+  }
+
+  clearSessionValues(['kavyaRole', 'kavyaAccessRole', 'kavyaUserEmail', 'kavyaUserStatus', 'kavyaEmployeeId', 'kavyaEmployeeName', 'kavyaEmployeeAvatar', 'kavyaEmployeePhoto', 'kavyaUserId', 'kavyaLastLogin', 'kavyaAuthToken', 'kavyaLoginSuccess']);
 }
 
 export function syncSessionFromAccessUser() {
-  const email = String(getSessionValue('kavyaUserEmail') || '').trim().toLowerCase();
-  if (!email) {
-    return { ok: true, role: getSessionValue('kavyaRole') };
+  const token = String(getSessionValue('kavyaAuthToken') || '').trim();
+  const role = String(getSessionValue('kavyaRole') || '').trim();
+  if (!token || !role) {
+    return { ok: false, role: '' };
   }
-
-  const accessUser = getUsers().find((user) => user.email === email);
-  if (!accessUser) {
-    return { ok: true, role: getSessionValue('kavyaRole') };
-  }
-
-  if (accessUser.status !== 'Active') {
-    clearSession();
-    return { ok: false, reason: accessUser.status };
-  }
-
-  const employeeId = accessUser.employeeId || getSessionValue('kavyaEmployeeId') || '';
-  const employeeProfile = getStoredEmployees([]).find((employee) => {
-    const profileEmployeeId = employee.employeeCode || employee.employeeId || employee.id;
-    const profileEmail = String(employee.email || '').trim().toLowerCase();
-
-    return (employeeId && profileEmployeeId === employeeId) || profileEmail === email;
-  });
-  const accessRole = normalizeAccessRole(employeeProfile?.accessRole || accessUser.role);
-  const appRole = getAppRole(accessRole);
-
-  if (normalizeAccessRole(accessUser.role) !== accessRole) {
-    const nextUsers = getUsers().map((user) => (
-      user.userId === accessUser.userId || user.employeeId === accessUser.employeeId || user.email === accessUser.email
-        ? { ...user, role: accessRole, permissions: getPermissions(accessRole) }
-        : user
-    ));
-    saveUsers(nextUsers);
-  }
-
-  setSessionValue('kavyaRole', appRole);
-  setSessionValue('kavyaAccessRole', accessRole);
-  setSessionValue('kavyaUserStatus', accessUser.status);
-  setSessionValue('kavyaEmployeeId', employeeId);
-  setSessionValue('kavyaEmployeeName', accessUser.employeeName || '');
-  setSessionValue('kavyaEmployeeAvatar', accessUser.avatar || '');
-  setSessionValue('kavyaEmployeePhoto', accessUser.profilePicture || '');
-  setSessionValue('kavyaAuthToken', accessUser.token || '');
 
   return {
     ok: true,
-    role: appRole,
-    dashboardPath: getDashboardPath(accessRole),
-    user: { ...accessUser, role: accessRole },
+    role,
+    dashboardPath: getDashboardPath(getSessionValue('kavyaAccessRole') || role),
+    user: {
+      userId: getSessionValue('kavyaUserId') || '',
+      email: getSessionValue('kavyaUserEmail') || '',
+      employeeId: getSessionValue('kavyaEmployeeId') || '',
+      employeeName: getSessionValue('kavyaEmployeeName') || '',
+      role: getSessionValue('kavyaAccessRole') || 'Employee',
+      status: getSessionValue('kavyaUserStatus') || 'Active',
+      token,
+    },
   };
 }

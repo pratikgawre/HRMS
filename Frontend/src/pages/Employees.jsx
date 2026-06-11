@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { getAllStatesWithDistricts } from 'india-state-district';
+import * as indiaStateDistrict from 'india-state-district';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
 import { getStoredEmployees, saveStoredEmployees, upsertEmployeeLogin } from '../utils/employeeStorage.js';
+import { deleteEmployee, deleteUser, safeApiRequest } from '../utils/api.js';
+import { getUsers } from '../utils/user-management.js';
 import { ACCESS_ROLE_OPTIONS, normalizeAccessRole } from '../utils/role-access.js';
 import { getSessionValue } from '../utils/appSession.js';
 
@@ -64,7 +66,9 @@ const bankNameGroups = [
   },
 ];
 const bankNameOptionSet = new Set(bankNameGroups.flatMap((group) => group.options));
-const indiaStateDistrictData = getAllStatesWithDistricts();
+const indiaStateDistrictData = indiaStateDistrict.getAllStatesWithDistricts?.()
+  || indiaStateDistrict.default?.getAllStatesWithDistricts?.()
+  || [];
 const indianStates = indiaStateDistrictData.map((item) => item.name);
 const indianDistrictsByState = Object.fromEntries(
   indiaStateDistrictData.map((item) => [item.name, item.districts])
@@ -241,6 +245,7 @@ function Employees() {
   const [status, setStatus] = useState('All');
   const [department, setDepartment] = useState('All Departments');
   const [employmentType, setEmploymentType] = useState('All Types');
+  const [summaryFilter, setSummaryFilter] = useState('All');
   const [message, setMessage] = useState('');
   const [credentialNotice, setCredentialNotice] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -259,6 +264,7 @@ function Employees() {
     setDepartment(nextDepartment || 'All Departments');
     setStatus(nextStatus || 'All');
     setEmploymentType(nextEmploymentType || 'All Types');
+    setSummaryFilter('All');
 
     if (location.hash === '#employee-directory') {
       requestAnimationFrame(() => {
@@ -267,14 +273,34 @@ function Employees() {
     }
   }, [location.hash, location.search]);
 
-  const rows = useMemo(() => employees.filter((person) => {
+  const summaryFilterRows = useMemo(() => employees.filter((person) => {
+    if (summaryFilter === 'All') {
+      return true;
+    }
+
+    if (summaryFilter === 'Active') {
+      return person.status === 'Active';
+    }
+
+    if (summaryFilter === 'On Leave') {
+      return person.status === 'On Leave';
+    }
+
+    if (summaryFilter === 'Full Time') {
+      return person.employmentType === 'Full Time';
+    }
+
+    return true;
+  }), [employees, summaryFilter]);
+
+  const rows = useMemo(() => summaryFilterRows.filter((person) => {
     const matchesSearch = `${person.displayName} ${person.email} ${person.jobTitle} ${person.department}`.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = status === 'All' || person.status === status;
     const matchesDepartment = department === 'All Departments' || person.department === department;
     const matchesType = employmentType === 'All Types' || person.employmentType === employmentType;
 
     return matchesSearch && matchesStatus && matchesDepartment && matchesType;
-  }), [employees, search, status, department, employmentType]);
+  }), [summaryFilterRows, search, status, department, employmentType]);
 
   const summary = useMemo(() => {
     const active = employees.filter((person) => person.status === 'Active').length;
@@ -282,10 +308,10 @@ function Employees() {
     const fullTime = employees.filter((person) => person.employmentType === 'Full Time').length;
 
     return [
-      { label: 'Employees', value: String(employees.length).padStart(2, '0'), delta: 'People records', tone: 'blue', icon: 'ri-team-line' },
-      { label: 'Active', value: String(active).padStart(2, '0'), delta: 'Available today', tone: 'green', icon: 'ri-user-follow-line' },
-      { label: 'On Leave', value: String(onLeave).padStart(2, '0'), delta: 'Marked away', tone: 'orange', icon: 'ri-suitcase-line' },
-      { label: 'Full Time', value: String(fullTime).padStart(2, '0'), delta: 'Core team', tone: 'pink', icon: 'ri-briefcase-4-line' },
+      { label: 'Employees', value: String(employees.length).padStart(2, '0'), delta: 'People records', tone: 'blue', icon: 'ri-team-line', onClick: () => handleSummaryCardClick('All') },
+      { label: 'Active', value: String(active).padStart(2, '0'), delta: 'Available today', tone: 'green', icon: 'ri-user-follow-line', onClick: () => handleSummaryCardClick('Active') },
+      { label: 'On Leave', value: String(onLeave).padStart(2, '0'), delta: 'Marked away', tone: 'orange', icon: 'ri-suitcase-line', onClick: () => handleSummaryCardClick('On Leave') },
+      { label: 'Full Time', value: String(fullTime).padStart(2, '0'), delta: 'Core team', tone: 'pink', icon: 'ri-briefcase-4-line', onClick: () => handleSummaryCardClick('Full Time') },
     ];
   }, [employees]);
 
@@ -320,6 +346,10 @@ function Employees() {
             <i className="ri-edit-line" aria-hidden="true" />
             Edit
           </button>
+          <button type="button" className="danger" onClick={() => handleDeleteEmployee(employee)}>
+            <i className="ri-delete-bin-line" aria-hidden="true" />
+            Delete
+          </button>
         </div>
       ),
     },
@@ -344,6 +374,68 @@ function Employees() {
     setMessage('');
     setCredentialNotice(null);
     setIsModalOpen(true);
+  };
+
+  const handleSummaryCardClick = (filter) => {
+    setSummaryFilter(filter);
+    setStatus('All');
+    setDepartment('All Departments');
+    setEmploymentType('All Types');
+    requestAnimationFrame(() => {
+      document.getElementById('employee-directory')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const handleDeleteEmployee = async (employee) => {
+    const employeeId = employee.employeeCode || employee.id;
+    if (!employeeId) {
+      setMessage('Employee ID not found. Unable to delete this record.');
+      return;
+    }
+
+    const employeeName = employee.displayName || employee.name || employeeId;
+    const confirmed = window.confirm(`Delete ${employeeName}? This will remove the employee from the backend and access records.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setMessage('');
+
+    try {
+      await deleteEmployee(employeeId);
+
+      const nextEmployees = employees.filter((item) => (item.employeeCode || item.id) !== employeeId);
+      const userRows = await safeApiRequest('/users', []);
+      const availableUsers = Array.isArray(userRows) && userRows.length > 0 ? userRows : getUsers();
+      const currentEmployeeEmail = String(employee.email || '').trim().toLowerCase();
+      const matchingUser = availableUsers.find((user) => {
+        const userEmployeeId = String(user.employeeId || '').trim().toLowerCase();
+        const userEmail = String(user.email || '').trim().toLowerCase();
+
+        return userEmployeeId === String(employeeId).trim().toLowerCase()
+          || userEmail === currentEmployeeEmail;
+      });
+
+      await saveStoredEmployees(nextEmployees);
+      if (matchingUser?.userId) {
+        await deleteUser(matchingUser.userId);
+      }
+
+      setEmployees(nextEmployees);
+      if (selectedEmployee && (selectedEmployee.employeeCode || selectedEmployee.id) === employeeId) {
+        setSelectedEmployee(null);
+        setIsPreviewOpen(false);
+      }
+      if (editingEmployee && (editingEmployee.employeeCode || editingEmployee.id) === employeeId) {
+        setEditingEmployee(null);
+        setIsModalOpen(false);
+      }
+
+      setMessage(`${employeeName} deleted successfully.`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unable to delete employee right now.';
+      setMessage(errorMessage);
+    }
   };
 
   const saveEmployee = (event) => {
@@ -426,6 +518,20 @@ function Employees() {
             <i className="ri-user-add-line" aria-hidden="true" />
             Add Employee
           </button>
+          {summaryFilter !== 'All' && (
+            <button
+              type="button"
+              className="asset-filter-clear"
+              onClick={() => {
+                setSummaryFilter('All');
+                requestAnimationFrame(() => {
+                  document.getElementById('employee-directory')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+              }}
+            >
+              Clear summary filter
+            </button>
+          )}
         </div>
 
         <DataTable columns={columns} rows={rows} emptyMessage="No employees match your filters." />
@@ -1075,6 +1181,14 @@ function getFormFromEmployee(employee) {
 function normalizeEmployee(form) {
   const displayName = form.displayName || [form.firstName, form.lastName].filter(Boolean).join(' ').trim();
   const accessRole = normalizeAccessRole(form.accessRole);
+  
+  // Generate username and password
+  const firstName = (form.firstName || 'employee').toLowerCase().trim();
+  const lastName = (form.lastName || '').toLowerCase().trim();
+  const username = lastName ? `${firstName}.${lastName}` : firstName;
+  const generatedUsername = `${username}@kavyainfoweb.com`;
+  const passwordBase = (form.firstName || 'Employee').toLowerCase();
+  const generatedPassword = passwordBase.charAt(0).toUpperCase() + passwordBase.slice(1) + '@123';
 
   return {
     ...form,
@@ -1093,15 +1207,27 @@ function normalizeEmployee(form) {
     role: form.jobTitle,
     phone: form.mobileNo,
     avatar: getInitials(displayName || `${form.firstName} ${form.lastName}`),
+    generatedUsername: generatedUsername,
+    generatedPassword: generatedPassword,
   };
 }
 
 function getEmployeeCredentialNotice(employee) {
+  // Generate username: firstName.lastName@kavyainfoweb.com or just firstName@kavyainfoweb.com
+  const firstName = (employee.firstName || 'employee').toLowerCase().trim();
+  const lastName = (employee.lastName || '').toLowerCase().trim();
+  const username = lastName ? `${firstName}.${lastName}` : firstName;
+  const loginId = `${username}@kavyainfoweb.com`;
+  
+  // Generate password: FirstLetterCapital + restLowercase@123
+  const passwordBase = (employee.firstName || 'Employee').toLowerCase();
+  const password = passwordBase.charAt(0).toUpperCase() + passwordBase.slice(1) + '@123';
+  
   return {
     employeeName: employee.displayName || employee.name,
     employeeId: employee.employeeCode || employee.id,
-    loginId: String(employee.email || '').trim().toLowerCase(),
-    password: DEFAULT_EMPLOYEE_PASSWORD,
+    loginId: loginId,
+    password: password,
     accessRole: normalizeAccessRole(employee.accessRole),
   };
 }

@@ -3,10 +3,6 @@ import { apiRequest } from './api.js';
 let payrollRecordsCache = [];
 
 export function getStoredPayrollRecords() {
-  if (payrollRecordsCache.length > 0) {
-    return payrollRecordsCache;
-  }
-
   return payrollRecordsCache;
 }
 
@@ -17,12 +13,14 @@ export function setPayrollRecordsCache(records) {
 
 export async function refreshStoredPayrollRecords() {
   const records = await apiRequest('/payroll');
-  setPayrollRecordsCache(records);
-  return records;
+  setPayrollRecordsCache(Array.isArray(records) ? records : []);
+  return payrollRecordsCache;
 }
 
-export function saveStoredPayrollRecords(records) {
-  payrollRecordsCache = Array.isArray(records) ? records : [];
-  apiRequest('/payroll/bulk', { method: 'POST', body: JSON.stringify(payrollRecordsCache) }).catch(() => {});
+export async function saveStoredPayrollRecords(records) {
+  const payload = Array.isArray(records) ? records : [];
+  payrollRecordsCache = payload;
+  await apiRequest('/payroll/bulk', { method: 'POST', body: JSON.stringify(payload) });
   window.dispatchEvent(new Event('kavyaPayrollRecordsChanged'));
+  return payrollRecordsCache;
 }

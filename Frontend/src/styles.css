@@ -1970,6 +1970,28 @@ a:focus-visible {
   gap: 1rem;
 }
 
+.card-grid.employee-card-row {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.employee-card-row .dashboard-card {
+  min-height: 132px;
+  padding: 1rem;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 0.7rem;
+}
+
+.employee-card-row .card-icon {
+  width: 42px;
+  height: 42px;
+  font-size: 1.2rem;
+}
+
+.employee-card-row .dashboard-card strong {
+  font-size: 1.55rem;
+}
+
 .admin-sections-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -3268,6 +3290,44 @@ a:focus-visible {
   background: #fff;
   box-shadow: 0 8px 20px rgba(27, 54, 64, 0.04);
   -webkit-overflow-scrolling: touch;
+}
+
+.attendance-table-container {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.attendance-table-container::-webkit-scrollbar {
+  display: block;
+  width: 10px;
+}
+
+.attendance-table-container::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-color: rgba(96, 113, 124, 0.45);
+  background-clip: content-box;
+}
+
+.attendance-table-container thead {
+  position: static;
+}
+
+.attendance-table-container thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: linear-gradient(180deg, #f9fcfb, #eff7f6);
+  border-bottom: 2px solid var(--border-strong);
+}
+
+@media (max-width: 700px) {
+  .table-card:not(.payroll-table-card) {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
 }
 
 .table {
@@ -6772,6 +6832,10 @@ img.profile-avatar.large {
     grid-template-columns: 1fr;
   }
 
+  .card-grid.employee-card-row {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
   .settings-cards--roles,
   .settings-cards--leave-balances {
     grid-template-columns: 1fr;
@@ -7112,6 +7176,14 @@ img.profile-avatar.large {
 
   .table-card:not(.payroll-table-card) .table-empty {
     display: block;
+  }
+
+  .attendance-table-container {
+    max-height: 280px;
+  }
+
+  .attendance-table-container thead {
+    position: static;
   }
 
   .asset-action-group {

@@ -623,6 +623,7 @@ function EmployeeAssetsView() {
   const currentEmployee = getCurrentEmployeeIdentity();
   const [assets, setAssets] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [activeRequest, setActiveRequest] = useState(null);
   const [toast, setToast] = useState(null);
@@ -672,19 +673,39 @@ function EmployeeAssetsView() {
       }
     };
 
+    const refreshAnnouncements = async () => {
+      try {
+        const announcementRows = await apiRequest('/announcements');
+        if (!active) {
+          return;
+        }
+
+        setAnnouncements(normalizeAnnouncementRows(Array.isArray(announcementRows) ? announcementRows : []));
+      } catch {
+        if (active) {
+          setAnnouncements([]);
+        }
+      }
+    };
+
     refreshAssets();
     refreshRequests();
+    refreshAnnouncements();
     window.addEventListener('focus', refreshAssets);
     window.addEventListener('focus', refreshRequests);
+    window.addEventListener('focus', refreshAnnouncements);
     window.addEventListener('kavyaAssetsChanged', refreshAssets);
     window.addEventListener('kavyaAssetRequestsChanged', refreshRequests);
+    window.addEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
 
     return () => {
       active = false;
       window.removeEventListener('focus', refreshAssets);
       window.removeEventListener('focus', refreshRequests);
+      window.removeEventListener('focus', refreshAnnouncements);
       window.removeEventListener('kavyaAssetsChanged', refreshAssets);
       window.removeEventListener('kavyaAssetRequestsChanged', refreshRequests);
+      window.removeEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
     };
   }, [currentEmployee.employeeId]);
 
@@ -709,6 +730,12 @@ function EmployeeAssetsView() {
   const returnRequests = useMemo(() => requests.filter((request) => request.requestType === 'return'), [requests]);
   const openRequestCount = useMemo(() => requests.filter((request) => isOpenRequestStatus(request.status)).length, [requests]);
   const returnedCount = useMemo(() => returnRequests.filter((request) => request.status === 'Returned').length, [returnRequests]);
+  const announcementBuckets = useMemo(() => ({
+    assets: filterAnnouncementsForSection(announcements, ['asset', 'assets', 'inventory', 'equipment']),
+    replacement: filterAnnouncementsForSection(announcements, ['replacement', 'replace', 'device swap', 'swap']),
+    repair: filterAnnouncementsForSection(announcements, ['repair', 'maintenance', 'service', 'fix']),
+    return: filterAnnouncementsForSection(announcements, ['return', 'returns', 'handback', 'handover']),
+  }), [announcements]);
 
   const dashboardCards = useMemo(() => ([{
     label: 'My Assets',
@@ -822,6 +849,11 @@ function EmployeeAssetsView() {
       <Section title="My Assets">
         {isLoading && <p className="notification-empty">Loading your assigned assets...</p>}
         {!isLoading && loadError && <p className="notification-empty">{loadError}</p>}
+        <AnnouncementStrip
+          title="Announcements for My Assets"
+          items={announcementBuckets.assets}
+          emptyMessage="No asset-related announcements available."
+        />
         {!isLoading && !loadError && (
           <MyAssetsTable
             rows={myAssets}
@@ -835,6 +867,11 @@ function EmployeeAssetsView() {
 
       <div className="assets-stack">
         <Section title="Replacement Requests">
+          <AnnouncementStrip
+            title="Replacement Announcements"
+            items={announcementBuckets.replacement}
+            emptyMessage="No replacement announcements available."
+          />
           <ReplacementRequestTable
             rows={replacementRequests}
             emptyMessage="No replacement requests found."
@@ -842,6 +879,11 @@ function EmployeeAssetsView() {
           />
         </Section>
         <Section title="Repair Requests">
+          <AnnouncementStrip
+            title="Repair Announcements"
+            items={announcementBuckets.repair}
+            emptyMessage="No repair announcements available."
+          />
           <RepairRequestTable
             rows={repairRequests}
             emptyMessage="No repair requests found."
@@ -849,6 +891,11 @@ function EmployeeAssetsView() {
           />
         </Section>
         <Section title="Return Requests">
+          <AnnouncementStrip
+            title="Return Announcements"
+            items={announcementBuckets.return}
+            emptyMessage="No return announcements available."
+          />
           <ReturnRequestTable
             rows={returnRequests}
             emptyMessage="No return requests found."
@@ -891,6 +938,31 @@ function EmployeeAssetsView() {
 
       <AssetToast toast={toast} />
     </>
+  );
+}
+
+function AnnouncementStrip({ title, items, emptyMessage }) {
+  const visibleItems = Array.isArray(items) ? items.slice(0, 3) : [];
+
+  return (
+    <div className="asset-announcement-strip" aria-label={title}>
+      <div className="asset-announcement-strip__head">
+        <strong>{title}</strong>
+      </div>
+      {visibleItems.length > 0 ? (
+        <div className="announcement-list">
+          {visibleItems.map((item) => (
+            <article key={item.id}>
+              <span>{item.date || item.dateLabel || ''}</span>
+              <strong>{item.title}</strong>
+              <p>{item.body}</p>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="notification-empty">{emptyMessage}</p>
+      )}
+    </div>
   );
 }
 
@@ -1033,6 +1105,27 @@ function normalizeAssetRequest(request, index = 0) {
     handledBy: request.handledBy || '',
     asset: request.asset || null,
   };
+}
+
+function normalizeAnnouncementRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((item, index) => ({
+    id: item.id || `ANN-${index}`,
+    title: item.title || '',
+    body: item.body || '',
+    category: item.category || '',
+    date: item.dateLabel || item.postedAt || '',
+    postedBy: item.postedBy || 'HR',
+  }));
+}
+
+function filterAnnouncementsForSection(items, keywords) {
+  const normalizedKeywords = (Array.isArray(keywords) ? keywords : []).map((keyword) => String(keyword || '').toLowerCase());
+  return (Array.isArray(items) ? items : []).filter((item) => {
+    const category = String(item.category || '').toLowerCase();
+    const title = String(item.title || '').toLowerCase();
+    const body = String(item.body || '').toLowerCase();
+    return normalizedKeywords.some((keyword) => category.includes(keyword) || title.includes(keyword) || body.includes(keyword));
+  });
 }
 
 function normalizeEmployeeAssetRows(rows) {

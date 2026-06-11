@@ -1,15 +1,17 @@
 import { getSessionValue } from './appSession.js';
 
-const API_BASE = 'http://localhost:8080/api';
+const API_BASE = '/api';
 
 export async function apiRequest(path, options = {}) {
   const token = getSessionValue('kavyaAuthToken');
   const accessRole = getSessionValue('kavyaAccessRole') || getSessionValue('kavyaRole');
+  const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId');
   const employeeId = getSessionValue('kavyaEmployeeId');
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(accessRole ? { 'X-Kavya-Access-Role': accessRole } : {}),
+    ...(userId ? { 'X-Kavya-User-Id': userId } : {}),
     ...(employeeId ? { 'X-Kavya-Employee-Id': employeeId } : {}),
     ...(options.headers || {}),
   };
@@ -37,4 +39,12 @@ export async function safeApiRequest(path, fallback, options = {}) {
   } catch {
     return fallback;
   }
+}
+
+export async function deleteEmployee(employeeId) {
+  return apiRequest(`/employees/${employeeId}`, { method: 'DELETE' });
+}
+
+export async function deleteUser(userId) {
+  return apiRequest(`/users/${userId}`, { method: 'DELETE' });
 }

@@ -2,30 +2,29 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import { CardGrid, Hero, Section } from './AdminDashboard.jsx';
-import { dashboardStats } from '../data/dummyData.js';
-import { apiRequest, safeApiRequest } from '../utils/api.js';
+import { announcements as fallbackAnnouncements } from '../data/dummyData.js';
 import {
   applyCheckOutToRecord,
   createCheckInRecord,
   getAttendanceEmployee,
+  getLateCheckInCountForMonth,
   getInitialAttendanceRows,
   getTodayLabel,
-  refreshEmployeeAttendanceRows,
   refreshStoredAttendanceRows,
   saveAttendanceRows,
 } from '../utils/attendanceStorage.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
+import { safeApiRequest } from '../utils/api.js';
 import { getEmployeeLeaveSummary, normalizeLeaveTypes, DEFAULT_LEAVE_TYPES } from '../utils/leaveBalance.js';
 
 function EmployeeDashboard() {
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
   const [leaveRequests, setLeaveRequests] = useState(getInitialLeaveRequests);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
-  const [tasks, setTasks] = useState([]);
-  const [payrollRecords, setPayrollRecords] = useState([]);
   const [latestAnnouncements, setLatestAnnouncements] = useState([]);
   const [wellnessAnnouncements, setWellnessAnnouncements] = useState([]);
+  const [dashboardSummary, setDashboardSummary] = useState(null);
   const [message, setMessage] = useState('');
   const attendanceEmployee = getAttendanceEmployee();
   const employeeIdentity = getCurrentEmployeeIdentity();
@@ -34,25 +33,8 @@ function EmployeeDashboard() {
     () => getEmployeeLeaveSummary(leaveTypes, leaveRequests, employeeIdentity),
     [leaveRequests, leaveTypes, employeeIdentity],
   );
-  const employeeTasks = useMemo(
-    () => tasks.filter((task) => isTaskAssignedToEmployee(task, employeeIdentity)),
-    [employeeIdentity, tasks],
-  );
-  const employeePayslips = useMemo(
-    () => payrollRecords.filter((record) => String(record.employeeId || '').trim() === String(employeeIdentity.employeeId || '').trim()),
-    [employeeIdentity.employeeId, payrollRecords],
-  );
 
-  const myRows = useMemo(() => {
-    return attendance
-      .filter((row) => row.employeeId === attendanceEmployee.employeeId)
-      .slice()
-      .sort((a, b) => {
-        const aTime = a.checkInAt ? Date.parse(a.checkInAt) : Date.parse(a.date || '');
-        const bTime = b.checkInAt ? Date.parse(b.checkInAt) : Date.parse(b.date || '');
-        return Number(bTime) - Number(aTime);
-      });
-  }, [attendance, attendanceEmployee.employeeId]);
+  const myRows = useMemo(() => attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId), [attendance, attendanceEmployee.employeeId]);
   const todayRecord = myRows.find((row) => row.date === todayLabel);
   const canCheckIn = !todayRecord;
   const canCheckOut = Boolean(todayRecord?.checkInAt && !todayRecord?.checkOutAt);
@@ -74,45 +56,78 @@ function EmployeeDashboard() {
     : []);
 
   const attendanceRate = totalConsideredDays ? Math.round((weightedPresence / totalConsideredDays) * 100) : 0;
-  const pendingTasks = employeeTasks.filter((task) => normalizeTaskStatus(task.status) === 'pending').length;
-  const completedTasks = employeeTasks.filter((task) => normalizeTaskStatus(task.status) === 'completed').length;
-  const dueTodayTasks = employeeTasks.filter((task) => normalizeDateValue(task.dueDate || task.due) === todayLabel && normalizeTaskStatus(task.status) !== 'completed').length;
-  const latestPayslip = employeePayslips[0];
-  const employeeStats = dashboardStats.employee.map((stat, index) => (index === 0
-    ? {
-      ...stat,
-      value: `${attendanceRate}%`,
-      delta: `${presentDays} present days`,
-      onClick: () => navigate('/employee/attendance'),
-    }
-    : index === 1
-      ? {
-        ...stat,
+  const employeeStats = useMemo(() => {
+    const fallbackStats = [
+      {
+        label: 'Attendance',
+        value: `${attendanceRate}%`,
+        delta: `${presentDays} present days`,
+        tone: 'blue',
+        icon: 'ri-time-line',
+        onClick: () => navigate('/employee/attendance'),
+      },
+      {
+        label: 'Leave Balance',
         value: String(leaveSummary.totalRemaining),
         delta: `${leaveSummary.totalUsed} used`,
+        tone: 'green',
+        icon: 'ri-suitcase-line',
         onClick: () => navigate('/employee/leave-requests'),
-      }
-      : index === 2
-        ? {
-          ...stat,
-          value: String(employeeTasks.length).padStart(2, '0'),
-          delta: `${pendingTasks} pending, ${dueTodayTasks} due today`,
-          onClick: () => navigate('/employee/tasks'),
-        }
-        : index === 3
-          ? {
-            ...stat,
-            value: String(employeePayslips.length).padStart(2, '0'),
-            delta: latestPayslip ? `${latestPayslip.month} ${latestPayslip.year}` : 'No payslips yet',
-            onClick: () => navigate('/employee/payroll'),
-          }
-          : stat));
+      },
+      {
+        label: 'Tasks',
+        value: '00',
+        delta: '0 due today',
+        tone: 'orange',
+        icon: 'ri-task-line',
+        onClick: () => navigate('/employee/tasks'),
+      },
+      {
+        label: 'My Assets',
+        value: '00',
+        delta: 'Assigned to you',
+        tone: 'green',
+        icon: 'ri-briefcase-4-line',
+        onClick: () => navigate('/employee/assets'),
+      },
+      {
+        label: 'Announcements',
+        value: '00',
+        delta: 'Latest updates',
+        tone: 'pink',
+        icon: 'ri-megaphone-line',
+        onClick: () => navigate('/employee/announcements'),
+      },
+    ];
+
+    const summaryStats = dashboardSummary ? [
+      dashboardSummary.attendance,
+      dashboardSummary.leaveBalance,
+      dashboardSummary.tasks,
+      dashboardSummary.assets,
+      dashboardSummary.announcements,
+    ] : fallbackStats;
+
+    return summaryStats.map((stat, index) => ({
+      ...stat,
+      onClick: fallbackStats[index]?.onClick,
+    }));
+  }, [attendanceRate, dashboardSummary, leaveSummary.totalRemaining, leaveSummary.totalUsed, navigate, presentDays]);
 
   useEffect(() => {
-    const refreshAttendance = () => {
-      refreshEmployeeAttendanceRows(attendanceEmployee.employeeId)
-        .then(setAttendance)
-        .catch(() => setAttendance(getInitialAttendanceRows()));
+    let active = true;
+
+    const refreshAttendance = async () => {
+      try {
+        const rows = await refreshStoredAttendanceRows();
+        if (active) {
+          setAttendance(rows);
+        }
+      } catch {
+        if (active) {
+          setAttendance(getInitialAttendanceRows());
+        }
+      }
     };
     const refreshLeaves = () => {
       refreshStoredLeaveRequests()
@@ -124,51 +139,39 @@ function EmployeeDashboard() {
         .then((payload) => setLeaveTypes(normalizeLeaveTypes(payload?.leaveTypes, DEFAULT_LEAVE_TYPES)))
         .catch(() => setLeaveTypes(DEFAULT_LEAVE_TYPES));
     };
-    const refreshTasks = () => {
-      apiRequest('/tasks')
-        .then((rows) => setTasks(Array.isArray(rows) ? rows : []))
-        .catch(() => setTasks([]));
-    };
-    const refreshPayslips = () => {
-      const employeeId = String(employeeIdentity.employeeId || '').trim();
-      if (!employeeId) {
-        setPayrollRecords([]);
-        return;
-      }
-
-      apiRequest(`/payroll/employee/${encodeURIComponent(employeeId)}`)
-        .then((rows) => setPayrollRecords(Array.isArray(rows) ? rows : []))
-        .catch(() => setPayrollRecords([]));
-    };
 
     const refreshAnnouncements = async () => {
-      const latest = await safeApiRequest('/announcements?excludeCategory=Wellness', []);
-      const wellness = await safeApiRequest('/announcements?category=Wellness', []);
+      const allAnnouncements = await safeApiRequest('/announcements', fallbackAnnouncements);
+      const normalizedAnnouncements = normalizeAnnouncements(allAnnouncements);
+      const wellness = normalizedAnnouncements.filter((item) => String(item.category || '').toLowerCase() === 'wellness');
+      const latest = normalizedAnnouncements.filter((item) => String(item.category || '').toLowerCase() !== 'wellness');
 
-      setLatestAnnouncements(normalizeAnnouncements(latest));
-      setWellnessAnnouncements(normalizeAnnouncements(wellness));
+      setLatestAnnouncements(latest);
+      setWellnessAnnouncements(wellness);
+    };
+
+    const refreshDashboardSummary = async () => {
+      const summary = await safeApiRequest(`/dashboard/employee/summary/${employeeIdentity.employeeId}`, null);
+      setDashboardSummary(summary);
     };
 
     window.addEventListener('storage', refreshAttendance);
     window.addEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
     window.addEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
     window.addEventListener('kavyaSettingsChanged', refreshLeaveTypes);
-    window.addEventListener('kavyaTasksChanged', refreshTasks);
     window.addEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
 
-    refreshAttendance();
     refreshLeaves();
     refreshLeaveTypes();
-    refreshTasks();
-    refreshPayslips();
     refreshAnnouncements();
+    refreshDashboardSummary();
 
     return () => {
+      active = false;
       window.removeEventListener('storage', refreshAttendance);
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
       window.removeEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
       window.removeEventListener('kavyaSettingsChanged', refreshLeaveTypes);
-      window.removeEventListener('kavyaTasksChanged', refreshTasks);
       window.removeEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
     };
   }, [employeeIdentity.employeeId]);
@@ -184,7 +187,7 @@ function EmployeeDashboard() {
   const checkIn = () => {
     const now = new Date();
     updateAttendance((current) => [
-      createCheckInRecord(attendanceEmployee, now),
+      createCheckInRecord(attendanceEmployee, now, getLateCheckInCountForMonth(current, attendanceEmployee.employeeId, now)),
       ...current.filter((row) => !(row.employeeId === attendanceEmployee.employeeId && row.date === todayLabel)),
     ]);
     setMessage('Checked in successfully. Day status will finalize at check-out.');
@@ -203,7 +206,7 @@ function EmployeeDashboard() {
   return (
     <>
       <Hero title="My Dashboard" copy="Your attendance snapshot, leave balance, upcoming notices, and profile activity in one personal workspace." />
-      <CardGrid stats={employeeStats} />
+      <CardGrid stats={employeeStats} className="employee-card-row" />
 
       {message && (
         <div className="user-alert" role="status">
@@ -231,7 +234,8 @@ function EmployeeDashboard() {
               </button>
             </div>
           </div>
-          <div className="attendance-history-wrapper" style={{ maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+
+          <div className="attendance-table-container">
             <DataTable columns={attendanceColumns} rows={myRows} />
           </div>
         </Section>
@@ -280,32 +284,3 @@ export const attendanceColumns = [
 ];
 
 export default EmployeeDashboard;
-
-function normalizeTaskStatus(status) {
-  return String(status || '').trim().toLowerCase();
-}
-
-function normalizeDateValue(value) {
-  if (!value) {
-    return '';
-  }
-
-  const date = new Date(value);
-  if (!Number.isNaN(date.getTime())) {
-    return date.toISOString().slice(0, 10);
-  }
-
-  return String(value);
-}
-
-function isTaskAssignedToEmployee(task, employeeIdentity) {
-  const employeeId = String(employeeIdentity.employeeId || '').trim().toLowerCase();
-  const employeeName = String(employeeIdentity.employee || '').trim().toLowerCase();
-  const taskEmployeeId = String(task.assignedToId || '').trim().toLowerCase();
-  const taskOwner = String(task.owner || task.assignedToName || task.assignedTo || '').trim().toLowerCase();
-
-  return Boolean(
-    (employeeId && taskEmployeeId && taskEmployeeId === employeeId)
-    || (employeeName && taskOwner === employeeName)
-  );
-}

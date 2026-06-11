@@ -13,9 +13,6 @@ public class AttendanceRecord {
   private String date;
   private String checkIn;
   private String checkOut;
-  private String checkInAt;
-  private String checkOutAt;
-  private String checkInBand;
   private String workedHours;
   private String totalHours;
   private String status;
@@ -35,12 +32,6 @@ public class AttendanceRecord {
   public void setCheckIn(String checkIn) { this.checkIn = checkIn; }
   public String getCheckOut() { return checkOut; }
   public void setCheckOut(String checkOut) { this.checkOut = checkOut; }
-  public String getCheckInAt() { return checkInAt; }
-  public void setCheckInAt(String checkInAt) { this.checkInAt = checkInAt; }
-  public String getCheckOutAt() { return checkOutAt; }
-  public void setCheckOutAt(String checkOutAt) { this.checkOutAt = checkOutAt; }
-  public String getCheckInBand() { return checkInBand; }
-  public void setCheckInBand(String checkInBand) { this.checkInBand = checkInBand; }
   public String getWorkedHours() { return workedHours; }
   public void setWorkedHours(String workedHours) { this.workedHours = workedHours; }
   public String getTotalHours() { return totalHours; }

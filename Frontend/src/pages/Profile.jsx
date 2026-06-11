@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import QRCode from 'qrcode';
+import { useNavigate } from 'react-router-dom';
+import * as QRCode from 'qrcode';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
@@ -7,7 +8,7 @@ import { getCurrentEmployeeIdentity, getStoredEmployees, saveStoredEmployees, se
 import { getUsers, saveUsers, setUsersCache } from '../utils/user-management.js';
 import { normalizeAccessRole } from '../utils/role-access.js';
 import { getSessionValue, setSessionValue } from '../utils/appSession.js';
-import { safeApiRequest } from '../utils/api.js';
+import { safeApiRequest, deleteEmployee } from '../utils/api.js';
 
 const fallbackEmployees = people.map((person) => ({
   ...person,
@@ -53,6 +54,7 @@ const PRESENT_TO_PERMANENT_ADDRESS_MAP = {
 };
 
 function Profile() {
+  const navigate = useNavigate();
   const identity = getCurrentEmployeeIdentity();
   const accessRole = getSessionValue('kavyaAccessRole') || 'Employee';
   const normalizedAccessRole = normalizeAccessRole(accessRole);
@@ -94,6 +96,8 @@ function Profile() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [twoFactorQr, setTwoFactorQr] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const toastTimerRef = useRef(null);
   const twoFactorIssuer = 'Kavya HRMS';
   const twoFactorAccount = employee.email || identity.email || '';
@@ -413,6 +417,44 @@ function Profile() {
     }
   };
 
+  const handleDelete = async () => {
+    if (isDeleting) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const employeeId = employee.employeeCode || employee.id;
+      if (!employeeId) {
+        throw new Error('Employee ID not found');
+      }
+
+      await deleteEmployee(employeeId);
+
+      const nextEmployees = employees.filter((emp) => (emp.employeeCode || emp.id) !== employeeId);
+      const nextUsers = users.filter((user) => user.employeeId !== employeeId);
+
+      await saveStoredEmployees(nextEmployees);
+      await saveUsers(nextUsers);
+
+      setEmployees(nextEmployees);
+      setUsers(nextUsers);
+      setEmployeesCache(nextEmployees);
+      setUsersCache(nextUsers);
+
+      showPopup('User deleted successfully.', 'success');
+      setTimeout(() => {
+        navigate('/employees');
+      }, 1500);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete user right now.';
+      showPopup(message, 'error');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   return (
     <>
       <Hero title="Profile Management" copy="Edit your personal details, contact information, profile photo, and password in one place." />
@@ -447,6 +489,38 @@ function Profile() {
         </div>
       )}
 
+      {showDeleteConfirm && (
+        <div className="settings-modal-backdrop" role="presentation" onClick={() => !isDeleting && setShowDeleteConfirm(false)}>
+          <section className="settings-modal settings-modal--error" role="dialog" aria-modal="true" aria-label="Delete confirmation" onClick={(event) => event.stopPropagation()}>
+            <div className="settings-modal-icon">
+              <i className="ri-delete-bin-line" aria-hidden="true" />
+            </div>
+            <div className="settings-modal-copy">
+              <strong>Delete User Account?</strong>
+              <span>Are you sure you want to permanently delete this user account and all associated data? This action cannot be undone.</span>
+            </div>
+            <div className="settings-modal-actions">
+              <button 
+                type="button" 
+                className="settings-modal-cancel" 
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="settings-modal-delete" 
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       <section className="profile-hero-card">
         {form.profilePicture ? (
           <img className="profile-avatar large profile-photo" src={form.profilePicture} alt={`${form.displayName || employee.name} profile`} />
@@ -461,6 +535,26 @@ function Profile() {
             <strong>{employee.employeeCode || employee.id}</strong>
             <strong>{employee.department || 'General'}</strong>
             <strong>{employee.accessRole || 'Employee'}</strong>
+          </div>
+          <div className="profile-actions">
+            <button type="button" className="profile-action-btn profile-edit-btn" title="Edit Profile">
+              <i className="ri-edit-line" aria-hidden="true" />
+              <span>Edit</span>
+            </button>
+            <button type="button" className="profile-action-btn profile-view-btn" title="View Profile">
+              <i className="ri-eye-line" aria-hidden="true" />
+              <span>View</span>
+            </button>
+            <button 
+              type="button" 
+              className="profile-action-btn profile-delete-btn" 
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isDeleting}
+              title="Delete User"
+            >
+              <i className="ri-delete-bin-line" aria-hidden="true" />
+              <span>Delete</span>
+            </button>
           </div>
         </div>
         <div className="profile-contact-card">

@@ -6,6 +6,7 @@ C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\websoc
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\AssetAssignmentRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\ProjectController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\dto\AdminDashboardSummary.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\service\NotificationAudience.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\Announcement.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\LeaveRequestRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\config\WebConfig.java
@@ -20,6 +21,7 @@ C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\contro
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\SystemSettingsController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\AuditLog.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\AppUser.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\AuthSession.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\AssetAssignmentController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\Designation.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\TaskRepository.java
@@ -28,9 +30,12 @@ C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\websoc
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\SystemSettings.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\Role.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\Project.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\AuthSessionRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\LeaveType.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\NotificationController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\TaskController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\DashboardController.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\service\NotificationService.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\dto\LoginRequest.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\AssetAssignment.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\TaskItem.java
@@ -45,6 +50,7 @@ C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\PayrollRecordRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\AnnouncementRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\EmployeeRepository.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\NotificationRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\EmployeeController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\AttendanceRecordRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\config\WebSocketConfig.java
@@ -52,6 +58,7 @@ C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\UserController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\ProjectMember.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\AssetRequestRepository.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\service\AttendanceAutoCheckoutService.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\AnnouncementController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\SystemSettingsRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\AppUserRepository.java
