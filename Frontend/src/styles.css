@@ -3297,6 +3297,11 @@ a:focus-visible {
   overflow-y: auto;
 }
 
+.attendance-table-container .table-card,
+.attendance-table-container .table-responsive {
+  overflow: visible;
+}
+
 .attendance-table-container::-webkit-scrollbar {
   display: block;
   width: 10px;
@@ -7180,6 +7185,11 @@ img.profile-avatar.large {
 
   .attendance-table-container {
     max-height: 280px;
+  }
+
+  .attendance-table-container .table-card,
+  .attendance-table-container .table-responsive {
+    overflow: visible;
   }
 
   .attendance-table-container thead {

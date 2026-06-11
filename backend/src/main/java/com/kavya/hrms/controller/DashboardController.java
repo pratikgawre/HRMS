@@ -5,6 +5,7 @@ import com.kavya.hrms.dto.EmployeeDashboardSummary;
 import com.kavya.hrms.model.AttendanceRecord;
 import com.kavya.hrms.model.LeaveRequest;
 import com.kavya.hrms.model.SystemSettings;
+import com.kavya.hrms.model.TaskItem;
 import com.kavya.hrms.repository.AnnouncementRepository;
 import com.kavya.hrms.repository.AttendanceRecordRepository;
 import com.kavya.hrms.repository.AssetAssignmentRepository;
@@ -19,6 +20,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.Map;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -106,13 +109,11 @@ public class DashboardController {
     leaveBalance.setNavigateTo(List.of("/employee/leave-requests"));
     response.setLeaveBalance(leaveBalance);
 
-    List<String> assignedTasks = taskRepository.findAll().stream()
-        .filter(task -> employeeId.equals(task.getAssignedToId()) || employeeId.equalsIgnoreCase(Optional.ofNullable(task.getAssignedTo()).orElse("")))
-        .map(task -> task.getId())
-        .collect(Collectors.toList());
-    long taskCount = assignedTasks.size();
+    long taskCount = taskRepository.findAll().stream()
+        .filter(task -> isTaskAssignedToEmployee(task, employeeId, response.getEmployeeName()))
+        .count();
     long dueToday = taskRepository.findAll().stream()
-        .filter(task -> employeeId.equals(task.getAssignedToId()) || employeeId.equalsIgnoreCase(Optional.ofNullable(task.getAssignedTo()).orElse("")))
+        .filter(task -> isTaskAssignedToEmployee(task, employeeId, response.getEmployeeName()))
         .filter(task -> isDueToday(task.getDueDate()))
         .count();
     EmployeeDashboardSummary.CardMetric tasks = new EmployeeDashboardSummary.CardMetric();
@@ -187,7 +188,36 @@ public class DashboardController {
     }
 
     String normalized = dueDate.trim().toLowerCase(Locale.ROOT);
-    return normalized.contains("today");
+    if (normalized.contains("today")) {
+      return true;
+    }
+
+    try {
+      return LocalDate.parse(dueDate.trim()).isEqual(LocalDate.now());
+    } catch (DateTimeParseException ex) {
+      return false;
+    }
+  }
+
+  private boolean isTaskAssignedToEmployee(TaskItem task, String employeeId, String employeeName) {
+    if (task == null) {
+      return false;
+    }
+
+    String normalizedEmployeeId = normalize(employeeId);
+    String normalizedEmployeeName = normalize(employeeName);
+    String taskAssignedToId = normalize(task.getAssignedToId());
+    String taskAssignedTo = normalize(Optional.ofNullable(task.getAssignedTo()).orElse(""));
+    String taskAssignedToName = normalize(Optional.ofNullable(task.getAssignedToName()).orElse(""));
+    String taskOwner = normalize(Optional.ofNullable(task.getOwner()).orElse(""));
+
+    return taskAssignedToId.equals(normalizedEmployeeId)
+        || taskAssignedTo.equals(normalizedEmployeeId)
+        || taskAssignedTo.equals(normalizedEmployeeName)
+        || taskAssignedToName.equals(normalizedEmployeeId)
+        || taskAssignedToName.equals(normalizedEmployeeName)
+        || taskOwner.equals(normalizedEmployeeId)
+        || taskOwner.equals(normalizedEmployeeName);
   }
 
   private record LeaveTotals(int remaining, int used) {}

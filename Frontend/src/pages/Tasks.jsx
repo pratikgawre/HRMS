@@ -785,6 +785,7 @@ function normalizeTaskRow(task) {
     owner: task.owner || task.assignedToName || task.assignedTo || '-',
     assignedToId: task.assignedToId || '',
     assignedToName: task.assignedToName || task.owner || task.assignedTo || '-',
+    assignedTo: task.assignedTo || '',
     priority: task.priority || 'Medium',
     due: task.due || task.dueDate || '-',
     dueDate: task.dueDate || task.due || '',
@@ -842,15 +843,19 @@ function getDueIndicator(task) {
 }
 
 function isTaskVisibleToEmployee(task, employeeId, employeeName) {
-  const taskEmployeeId = String(task.assignedToId || '').trim();
-  const taskOwner = String(task.owner || task.assignedToName || task.assignedTo || '').trim().toLowerCase();
-  const currentName = String(employeeName || '').trim().toLowerCase();
-  const currentId = String(employeeId || '').trim().toLowerCase();
+  const normalize = (value) => String(value || '').trim().toLowerCase();
+  const currentName = normalize(employeeName);
+  const currentId = normalize(employeeId);
+  const assignmentValues = [
+    task.assignedToId,
+    task.assignedTo,
+    task.assignedToName,
+    task.owner,
+  ].map(normalize);
 
   return (
-    taskEmployeeId.toLowerCase() === currentId
-    || taskOwner === currentName
-    || taskOwner === currentId
+    assignmentValues.includes(currentId)
+    || assignmentValues.includes(currentName)
   );
 }
 
