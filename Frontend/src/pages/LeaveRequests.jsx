@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
+import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
-import { getInitialLeaveRequests, refreshStoredLeaveRequests, saveLeaveRequests } from '../utils/leaveStorage.js';
+import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
-import { safeApiRequest } from '../utils/api.js';
+import { apiRequest, safeApiRequest } from '../utils/api.js';
 import {
   DEFAULT_LEAVE_TYPES,
   getEmployeeLeaveSummary,
@@ -27,7 +28,7 @@ function LeaveRequests() {
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
   const leaveSummary = useMemo(
-    () => getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee),
+    () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee), requests),
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
   );
   const leaveTypeOptions = useMemo(() => getLeaveTypeOptions(leaveTypes), [leaveTypes]);
@@ -105,7 +106,7 @@ function LeaveRequests() {
             <i className="ri-checkbox-circle-line" aria-hidden="true" />
             {role === 'admin' || role === 'hr' ? 'Approve' : 'Recommend'}
           </button>
-          {row.status === 'Pending' && role !== 'teamLead' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
+          {row.status === 'Pending' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
         </div>
       ),
     }] : []),
@@ -164,6 +165,45 @@ function LeaveRequests() {
     reader.readAsDataURL(file);
   };
 
+  const refreshRequests = async () => {
+    try {
+      const stored = await refreshStoredLeaveRequests();
+      setRequests(stored);
+    } catch {
+      setRequests(getInitialLeaveRequests());
+    }
+  };
+
+  const createLeaveRequest = async (request) => {
+    try {
+      return await apiRequest('/leaves', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...request,
+          fromDate: request.from,
+          toDate: request.to,
+        }),
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const updateLeaveRequestStatus = async (request) => {
+    try {
+      return await apiRequest(`/leaves/${request.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...request,
+          fromDate: request.from,
+          toDate: request.to,
+        }),
+      });
+    } catch {
+      return null;
+    }
+  };
+
   const submitLeaveRequest = async (event) => {
     event.preventDefault();
     const needsMedicalReport = form.type === 'Sick Leave' && Number(form.days) > 2;
@@ -185,21 +225,32 @@ function LeaveRequests() {
       reason: form.reason,
       status: 'Pending',
       ownerRole: role,
+      recommendationStatus: 'Pending',
+      recommendedBy: selectedPerson?.name || form.employee,
+      recommendedRole: 'hr',
+      finalActionBy: '',
+      finalActionRole: 'admin',
+      finalActionNote: '',
+      approvedBy: '',
       medicalReport: form.medicalReport || null,
     };
 
-    const next = [newRequest, ...requests];
-    setRequests(next);
+    const created = await createLeaveRequest({
+      ...newRequest,
+      from: form.from,
+      to: form.to,
+    });
 
-    try {
-      await saveLeaveRequests(next);
-      setForm(getEmptyLeaveForm(currentEmployee, leaveTypes));
-      setFileErrors({});
-      setShowForm(false);
-      setMessage('Leave request created successfully.');
-    } catch (error) {
-      setMessage(error.message || 'Failed to save leave request.');
+    if (created && created.id) {
+      await refreshRequests();
+    } else {
+      setRequests((current) => [newRequest, ...current]);
     }
+
+    setForm(getEmptyLeaveForm(currentEmployee, leaveTypes));
+    setFileErrors({});
+    setShowForm(false);
+    setMessage('Leave request created successfully.');
   };
 
   const updateLeaveStatus = async (requestId, nextStatus) => {
@@ -208,12 +259,19 @@ function LeaveRequests() {
     ));
     setRequests(next);
 
-    try {
-      await saveLeaveRequests(next);
-      setMessage(`Leave request ${nextStatus.toLowerCase()} successfully.`);
-    } catch (error) {
-      setMessage(error.message || 'Failed to update leave request.');
+    const requestToUpdate = next.find((request) => request.id === requestId);
+    if (requestToUpdate) {
+      const saved = await updateLeaveRequestStatus({
+        ...requestToUpdate,
+        from: requestToUpdate.from,
+        to: requestToUpdate.to,
+      });
+      if (saved && saved.id) {
+        await refreshRequests();
+      }
     }
+
+    setMessage(`Leave request ${nextStatus.toLowerCase()} successfully.`);
   };
 
   return (
@@ -229,26 +287,25 @@ function LeaveRequests() {
 
       <Section title="Leave Request Queue">
         {(role === 'employee' || role === 'hr' || role === 'teamLead' || role === 'projectManager') && (
-          <div className="leave-balance-strip" aria-label="Leave balances">
-            {leaveSummary.balances.map((item) => (
-              <article key={item.name} className="leave-balance-card">
-                <span className={`leave-balance-card-icon tone-${getLeaveBalanceTone(item.name)}`}>
-                  <i className={getLeaveBalanceIcon(item.name)} aria-hidden="true" />
-                </span>
-                <div className="leave-balance-card-content">
-                  <span>Leave balance</span>
-                  <strong>{item.name}</strong>
-                  <div className="leave-balance-card-value">
-                    <b>{item.remaining}</b>
-                    <small>of {item.days} days</small>
-                  </div>
-                  <p>{item.used > 0 ? `${item.used} days used` : 'Unused so far'}</p>
-                </div>
-              </article>
+          <section
+            className="leave-summary-grid"
+            aria-label="Leave request summary"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.85rem', width: '100%', marginBottom: '1.5rem' }}
+          >
+            {leaveSummary.map((item) => (
+              <DashboardCard
+                key={item.label}
+                label={item.label}
+                value={item.value}
+                delta={item.delta}
+                tone={item.tone}
+                className="leave-summary-card"
+                style={{ minHeight: '108px', padding: '0.8rem 0.9rem' }}
+              />
             ))}
-          </div>
+          </section>
         )}
-        <div className="page-toolbar">
+        <div className="page-toolbar" style={{ gap: '1.2rem', marginTop: '1.5rem' }}>
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>
             <option>Pending</option>
@@ -266,7 +323,9 @@ function LeaveRequests() {
             </button>
           )}
         </div>
-        <DataTable columns={columns} rows={rows} emptyMessage="No leave requests match your filter." />
+        <div style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+          <DataTable columns={columns} rows={rows} emptyMessage="No leave requests match your filter." />
+        </div>
       </Section>
 
       {showForm && (
@@ -409,6 +468,41 @@ function formatRequesterRole(role) {
     .filter(Boolean)
     .map((part) => part[0].toUpperCase() + part.slice(1).toLowerCase())
     .join(' ');
+}
+
+function buildLeaveSummary(summary, requests) {
+  const requestList = Array.isArray(requests) ? requests : [];
+  const totalTakenDays = Number(summary?.totalUsed || 0);
+  const pendingCount = requestList.filter((request) => String(request.status || '').toLowerCase() === 'pending').length;
+  const approvedCount = requestList.filter((request) => String(request.status || '').toLowerCase() === 'approved').length;
+  const rejectedCount = requestList.filter((request) => String(request.status || '').toLowerCase() === 'rejected').length;
+
+  return [
+    {
+      label: 'Total Leaves Taken',
+      value: String(totalTakenDays),
+      delta: 'Approved leave days',
+      tone: 'green',
+    },
+    {
+      label: 'Pending Requests',
+      value: String(pendingCount),
+      delta: 'Waiting for HR review',
+      tone: 'orange',
+    },
+    {
+      label: 'Approved Requests',
+      value: String(approvedCount),
+      delta: 'Confirmed leaves',
+      tone: 'blue',
+    },
+    {
+      label: 'Rejected Requests',
+      value: String(rejectedCount),
+      delta: 'Closed requests',
+      tone: 'pink',
+    },
+  ];
 }
 
 function getLeaveBalanceIcon(name) {

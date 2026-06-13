@@ -22,7 +22,7 @@ export const ACCESS_ROLES = {
   Employee: {
     appRole: 'employee',
     dashboardPath: '/employee/dashboard',
-    permissions: ['self.attendance', 'self.leave', 'self.payslip', 'self.profile'],
+    permissions: ['self.attendance', 'self.leave', 'self.payslip', 'self.profile', 'self.assets', 'self.assetRequests'],
   },
 };
 

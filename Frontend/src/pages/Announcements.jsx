@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Hero, Section } from "./AdminDashboard.jsx";
 import { apiRequest } from "../utils/api.js";
 import { getSessionValue } from "../utils/appSession.js";
-import { getStoredAnnouncements, refreshStoredAnnouncements } from "../utils/announcementStorage.js";
 
 const categories = ["Company", "Policy", "Wellness", "Payroll", "Attendance", "Event", "Vacancy", "Other"];
 const priorities = ["Low", "Medium", "High", "Critical"];
@@ -21,21 +20,6 @@ function normalizeList(value) {
   if (value && Array.isArray(value.data)) return value.data;
   if (value && Array.isArray(value.items)) return value.items;
   return [];
-}
-
-function normalizeAnnouncements(rows = []) {
-  return (Array.isArray(rows) ? rows : []).map((item, index) => ({
-    id: item.id || `ANN-${101 + index}`,
-    title: item.title || `Announcement ${index + 1}`,
-    body: item.body || "",
-    category: item.category || categories[0],
-    priority: item.priority || "Medium",
-    status: item.status || "Active",
-    postedBy: item.postedBy || "HR",
-    postedAt: item.postedAt || "",
-    dateLabel: item.dateLabel || item.date || formatDateTime(item.postedAt || item.date || new Date()),
-    ownerRole: item.ownerRole || "hr",
-  }));
 }
 
 function formatDateTime(value) {
@@ -66,7 +50,7 @@ function Announcements() {
   const roleKey = normalizeRoleKey(role);
   const canCreate = roleKey === "admin" || roleKey === "superadmin" || roleKey === "hr" || roleKey === "hrmanager";
 
-  const [announcements, setAnnouncements] = useState(() => normalizeAnnouncements(getStoredAnnouncements()));
+  const [announcements, setAnnouncements] = useState([]);
   const [editingId, setEditingId] = useState("");
   const [message, setMessage] = useState("");
   const [errors, setErrors] = useState({});
@@ -74,7 +58,6 @@ function Announcements() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
-  const [lastSyncedAt, setLastSyncedAt] = useState("");
 
   const filteredAnnouncements = useMemo(() => {
     if (!filterCategory) return announcements;
@@ -86,9 +69,8 @@ function Announcements() {
   const loadAnnouncements = async () => {
     setLoading(true);
     try {
-      const data = await refreshStoredAnnouncements();
-      setAnnouncements(normalizeAnnouncements(normalizeList(data)));
-      setLastSyncedAt(new Date().toISOString());
+      const data = await apiRequest(filterCategory ? `/announcements?category=${encodeURIComponent(filterCategory)}` : "/announcements");
+      setAnnouncements(normalizeList(data));
     } catch (error) {
       setMessage(error.message || "Failed to load announcements");
     } finally {
@@ -98,26 +80,14 @@ function Announcements() {
 
   useEffect(() => {
     loadAnnouncements();
-    const onFocus = () => loadAnnouncements();
-    const onAnnouncementsChanged = () => {
-      setAnnouncements(normalizeAnnouncements(getStoredAnnouncements()));
-      setLastSyncedAt(new Date().toISOString());
-    };
-    const onStorage = () => {
-      onAnnouncementsChanged();
-    };
-
+      const onFocus = () => loadAnnouncements();
     window.addEventListener("focus", onFocus);
-    window.addEventListener("storage", onStorage);
-    window.addEventListener("kavyaAnnouncementsChanged", onAnnouncementsChanged);
     const timer = window.setInterval(loadAnnouncements, 20000);
     return () => {
       window.removeEventListener("focus", onFocus);
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("kavyaAnnouncementsChanged", onAnnouncementsChanged);
       window.clearInterval(timer);
     };
-  }, []);
+  }, [filterCategory]);
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -212,16 +182,14 @@ function Announcements() {
 
   const deleteAnnouncement = async (announcementId) => {
     try {
-      await apiRequest(`/announcements/${announcementId}`, {
-        method: "DELETE",
-      });
+      await apiRequest(`/announcements/${announcementId}`, { method: "DELETE" });
+      setAnnouncements((current) => current.filter((item) => item.id !== announcementId));
       if (editingId === announcementId) {
         resetForm();
       }
-      setMessage("Announcement deleted successfully");
-      await loadAnnouncements();
+      setMessage('Announcement deleted successfully');
     } catch (error) {
-      setMessage(error.message || "Failed to delete announcement");
+      setMessage(error.message || 'Failed to delete announcement');
     }
   };
 
@@ -231,7 +199,7 @@ function Announcements() {
     <>
       <Hero
       title="Announcements"
-      copy="Only Admin and HR can post announcements. PM, TL, and Employee can view announcements only. Data refreshes live from the backend."
+      copy="Only Admin and HR can post announcements. PM, TL, and Employee can view announcements only."
       />
 
       {message && (
@@ -256,9 +224,6 @@ function Announcements() {
               </select>
             </label>
           </div>
-          <span className="announcement-tag muted" title={lastSyncedAt ? `Last synced at ${formatDateTime(lastSyncedAt)}` : "Waiting for first sync"}>
-            {lastSyncedAt ? `Live sync: ${formatDateTime(lastSyncedAt)}` : "Live sync: waiting..."}
-          </span>
           {canCreate && (
             <button className="toolbar-primary" type="button" onClick={startCreate}>
               <i className="ri-megaphone-line" aria-hidden="true" />

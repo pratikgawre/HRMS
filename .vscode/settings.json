@@ -1,3 +1,21 @@
 {
+<<<<<<< HEAD
+    "java.compile.nullAnalysis.mode": "disabled",
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.import.maven.enabled": true,
+    "java.jdt.ls.java.home": "c:\\Program Files\\Java\\jdk-17",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-17",
+            "path": "c:\\Program Files\\Java\\jdk-17",
+            "default": true
+        }
+    ],
+    "cSpell.words": [
+        "springframework"
+    ]
+}
+=======
     "java.compile.nullAnalysis.mode": "disabled"
 }
+>>>>>>> 89936275cd0ccbd21e38423f849742217ae9dfa5

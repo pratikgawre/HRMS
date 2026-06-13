@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
-import { CardGrid, Hero, InsightGrid, Section } from './AdminDashboard.jsx';
-import { dashboardStats, announcements } from '../data/dummyData.js';
+import { CardGrid, Hero, Section } from './AdminDashboard.jsx';
+import { announcements as fallbackAnnouncements } from '../data/dummyData.js';
 import {
   applyCheckOutToRecord,
   createCheckInRecord,
@@ -21,6 +22,9 @@ function EmployeeDashboard() {
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
   const [leaveRequests, setLeaveRequests] = useState(getInitialLeaveRequests);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
+  const [latestAnnouncements, setLatestAnnouncements] = useState([]);
+  const [wellnessAnnouncements, setWellnessAnnouncements] = useState([]);
+  const [dashboardSummary, setDashboardSummary] = useState(null);
   const [message, setMessage] = useState('');
   const attendanceEmployee = getAttendanceEmployee();
   const employeeIdentity = getCurrentEmployeeIdentity();
@@ -38,16 +42,77 @@ function EmployeeDashboard() {
   const halfDays = myRows.filter((row) => row.status === 'Half Day').length;
   const totalConsideredDays = myRows.filter((row) => ['Present', 'Half Day', 'Absent', 'Late'].includes(row.status)).length;
   const weightedPresence = presentDays + (halfDays * 0.5);
+  const navigate = useNavigate();
+
+  const normalizeAnnouncements = (items = []) => (Array.isArray(items)
+    ? items.map((item, index) => ({
+      id: item.id || `ANN-${index}`,
+      title: item.title || '',
+      body: item.body || '',
+      category: item.category || 'Company',
+      date: item.dateLabel || item.date || '',
+      postedBy: item.postedBy || 'HR',
+    }))
+    : []);
+
   const attendanceRate = totalConsideredDays ? Math.round((weightedPresence / totalConsideredDays) * 100) : 0;
-  const employeeStats = dashboardStats.employee.map((stat, index) => (index === 0
-    ? { ...stat, value: `${attendanceRate}%`, delta: `${presentDays} present days` }
-    : index === 1
-      ? {
-        ...stat,
+  const employeeStats = useMemo(() => {
+    const fallbackStats = [
+      {
+        label: 'Attendance',
+        value: `${attendanceRate}%`,
+        delta: `${presentDays} present days`,
+        tone: 'blue',
+        icon: 'ri-time-line',
+        onClick: () => navigate('/employee/attendance'),
+      },
+      {
+        label: 'Leave Balance',
         value: String(leaveSummary.totalRemaining),
         delta: `${leaveSummary.totalUsed} used`,
-      }
-    : stat));
+        tone: 'green',
+        icon: 'ri-suitcase-line',
+        onClick: () => navigate('/employee/leave-requests'),
+      },
+      {
+        label: 'Tasks',
+        value: '00',
+        delta: '0 due today',
+        tone: 'orange',
+        icon: 'ri-task-line',
+        onClick: () => navigate('/employee/tasks'),
+      },
+      {
+        label: 'My Assets',
+        value: '00',
+        delta: 'Assigned to you',
+        tone: 'green',
+        icon: 'ri-briefcase-4-line',
+        onClick: () => navigate('/employee/assets'),
+      },
+      {
+        label: 'Announcements',
+        value: '00',
+        delta: 'Latest updates',
+        tone: 'pink',
+        icon: 'ri-megaphone-line',
+        onClick: () => navigate('/employee/announcements'),
+      },
+    ];
+
+    const summaryStats = dashboardSummary ? [
+      dashboardSummary.attendance,
+      dashboardSummary.leaveBalance,
+      dashboardSummary.tasks,
+      dashboardSummary.assets,
+      dashboardSummary.announcements,
+    ] : fallbackStats;
+
+    return summaryStats.map((stat, index) => ({
+      ...stat,
+      onClick: fallbackStats[index]?.onClick,
+    }));
+  }, [attendanceRate, dashboardSummary, leaveSummary.totalRemaining, leaveSummary.totalUsed, navigate, presentDays]);
 
   useEffect(() => {
     let active = true;
@@ -75,26 +140,41 @@ function EmployeeDashboard() {
         .catch(() => setLeaveTypes(DEFAULT_LEAVE_TYPES));
     };
 
+    const refreshAnnouncements = async () => {
+      const allAnnouncements = await safeApiRequest('/announcements', fallbackAnnouncements);
+      const normalizedAnnouncements = normalizeAnnouncements(allAnnouncements);
+      const wellness = normalizedAnnouncements.filter((item) => String(item.category || '').toLowerCase() === 'wellness');
+      const latest = normalizedAnnouncements.filter((item) => String(item.category || '').toLowerCase() !== 'wellness');
+
+      setLatestAnnouncements(latest);
+      setWellnessAnnouncements(wellness);
+    };
+
+    const refreshDashboardSummary = async () => {
+      const summary = await safeApiRequest(`/dashboard/employee/summary/${employeeIdentity.employeeId}`, null);
+      setDashboardSummary(summary);
+    };
+
     window.addEventListener('storage', refreshAttendance);
     window.addEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
     window.addEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
     window.addEventListener('kavyaSettingsChanged', refreshLeaveTypes);
+    window.addEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
 
     refreshLeaves();
     refreshLeaveTypes();
-    refreshAttendance();
-
-    const intervalId = window.setInterval(refreshAttendance, 60 * 1000);
+    refreshAnnouncements();
+    refreshDashboardSummary();
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
       window.removeEventListener('storage', refreshAttendance);
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
       window.removeEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
       window.removeEventListener('kavyaSettingsChanged', refreshLeaveTypes);
+      window.removeEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
     };
-  }, []);
+  }, [employeeIdentity.employeeId]);
 
   const updateAttendance = (updater) => {
     setAttendance((current) => {
@@ -125,7 +205,7 @@ function EmployeeDashboard() {
 
   return (
     <>
-      <Hero title="My Dashboard" copy="" />
+      <Hero title="My Dashboard" copy="Your attendance snapshot, leave balance, upcoming notices, and profile activity in one personal workspace." />
       <CardGrid stats={employeeStats} />
 
       {message && (
@@ -135,7 +215,7 @@ function EmployeeDashboard() {
         </div>
       )}
 
-      <div className="dashboard-grid">
+      <div className="dashboard-grid" style={{ display: 'block' }}>
         <Section title="My Attendance">
           <div className="attendance-action-panel">
             <div>
@@ -154,12 +234,18 @@ function EmployeeDashboard() {
               </button>
             </div>
           </div>
-          <DataTable columns={attendanceColumns} rows={myRows} />
+
+          <div className="attendance-table-container">
+            <DataTable columns={attendanceColumns} rows={myRows} />
+          </div>
         </Section>
+      </div>
+
+      <div className="dashboard-grid" style={{ display: 'block', marginTop: '16px' }}>
         <Section title="Latest Announcements" action="Read all">
           <div className="announcement-list">
-            {announcements.slice(0, 3).map((item) => (
-              <article key={item.title}>
+            {latestAnnouncements.slice(0, 3).map((item) => (
+              <article key={item.id}>
                 <span>{item.date}</span>
                 <strong>{item.title}</strong>
                 <p>{item.body}</p>
@@ -168,7 +254,23 @@ function EmployeeDashboard() {
           </div>
         </Section>
       </div>
-      <InsightGrid />
+
+      <Section title="Wellbeing Reminders" className="wellbeing-section">
+        <div className="wellbeing-list wellbeing-list--single-row">
+          {wellnessAnnouncements.slice(0, 3).map((item) => (
+            <button key={item.id} type="button">
+              <i className="ri-heart-pulse-line" aria-hidden="true" />
+              <div>
+                <strong>{item.title}</strong>
+                <p>{item.body}</p>
+              </div>
+            </button>
+          ))}
+          {wellnessAnnouncements.length === 0 && (
+            <p className="notification-empty">No wellness announcements available.</p>
+          )}
+        </div>
+      </Section>
     </>
   );
 }

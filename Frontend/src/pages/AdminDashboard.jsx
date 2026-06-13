@@ -10,7 +10,7 @@ import { getInitialAttendanceRows, getTodayLabel, refreshStoredAttendanceRows } 
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 
-const DASHBOARD_REFRESH_MS = 5000;
+const DASHBOARD_REFRESH_MS = 15000;
 let todayFocusCache = todayFocus;
 
 function normalizeDashboardEmployee(employee, index = 0) {
@@ -88,7 +88,6 @@ function AdminDashboard() {
   const [dashboardAnnouncements, setDashboardAnnouncements] = useState(getInitialDashboardAnnouncements);
   const [dashboardAttendanceRows, setDashboardAttendanceRows] = useState(getInitialAttendanceRows);
   const [isOpenRolesModalOpen, setIsOpenRolesModalOpen] = useState(false);
-  const [lastSyncedAt, setLastSyncedAt] = useState(() => new Date());
   const navigate = useNavigate();
   const pendingLeaveRequests = dashboardLeaveRequests.filter((request) => request.status === 'Pending');
   const urgentPendingLeaves = pendingLeaveRequests.filter((request) => Number(request.days) >= 3).length;
@@ -100,7 +99,6 @@ function AdminDashboard() {
   const presentRate = dashboardEmployees.length
     ? Math.round((presentTodayCount / dashboardEmployees.length) * 100)
     : 0;
-
   const adminStats = dashboardStats.admin.map((stat, index) => (index === 0
     ? {
       ...stat,
@@ -138,12 +136,10 @@ function AdminDashboard() {
   };
 
   useEffect(() => {
-    let isActive = true;
-
     const refreshLeaveRequests = () => {
       const cached = getInitialDashboardLeaves();
       setDashboardLeaveRequests(cached);
-      return safeApiRequest('/leaves', cached).then((rows) => {
+      safeApiRequest('/leaves', cached).then((rows) => {
         const source = Array.isArray(rows) ? rows : cached;
         const normalized = source.map((request, index) => normalizeDashboardLeaveRequest(request, index));
         setDashboardLeaveRequests(normalized);
@@ -151,7 +147,7 @@ function AdminDashboard() {
       });
     };
     const refreshEmployees = () => {
-      return apiRequest('/employees').then((rows) => {
+      apiRequest('/employees').then((rows) => {
         const source = Array.isArray(rows) ? rows : [];
         const normalized = source
           .map((employee, index) => normalizeDashboardEmployee(employee, index))
@@ -166,7 +162,7 @@ function AdminDashboard() {
     const refreshAnnouncements = () => {
       const cached = getInitialDashboardAnnouncements();
       setDashboardAnnouncements(cached);
-      return safeApiRequest('/announcements', cached).then((rows) => {
+      safeApiRequest('/announcements', cached).then((rows) => {
         const source = Array.isArray(rows) ? rows : cached;
         const normalized = source.map((item, index) => normalizeDashboardAnnouncement(item, index));
         setDashboardAnnouncements(normalized);
@@ -175,25 +171,15 @@ function AdminDashboard() {
     };
     const refreshAttendance = () => {
       setDashboardAttendanceRows(getInitialAttendanceRows());
-      return refreshStoredAttendanceRows()
+      refreshStoredAttendanceRows()
         .then(setDashboardAttendanceRows)
         .catch(() => {});
     };
 
-    const syncDashboard = async () => {
-      await Promise.allSettled([
-        refreshLeaveRequests(),
-        refreshEmployees(),
-        refreshAnnouncements(),
-        refreshAttendance(),
-      ]);
-
-      if (isActive) {
-        setLastSyncedAt(new Date());
-      }
-    };
-
-    syncDashboard();
+    refreshLeaveRequests();
+    refreshEmployees();
+    refreshAnnouncements();
+    refreshAttendance();
 
     window.addEventListener('storage', refreshLeaveRequests);
     window.addEventListener('storage', refreshEmployees);
@@ -203,11 +189,14 @@ function AdminDashboard() {
     window.addEventListener('kavyaEmployeesChanged', refreshEmployees);
     window.addEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
     window.addEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
-    document.addEventListener('visibilitychange', syncDashboard);
-    const intervalId = window.setInterval(syncDashboard, DASHBOARD_REFRESH_MS);
+    const intervalId = window.setInterval(() => {
+      refreshLeaveRequests();
+      refreshEmployees();
+      refreshAnnouncements();
+      refreshAttendance();
+    }, DASHBOARD_REFRESH_MS);
 
     return () => {
-      isActive = false;
       window.removeEventListener('storage', refreshLeaveRequests);
       window.removeEventListener('storage', refreshEmployees);
       window.removeEventListener('storage', refreshAnnouncements);
@@ -216,18 +205,20 @@ function AdminDashboard() {
       window.removeEventListener('kavyaEmployeesChanged', refreshEmployees);
       window.removeEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
-      document.removeEventListener('visibilitychange', syncDashboard);
       window.clearInterval(intervalId);
     };
   }, []);
 
   return (
     <>
+<<<<<<< HEAD
       <Hero
         title="Admin Dashboard"
         copy=""
         liveStatus={`Live sync · ${lastSyncedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
       />
+=======
+      
       <QuickActions detailOverrides={quickActionDetails} />
       <CardGrid stats={adminStats} />
       <div className="admin-sections-stack">
@@ -328,7 +319,7 @@ export const checkedInColumns = [
   { key: 'status', label: 'Status' },
 ];
 
-export function Hero({ title, copy, liveStatus = '' }) {
+export function Hero({ title, copy }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
 
@@ -521,12 +512,6 @@ export function Hero({ title, copy, liveStatus = '' }) {
           <p>{copy}</p>
         </div>
         <div className="hero-actions">
-          {liveStatus && (
-            <div className="hero-live-status" role="status" aria-live="polite">
-              <span className="hero-live-dot" aria-hidden="true" />
-              <span>{liveStatus}</span>
-            </div>
-          )}
           <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
           <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
         </div>
@@ -608,8 +593,8 @@ export function Hero({ title, copy, liveStatus = '' }) {
   );
 }
 
-export function CardGrid({ stats }) {
-  return <div className="card-grid">{stats.map((stat) => <DashboardCard key={stat.label} {...stat} />)}</div>;
+export function CardGrid({ stats, className = '' }) {
+  return <div className={`card-grid ${className}`.trim()}>{stats.map((stat) => <DashboardCard key={stat.label} {...stat} />)}</div>;
 }
 
 export function Section({
@@ -665,10 +650,13 @@ export function QuickActions({ detailOverrides = {}, labelOverrides = {}, pathOv
 export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, wellnessAnnouncements = [] }) {
   const [focusItems, setFocusItems] = useState(todayFocusCache);
   const [isPlanDayOpen, setIsPlanDayOpen] = useState(false);
+<<<<<<< HEAD
   const [generatedFocusItems, setGeneratedFocusItems] = useState(null);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [planError, setPlanError] = useState('');
   const [planToast, setPlanToast] = useState('');
+=======
+>>>>>>> origin/master
   const [selectedReminder, setSelectedReminder] = useState(null);
 
   const saveFocusItems = (next) => {
@@ -676,6 +664,7 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
     setFocusItems(next);
   };
 
+<<<<<<< HEAD
   const openPlanDay = () => {
     setGeneratedFocusItems(null);
     setPlanError('');
@@ -701,51 +690,22 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
     return () => window.clearTimeout(timer);
   }, [planToast]);
 
-  const planFromRealtime = async () => {
-    setIsGeneratingPlan(true);
-    setPlanError('');
+  
 
-    try {
-      const summary = await apiRequest('/dashboard/admin/summary');
-      const totalEmployees = Number(summary?.totalEmployees ?? employees);
-      const pendingLeavesCount = Number(summary?.pendingLeaves ?? pendingLeaves);
-      const openRolesCount = Number(summary?.openRoles ?? openRoles);
-      const presentTodayCount = Number(summary?.presentToday ?? 0);
-      const attendanceRate = totalEmployees > 0 ? Math.round((presentTodayCount / totalEmployees) * 100) : 0;
-
-      const next = [
-        {
-          title: 'Leave approvals',
-          meta: `${pendingLeavesCount} pending`,
-          progress: Math.min(100, 25 + (pendingLeavesCount * 12)),
-          tone: 'orange',
-        },
-        {
-          title: 'Hiring pipeline',
-          meta: `${openRolesCount} open roles`,
-          progress: Math.min(100, 30 + (openRolesCount * 10)),
-          tone: 'blue',
-        },
-        {
-          title: 'Team coverage',
-          meta: `${presentTodayCount}/${totalEmployees} present`,
-          progress: Math.min(100, attendanceRate || 0),
-          tone: 'green',
-        },
-      ];
-
-      saveFocusItems(next);
-      setGeneratedFocusItems(next);
-      setPlanToast('Focus plan generated successfully.');
-    } catch (error) {
-      setPlanError(error instanceof Error ? error.message : 'Unable to fetch realtime plan data.');
-    } finally {
-      setIsGeneratingPlan(false);
-    }
+  const planFromRealtime = () => {
+    const next = [
+      { title: 'Leave approvals', meta: `${pendingLeaves} pending`, progress: Math.min(100, 40 + (pendingLeaves * 8)), tone: 'orange' },
+      { title: 'Hiring pipeline', meta: `${openRoles} open roles`, progress: Math.min(100, 35 + (openRoles * 10)), tone: 'blue' },
+      { title: 'Team coverage', meta: `${employees} employees`, progress: Math.min(100, 55 + (employees > 0 ? 20 : 0)), tone: 'green' },
+    ];
+    saveFocusItems(next);
+    setIsPlanDayOpen(false);
+>>>>>>> origin/master
   };
 
   return (
     <div className="insight-grid">
+<<<<<<< HEAD
       {planToast && (
         <div className="save-toast" role="status" aria-live="polite">
           <span className="save-toast-icon" aria-hidden="true">
@@ -758,10 +718,12 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
           <span className="save-toast-accent" aria-hidden="true" />
         </div>
       )}
+
+
       <section className="section-card">
         <div className="section-heading">
           <h3>Today Focus</h3>
-          <button type="button" onClick={openPlanDay}>Plan day</button>
+          <button type="button" onClick={() => setIsPlanDayOpen(true)}>Plan day</button>
         </div>
         <div className="focus-list">
           {focusItems.map((item) => (
@@ -795,18 +757,19 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
         </div>
       </Section>
       {isPlanDayOpen && (
-        <div className="smart-summary-backdrop" role="presentation" onClick={closePlanDay}>
+        <div className="smart-summary-backdrop" role="presentation" onClick={() => setIsPlanDayOpen(false)}>
           <section className="open-roles-modal" role="dialog" aria-modal="true" aria-label="Plan day focus" onClick={(event) => event.stopPropagation()}>
             <div className="open-roles-modal-head">
               <div>
                 <p className="eyebrow">Today Focus</p>
                 <h3>Plan day</h3>
               </div>
-              <button type="button" onClick={closePlanDay} aria-label="Close plan day">
+              <button type="button" onClick={() => setIsPlanDayOpen(false)} aria-label="Close plan day">
                 <i className="ri-close-line" aria-hidden="true" />
               </button>
             </div>
             <div className="open-roles-modal-body">
+< HEAD
               {generatedFocusItems ? (
                 <>
                   <p className="notification-empty">Focus plan generated from latest realtime stats.</p>
@@ -834,6 +797,12 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
                   {isGeneratingPlan ? 'Generating...' : 'Generate Plan'}
                 </button>
                 <button type="button" onClick={closePlanDay}>Close</button>
+=======
+              <p className="notification-empty">Create focus plan from latest realtime stats.</p>
+              <div className="notification-actions">
+                <button type="button" onClick={planFromRealtime}>Generate Plan</button>
+                <button type="button" onClick={() => setIsPlanDayOpen(false)}>Cancel</button>
+>>>>>>> origin/master
               </div>
             </div>
           </section>

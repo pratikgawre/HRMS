@@ -61,13 +61,14 @@ const menus = {
   ],
   employee: [
     { label: 'My Dashboard', to: '/employee/dashboard', icon: 'ri-dashboard-line' },
-    { label: 'Announcements', to: '/employee/announcements', icon: 'ri-megaphone-line' },
-    { label: 'Leave Requests', to: '/employee/leave-requests', icon: 'ri-calendar-check-line' },
     { label: 'My Attendance', to: '/employee/attendance', icon: 'ri-time-line' },
+    { label: 'My Tasks', to: '/employee/tasks', icon: 'ri-task-line' },
+    { label: 'Leave Request', to: '/employee/leave-requests', icon: 'ri-calendar-check-line' },
     { label: 'My Payslip', to: '/employee/payroll', icon: 'ri-money-rupee-circle-line' },
-    { label: 'My Profile', to: '/employee/profile', icon: 'ri-user-line' },
-    { label: 'Settings', to: '/employee/settings', icon: 'ri-settings-3-line' },
+    { label: 'My Asset', to: '/employee/assets', icon: 'ri-briefcase-4-line' },
+    { label: 'Announcement', to: '/employee/announcements', icon: 'ri-megaphone-line' },
     { label: 'Support', to: '/employee/support', icon: 'ri-customer-service-2-line' },
+    { label: 'Profile', to: '/employee/profile', icon: 'ri-user-line' },
   ],
 };
 
