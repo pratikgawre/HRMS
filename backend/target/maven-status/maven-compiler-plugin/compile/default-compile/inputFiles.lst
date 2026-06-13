@@ -1,5 +1,6 @@
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\LeaveController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\Notification.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\dto\EmployeeLeaveSummaryResponse.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\AttendanceRecord.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\AuthController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\websocket\SettingsWebSocketHandler.java
@@ -7,6 +8,7 @@ C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\reposi
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\ProjectController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\dto\AdminDashboardSummary.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\service\NotificationAudience.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\service\EmployeeLeaveSummaryService.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\Announcement.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\LeaveRequestRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\config\WebConfig.java
@@ -44,6 +46,7 @@ C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\contro
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\AssetRequestController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\dto\LoginResponse.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\SupportTicket.java
+C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\controller\EmployeeLeaveSummaryController.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\AssetRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\repository\ProjectRepository.java
 C:\Users\Admin\Desktop\React Project\backend\src\main\java\com\kavya\hrms\model\Department.java

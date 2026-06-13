@@ -88,7 +88,7 @@ public class PayrollController {
         : "Payroll for " + records.get(0).getMonth() + " " + records.get(0).getYear() + " was " + verb + ".";
 
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.payrollRecipients(),
         title,
         message,
         "payroll",

@@ -127,7 +127,7 @@ function AdminDashboard() {
         ...stat,
         value: String(presentTodayCount),
         delta: `${presentRate}% attendance`,
-        onClick: () => navigate('/admin/attendance'),
+        onClick: () => navigate('/admin/team-attendance'),
       }
     : stat));
 
@@ -225,7 +225,7 @@ function AdminDashboard() {
     <>
       <Hero
         title="Admin Dashboard"
-        copy="Monitor organization health, access controls, attendance exceptions, and people operations from one command center."
+        copy=""
         liveStatus={`Live sync · ${lastSyncedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
       />
       <QuickActions detailOverrides={quickActionDetails} />
@@ -237,7 +237,7 @@ function AdminDashboard() {
         <Section title="Pending Leave Queue" action="Approve" actionTo="/admin/leave-management">
           <DataTable columns={leaveColumns} rows={pendingLeaveRequests} emptyMessage="No pending leave requests." />
         </Section>
-        <Section title="Checked In Today" action="View all" actionTo="/admin/attendance">
+        <Section title="Checked In Today" action="View all" actionTo="/admin/team-attendance">
           <DataTable columns={checkedInColumns} rows={checkedInTodayRows} emptyMessage="No employees have checked in today." />
         </Section>
       </div>
@@ -666,7 +666,9 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
   const [focusItems, setFocusItems] = useState(todayFocusCache);
   const [isPlanDayOpen, setIsPlanDayOpen] = useState(false);
   const [generatedFocusItems, setGeneratedFocusItems] = useState(null);
-  const [savePopup, setSavePopup] = useState('');
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [planError, setPlanError] = useState('');
+  const [planToast, setPlanToast] = useState('');
   const [selectedReminder, setSelectedReminder] = useState(null);
 
   const saveFocusItems = (next) => {
@@ -674,49 +676,84 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
     setFocusItems(next);
   };
 
-  useEffect(() => {
-    if (!savePopup) {
-      return undefined;
-    }
-
-    const timer = window.setTimeout(() => {
-      setSavePopup('');
-    }, 2200);
-
-    return () => window.clearTimeout(timer);
-  }, [savePopup]);
-
   const openPlanDay = () => {
     setGeneratedFocusItems(null);
+    setPlanError('');
     setIsPlanDayOpen(true);
   };
 
   const closePlanDay = () => {
     setIsPlanDayOpen(false);
     setGeneratedFocusItems(null);
+    setPlanError('');
+    setIsGeneratingPlan(false);
   };
 
-  const planFromRealtime = () => {
-    const next = [
-      { title: 'Leave approvals', meta: `${pendingLeaves} pending`, progress: Math.min(100, 40 + (pendingLeaves * 8)), tone: 'orange' },
-      { title: 'Hiring pipeline', meta: `${openRoles} open roles`, progress: Math.min(100, 35 + (openRoles * 10)), tone: 'blue' },
-      { title: 'Team coverage', meta: `${employees} employees`, progress: Math.min(100, 55 + (employees > 0 ? 20 : 0)), tone: 'green' },
-    ];
-    saveFocusItems(next);
-    setGeneratedFocusItems(next);
-    setSavePopup('Focus plan generated successfully.');
+  useEffect(() => {
+    if (!planToast) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setPlanToast('');
+    }, 2200);
+
+    return () => window.clearTimeout(timer);
+  }, [planToast]);
+
+  const planFromRealtime = async () => {
+    setIsGeneratingPlan(true);
+    setPlanError('');
+
+    try {
+      const summary = await apiRequest('/dashboard/admin/summary');
+      const totalEmployees = Number(summary?.totalEmployees ?? employees);
+      const pendingLeavesCount = Number(summary?.pendingLeaves ?? pendingLeaves);
+      const openRolesCount = Number(summary?.openRoles ?? openRoles);
+      const presentTodayCount = Number(summary?.presentToday ?? 0);
+      const attendanceRate = totalEmployees > 0 ? Math.round((presentTodayCount / totalEmployees) * 100) : 0;
+
+      const next = [
+        {
+          title: 'Leave approvals',
+          meta: `${pendingLeavesCount} pending`,
+          progress: Math.min(100, 25 + (pendingLeavesCount * 12)),
+          tone: 'orange',
+        },
+        {
+          title: 'Hiring pipeline',
+          meta: `${openRolesCount} open roles`,
+          progress: Math.min(100, 30 + (openRolesCount * 10)),
+          tone: 'blue',
+        },
+        {
+          title: 'Team coverage',
+          meta: `${presentTodayCount}/${totalEmployees} present`,
+          progress: Math.min(100, attendanceRate || 0),
+          tone: 'green',
+        },
+      ];
+
+      saveFocusItems(next);
+      setGeneratedFocusItems(next);
+      setPlanToast('Focus plan generated successfully.');
+    } catch (error) {
+      setPlanError(error instanceof Error ? error.message : 'Unable to fetch realtime plan data.');
+    } finally {
+      setIsGeneratingPlan(false);
+    }
   };
 
   return (
     <div className="insight-grid">
-      {savePopup && (
+      {planToast && (
         <div className="save-toast" role="status" aria-live="polite">
           <span className="save-toast-icon" aria-hidden="true">
             <i className="ri-checkbox-circle-fill" />
           </span>
           <div className="save-toast-body">
             <span className="save-toast-kicker">Success</span>
-            <strong>{savePopup}</strong>
+            <strong>{planToast}</strong>
           </div>
           <span className="save-toast-accent" aria-hidden="true" />
         </div>
@@ -791,8 +828,11 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
               ) : (
                 <p className="notification-empty">Create focus plan from latest realtime stats.</p>
               )}
+              {planError ? <p className="notification-empty">{planError}</p> : null}
               <div className="notification-actions">
-                <button type="button" onClick={planFromRealtime}>Generate Plan</button>
+                <button type="button" onClick={planFromRealtime} disabled={isGeneratingPlan}>
+                  {isGeneratingPlan ? 'Generating...' : 'Generate Plan'}
+                </button>
                 <button type="button" onClick={closePlanDay}>Close</button>
               </div>
             </div>

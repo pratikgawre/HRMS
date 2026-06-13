@@ -38,7 +38,7 @@ public class AssetController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     Asset saved = assetRepository.save(asset);
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.assetRecipients(),
         "Asset created",
         buildAssetMessage(saved, "created"),
         "asset",
@@ -59,7 +59,7 @@ public class AssetController {
     List<Asset> saved = assetRepository.saveAll(assets);
     if (existingCount > 0) {
       notificationService.notifyRoles(
-          NotificationAudience.operationalRecipients(accessRole),
+          NotificationAudience.assetRecipients(),
           "Assets refreshed",
           "Asset inventory was updated in bulk.",
           "asset",
@@ -80,7 +80,7 @@ public class AssetController {
     asset.setId(id);
     Asset saved = assetRepository.save(asset);
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.assetRecipients(),
         "Asset updated",
         buildAssetMessage(saved, "updated"),
         "asset",
@@ -99,7 +99,7 @@ public class AssetController {
     Asset current = assetRepository.findById(id).orElse(null);
     assetRepository.deleteById(id);
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.assetRecipients(),
         "Asset removed",
         buildAssetMessage(current, "removed"),
         "asset",

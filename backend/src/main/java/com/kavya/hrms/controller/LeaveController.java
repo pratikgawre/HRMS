@@ -12,8 +12,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -46,7 +46,7 @@ public class LeaveController {
       request.setOwnerRole(accessRole);
     }
     LeaveRequest saved = leaveRequestRepository.save(request);
-    notifyLeaveChange(saved, "Leave request submitted", accessRole, userId, "submitted");
+    notifyLeaveChange(saved, accessRole, userId, "submitted");
     return saved;
   }
 
@@ -57,7 +57,7 @@ public class LeaveController {
     List<LeaveRequest> saved = leaveRequestRepository.saveAll(requests);
     if (existingCount > 0) {
       notificationService.notifyRoles(
-          NotificationAudience.leaveRecipients("hr"),
+          NotificationAudience.leaveRecipients(),
           "Leave records refreshed",
           "Leave records were updated in bulk.",
           "leave",
@@ -77,16 +77,19 @@ public class LeaveController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     request.setId(id);
     LeaveRequest saved = leaveRequestRepository.save(request);
-    notifyLeaveChange(saved, "Leave request updated", accessRole, userId, "updated");
+    notifyLeaveChange(saved, accessRole, userId, determineLeaveVerb(saved));
     return saved;
   }
 
-  private void notifyLeaveChange(LeaveRequest request, String title, String accessRole, String userId, String verb) {
+  private void notifyLeaveChange(LeaveRequest request, String accessRole, String userId, String verb) {
     String employeeUserId = resolveEmployeeUserId(request.getEmployeeId()).orElse("");
+    String title = buildLeaveNotificationTitle(request, verb);
+    String message = buildLeaveMessage(request, verb);
+
     notificationService.notifyRoles(
-        NotificationAudience.leaveRecipients(accessRole),
+        NotificationAudience.leaveRecipients(),
         title,
-        buildLeaveMessage(request, verb),
+        message,
         "leave",
         request.getId(),
         accessRole,
@@ -96,7 +99,7 @@ public class LeaveController {
       notificationService.notifyUsers(
           List.of(employeeUserId),
           title,
-          buildLeaveMessage(request, verb),
+          message,
           "leave",
           request.getId(),
           accessRole,
@@ -110,6 +113,50 @@ public class LeaveController {
     }
 
     return appUserRepository.findByEmployeeId(employeeId).map(user -> user.getUserId());
+  }
+
+  private String determineLeaveVerb(LeaveRequest request) {
+    if (request == null) {
+      return "updated";
+    }
+
+    String status = String.valueOf(request.getStatus() == null ? "" : request.getStatus()).trim().toLowerCase();
+    if ("approved".equals(status)) {
+      return "approved";
+    }
+    if ("rejected".equals(status)) {
+      return "rejected";
+    }
+    if ("recommended".equals(status)) {
+      return "recommended";
+    }
+    return "updated";
+  }
+
+  private String buildLeaveNotificationTitle(LeaveRequest request, String verb) {
+    String normalizedVerb = String.valueOf(verb == null ? "" : verb).trim().toLowerCase();
+    if ("approved".equals(normalizedVerb)) {
+      return "Leave approved";
+    }
+    if ("rejected".equals(normalizedVerb)) {
+      return "Leave rejected";
+    }
+    if ("recommended".equals(normalizedVerb)) {
+      return "Leave recommended";
+    }
+    if (request != null && request.getStatus() != null && !request.getStatus().isBlank()) {
+      String status = request.getStatus().trim();
+      if ("approved".equalsIgnoreCase(status)) {
+        return "Leave approved";
+      }
+      if ("rejected".equalsIgnoreCase(status)) {
+        return "Leave rejected";
+      }
+      if ("recommended".equalsIgnoreCase(status)) {
+        return "Leave recommended";
+      }
+    }
+    return "Leave request " + normalizedVerb;
   }
 
   private String buildLeaveMessage(LeaveRequest request, String verb) {

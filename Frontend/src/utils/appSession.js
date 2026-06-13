@@ -1,6 +1,6 @@
 const TOKEN_STORAGE_KEY = 'kavyaAuthToken';
-// Keep session bootstrap on the same API origin as the rest of the app.
-const API_BASE = '/api';
+// Keep session bootstrap configurable while defaulting to the same API origin.
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 let session = {};
 const storage = typeof window !== 'undefined' ? window.sessionStorage : null;

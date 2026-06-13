@@ -65,6 +65,7 @@ function TeamLeadDashboard() {
   const [liveTasks, setLiveTasks] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [payrollCycleText, setPayrollCycleText] = useState('Monthly payroll cycle');
   const [employeeLeaveSummary, setEmployeeLeaveSummary] = useState({
     totalAllotted: 0,
     totalTaken: 0,
@@ -85,6 +86,7 @@ function TeamLeadDashboard() {
       setAttendance(normalizeAttendanceRows(attendanceRows));
       setLeaveRequests(normalizeLeaveRows(leaveRows));
       setAnnouncements(normalizeAnnouncementRows(announcementRows));
+      setPayrollCycleText(getPayrollDueText(settingsPayload));
       setEmployeeLeaveSummary(normalizeEmployeeLeaveSummary(summaryPayload, settingsPayload, leaveRows, currentEmployee));
       setLiveTasks(Array.isArray(taskRows) ? taskRows : []);
     });
@@ -130,12 +132,13 @@ function TeamLeadDashboard() {
   const presentToday = teamTodayAttendance.filter((row) => String(row.status || '').toLowerCase() === 'present');
   const pendingLeaves = leaveRequests.filter((request) => String(request.status || '').toLowerCase() === 'pending');
   const openTasks = liveTasks.filter((task) => String(task.status || '').toLowerCase() !== 'completed');
-  const departments = new Set(teamMembers.map((employee) => employee.department).filter(Boolean));
+  const departments = useMemo(() => buildDepartmentList(teamMembers), [teamMembers]);
   const urgentLeaves = pendingLeaves.filter((request) => Number(request.days) >= 3).length;
   const highPriorityTasks = openTasks.filter((task) => String(task.priority || '').toLowerCase() === 'high').length;
   const activeAnnouncements = announcements.filter((item) => String(item.status || 'active').toLowerCase() !== 'inactive');
   const employeeLeaveDetail = `Total: ${employeeLeaveSummary.totalAllotted} | Taken: ${employeeLeaveSummary.totalTaken} | Remaining: ${employeeLeaveSummary.totalRemaining}`;
-  const attendanceLink = '/team-lead/attendance';
+  const profileDetail = currentEmployee.employee || currentEmployee.employeeName || 'Open my profile';
+  const attendanceLink = '/team-lead/team-attendance';
   const todayAttendance = teamTodayAttendance;
 
   const summaryCards = [
@@ -155,14 +158,14 @@ function TeamLeadDashboard() {
       icon: 'ri-list-check-3',
       onClick: () => navigate('/team-lead/tasks?status=Pending'),
     },
-    {
-      label: 'Present Today',
-      value: String(presentToday.length).padStart(2, '0'),
-      delta: `${teamMembers.length ? Math.round((presentToday.length / teamMembers.length) * 100) : 0}% attendance`,
-      tone: 'green',
-      icon: 'ri-user-smile-line',
-      onClick: () => navigate('/team-lead/attendance?status=Present'),
-    },
+      {
+        label: 'Present Today',
+        value: String(presentToday.length).padStart(2, '0'),
+        delta: `${teamMembers.length ? Math.round((presentToday.length / teamMembers.length) * 100) : 0}% attendance`,
+        tone: 'green',
+        icon: 'ri-user-smile-line',
+        onClick: () => navigate('/team-lead/team-attendance?status=Present'),
+      },
     {
       label: 'Leave Requests',
       value: String(pendingLeaves.length).padStart(2, '0'),
@@ -174,9 +177,9 @@ function TeamLeadDashboard() {
   ];
 
   const quickActionDetails = {
-    'Add Employee': '',
+    'Add Employee': profileDetail,
     'Approve Leave': employeeLeaveDetail,
-    'Run Payroll': `${departments.size} departments`,
+    'Run Payroll': payrollCycleText,
     'Post Notice': `${activeAnnouncements.length} published`,
   };
 
@@ -187,6 +190,7 @@ function TeamLeadDashboard() {
 
   const quickActionPaths = {
     'Add Employee': '/team-lead/profile',
+    'Approve Leave': '/team-lead/leave-review',
   };
 
   const reviewLink = '/team-lead/leave-review?status=Pending';
@@ -196,6 +200,17 @@ function TeamLeadDashboard() {
     <>
       <Hero title="Team Lead Dashboard" copy="Coordinate team attendance, task ownership, leave requests, and day-to-day delivery updates." />
       <QuickActions detailOverrides={quickActionDetails} labelOverrides={quickActionLabels} pathOverrides={quickActionPaths} />
+      <section className="team-lead-department-strip" aria-label="Payroll departments">
+        <div className="team-lead-department-strip-head">
+          <p className="eyebrow">Run Payroll</p>
+          <strong>Departments in scope</strong>
+        </div>
+        <div className="project-member-chips">
+          {departments.slice(0, 5).map((department) => (
+            <span key={department} className="project-member-chip">{department}</span>
+          ))}
+        </div>
+      </section>
       <CardGrid stats={summaryCards} />
       <Section title="Leave Review" action="Review" actionTo={reviewLink}>
         <DataTable columns={leaveColumns} rows={leaveRequests} />
@@ -253,6 +268,34 @@ function normalizeAnnouncementRows(rows) {
     status: item.status || 'Active',
     category: item.category || 'Other',
   }));
+}
+
+function buildDepartmentList(employees) {
+  const seen = new Set();
+  const departments = [];
+
+  (Array.isArray(employees) ? employees : []).forEach((employee) => {
+    const department = String(employee.department || '').trim();
+    if (!department || department === '-' || seen.has(department)) {
+      return;
+    }
+
+    seen.add(department);
+    departments.push(department);
+  });
+
+  return departments;
+}
+
+function getPayrollDueText(settings) {
+  const payrollCutoff = String(settings?.payrollCutoff || settings?.payrollSettings?.['Salary Credit Day'] || '').trim();
+  if (payrollCutoff) {
+    return payrollCutoff.toLowerCase().includes('day')
+      ? payrollCutoff
+      : `Due ${payrollCutoff}`;
+  }
+
+  return 'Monthly payroll cycle';
 }
 
 function isAdminEmployee(employee) {

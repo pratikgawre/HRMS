@@ -542,7 +542,3 @@ function isAdminEmployee(employee) {
 }
 
 export default Tasks;
-
-console.log(
-  JSON.parse(localStorage.getItem('kavyaUser'))
-);

@@ -20,6 +20,7 @@ com\kavya\hrms\HrmsBackendApplication.class
 com\kavya\hrms\controller\LeaveController.class
 com\kavya\hrms\controller\SystemSettingsController.class
 com\kavya\hrms\repository\PayrollRecordRepository.class
+com\kavya\hrms\service\EmployeeLeaveSummaryService.class
 com\kavya\hrms\model\Employee.class
 com\kavya\hrms\repository\AppUserRepository.class
 com\kavya\hrms\controller\AttendanceController.class
@@ -27,6 +28,7 @@ com\kavya\hrms\model\ProjectMember.class
 com\kavya\hrms\model\TaskItem.class
 com\kavya\hrms\service\NotificationAudience.class
 com\kavya\hrms\model\AssetRequest.class
+com\kavya\hrms\service\AttendanceAutoCheckoutService.class
 com\kavya\hrms\repository\TaskRepository.class
 com\kavya\hrms\repository\LeaveRequestRepository.class
 com\kavya\hrms\repository\ProjectRepository.class
@@ -51,9 +53,11 @@ com\kavya\hrms\controller\AssetController.class
 com\kavya\hrms\controller\AssetRequestController.class
 com\kavya\hrms\controller\AuthController.class
 com\kavya\hrms\config\WebConfig.class
+com\kavya\hrms\controller\EmployeeLeaveSummaryController.class
 com\kavya\hrms\model\LeaveType.class
 com\kavya\hrms\repository\AssetRepository.class
 com\kavya\hrms\model\PayrollRecord.class
+com\kavya\hrms\dto\EmployeeLeaveSummaryResponse.class
 com\kavya\hrms\dto\LoginRequest.class
 com\kavya\hrms\model\SupportTicket.class
 com\kavya\hrms\model\AuthSession.class
