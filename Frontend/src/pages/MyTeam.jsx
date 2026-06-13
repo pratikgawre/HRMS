@@ -118,7 +118,7 @@ function MyTeam() {
 
   const cardRoutes = {
     'Team Members': `${roleBasePath}/team`,
-    'Attendance Marked': `${roleBasePath}/attendance`,
+    'Attendance Marked': `${roleBasePath}/team-attendance`,
     'Open Workload': `${roleBasePath}/tasks`,
     Departments: role === 'projectManager' ? `${roleBasePath}/departments` : `${roleBasePath}/team`,
   };

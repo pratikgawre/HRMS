@@ -13,15 +13,16 @@ import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
 import com.kavya.hrms.repository.TaskRepository;
-import java.util.Comparator;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.Map;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,6 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/dashboard")
 public class DashboardController {
+  private static final ZoneId KOLKATA_ZONE = ZoneId.of("Asia/Kolkata");
+  private static final DateTimeFormatter TODAY_LABEL_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy");
+
   private final EmployeeRepository employeeRepository;
   private final LeaveRequestRepository leaveRequestRepository;
   private final AnnouncementRepository announcementRepository;
@@ -62,13 +66,10 @@ public class DashboardController {
     response.setPendingLeaves(leaveRequestRepository.findAll().stream().filter(r -> "Pending".equalsIgnoreCase(r.getStatus())).count());
     response.setOpenRoles(announcementRepository.findByCategoryIgnoreCase("Vacancy").size());
 
-    String latestDay = attendanceRecordRepository.findAll().stream()
-      .map(r -> r.getDateLabel() == null ? "" : r.getDateLabel())
-      .max(Comparator.naturalOrder())
-      .orElse("");
+    String todayLabel = LocalDate.now(KOLKATA_ZONE).format(TODAY_LABEL_FORMATTER);
 
     long presentToday = attendanceRecordRepository.findAll().stream()
-      .filter(r -> latestDay.equals(r.getDateLabel()))
+      .filter(r -> todayLabel.equals(r.getDateLabel()) || todayLabel.equals(r.getDate()))
       .filter(r -> "Present".equalsIgnoreCase(r.getStatus()))
       .count();
     response.setPresentToday(presentToday);

@@ -125,7 +125,7 @@ function AdminDashboard() {
         ...stat,
         value: String(presentTodayCount),
         delta: `${presentRate}% attendance`,
-        onClick: () => navigate('/admin/attendance'),
+        onClick: () => navigate('/admin/team-attendance'),
       }
     : stat));
 
@@ -211,7 +211,14 @@ function AdminDashboard() {
 
   return (
     <>
-      <Hero title="Admin Dashboard" copy="Monitor organization health, access controls, attendance exceptions, and people operations from one command center." />
+<<<<<<< HEAD
+      <Hero
+        title="Admin Dashboard"
+        copy=""
+        liveStatus={`Live sync · ${lastSyncedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
+      />
+=======
+      
       <QuickActions detailOverrides={quickActionDetails} />
       <CardGrid stats={adminStats} />
       <div className="admin-sections-stack">
@@ -221,7 +228,7 @@ function AdminDashboard() {
         <Section title="Pending Leave Queue" action="Approve" actionTo="/admin/leave-management">
           <DataTable columns={leaveColumns} rows={pendingLeaveRequests} emptyMessage="No pending leave requests." />
         </Section>
-        <Section title="Checked In Today" action="View all" actionTo="/admin/attendance">
+        <Section title="Checked In Today" action="View all" actionTo="/admin/team-attendance">
           <DataTable columns={checkedInColumns} rows={checkedInTodayRows} emptyMessage="No employees have checked in today." />
         </Section>
       </div>
@@ -643,12 +650,47 @@ export function QuickActions({ detailOverrides = {}, labelOverrides = {}, pathOv
 export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, wellnessAnnouncements = [] }) {
   const [focusItems, setFocusItems] = useState(todayFocusCache);
   const [isPlanDayOpen, setIsPlanDayOpen] = useState(false);
+<<<<<<< HEAD
+  const [generatedFocusItems, setGeneratedFocusItems] = useState(null);
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [planError, setPlanError] = useState('');
+  const [planToast, setPlanToast] = useState('');
+=======
+>>>>>>> origin/master
   const [selectedReminder, setSelectedReminder] = useState(null);
 
   const saveFocusItems = (next) => {
     todayFocusCache = next;
     setFocusItems(next);
   };
+
+<<<<<<< HEAD
+  const openPlanDay = () => {
+    setGeneratedFocusItems(null);
+    setPlanError('');
+    setIsPlanDayOpen(true);
+  };
+
+  const closePlanDay = () => {
+    setIsPlanDayOpen(false);
+    setGeneratedFocusItems(null);
+    setPlanError('');
+    setIsGeneratingPlan(false);
+  };
+
+  useEffect(() => {
+    if (!planToast) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setPlanToast('');
+    }, 2200);
+
+    return () => window.clearTimeout(timer);
+  }, [planToast]);
+
+  
 
   const planFromRealtime = () => {
     const next = [
@@ -658,10 +700,26 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
     ];
     saveFocusItems(next);
     setIsPlanDayOpen(false);
+>>>>>>> origin/master
   };
 
   return (
     <div className="insight-grid">
+<<<<<<< HEAD
+      {planToast && (
+        <div className="save-toast" role="status" aria-live="polite">
+          <span className="save-toast-icon" aria-hidden="true">
+            <i className="ri-checkbox-circle-fill" />
+          </span>
+          <div className="save-toast-body">
+            <span className="save-toast-kicker">Success</span>
+            <strong>{planToast}</strong>
+          </div>
+          <span className="save-toast-accent" aria-hidden="true" />
+        </div>
+      )}
+
+
       <section className="section-card">
         <div className="section-heading">
           <h3>Today Focus</h3>
@@ -711,10 +769,40 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
               </button>
             </div>
             <div className="open-roles-modal-body">
+< HEAD
+              {generatedFocusItems ? (
+                <>
+                  <p className="notification-empty">Focus plan generated from latest realtime stats.</p>
+                  <div className="focus-list">
+                    {generatedFocusItems.map((item) => (
+                      <article key={item.title}>
+                        <div>
+                          <strong>{item.title}</strong>
+                          <span>{item.meta}</span>
+                        </div>
+                        <div className="focus-progress">
+                          <span>{item.progress}%</span>
+                          <div className={`mini-progress tone-${item.tone}`}><i style={{ width: `${item.progress}%` }} /></div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="notification-empty">Create focus plan from latest realtime stats.</p>
+              )}
+              {planError ? <p className="notification-empty">{planError}</p> : null}
+              <div className="notification-actions">
+                <button type="button" onClick={planFromRealtime} disabled={isGeneratingPlan}>
+                  {isGeneratingPlan ? 'Generating...' : 'Generate Plan'}
+                </button>
+                <button type="button" onClick={closePlanDay}>Close</button>
+=======
               <p className="notification-empty">Create focus plan from latest realtime stats.</p>
               <div className="notification-actions">
                 <button type="button" onClick={planFromRealtime}>Generate Plan</button>
                 <button type="button" onClick={() => setIsPlanDayOpen(false)}>Cancel</button>
+>>>>>>> origin/master
               </div>
             </div>
           </section>

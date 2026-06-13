@@ -206,7 +206,7 @@ function EmployeeDashboard() {
   return (
     <>
       <Hero title="My Dashboard" copy="Your attendance snapshot, leave balance, upcoming notices, and profile activity in one personal workspace." />
-      <CardGrid stats={employeeStats} className="employee-card-row" />
+      <CardGrid stats={employeeStats} />
 
       {message && (
         <div className="user-alert" role="status">

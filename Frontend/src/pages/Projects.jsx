@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
-import { people } from '../data/dummyData.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Hero, Section } from './AdminDashboard.jsx';
+import { normalizeAccessRole } from '../utils/role-access.js';
 
 export const projectColumns = [
   { key: 'projectCode', label: 'Project Code' },
@@ -59,6 +59,7 @@ function Projects() {
 
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [teamLeaders, setTeamLeaders] = useState([]);
   const [activeTab, setActiveTab] = useState(isProjectManager ? 'create' : 'list');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [editingProjectId, setEditingProjectId] = useState('');
@@ -154,47 +155,77 @@ function Projects() {
     };
 
     const loadEmployees = () => {
-      safeApiRequest('/employees', people)
-        .then((rows) => {
+      Promise.all([
+        safeApiRequest('/employees?accessRole=Employee', []),
+        safeApiRequest('/users', []),
+      ]).then(([employeeRows, userRows]) => {
           if (active) {
-            setEmployees(normalizeEmployees(rows));
+            setEmployees(normalizeEmployees(employeeRows, userRows));
           }
         })
         .catch(() => {
           if (active) {
-            setEmployees(normalizeEmployees(people));
+            setEmployees([]);
           }
         });
     };
 
+    const loadTeamLeaders = () => {
+      Promise.all([
+        safeApiRequest('/employees?accessRole=Team Lead', []),
+        safeApiRequest('/users', []),
+      ]).then(([leaderRows, userRows]) => {
+        if (active) {
+          const normalizedLeaders = dedupeEmployeeOptions([
+            ...normalizeEmployees(leaderRows, userRows),
+            ...normalizeEmployees((Array.isArray(userRows) ? userRows : []).filter((user) => normalizeRoleLabel(user.role || '') === 'team lead'), userRows),
+          ]);
+          setTeamLeaders(normalizedLeaders);
+        }
+      }).catch(() => {
+        if (active) {
+          setTeamLeaders([]);
+        }
+      });
+    };
+
     loadProjects();
     loadEmployees();
+    loadTeamLeaders();
 
     const refreshId = window.setInterval(() => {
       loadProjects();
       loadEmployees();
+      loadTeamLeaders();
     }, PROJECT_REFRESH_MS);
     window.addEventListener('focus', loadProjects);
     window.addEventListener('focus', loadEmployees);
+    window.addEventListener('focus', loadTeamLeaders);
     window.addEventListener('kavyaProjectsChanged', loadProjects);
     window.addEventListener('kavyaEmployeesChanged', loadEmployees);
+    window.addEventListener('kavyaEmployeesChanged', loadTeamLeaders);
 
     return () => {
       active = false;
       window.clearInterval(refreshId);
       window.removeEventListener('focus', loadProjects);
       window.removeEventListener('focus', loadEmployees);
+      window.removeEventListener('focus', loadTeamLeaders);
       window.removeEventListener('kavyaProjectsChanged', loadProjects);
       window.removeEventListener('kavyaEmployeesChanged', loadEmployees);
+      window.removeEventListener('kavyaEmployeesChanged', loadTeamLeaders);
     };
   }, []);
 
-  const employeeOptions = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee)), [employees]);
+  const employeeOptions = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee) && !isLegacyRemovedEmployee(employee)), [employees]);
+  const selectableEmployeeOptions = useMemo(
+    () => employeeOptions.filter((employee) => isSelectableEmployee(employee)),
+    [employeeOptions],
+  );
   const teamLeaderOptions = useMemo(() => (
-    employeeOptions
-      .filter((employee) => isTeamLeaderEmployee(employee))
+    [...teamLeaders]
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-  ), [employeeOptions]);
+  ), [teamLeaders]);
   const employeeLookup = useMemo(() => new Map(employeeOptions.map((employee) => [employee.id, employee])), [employeeOptions]);
   const employeeDirectory = useMemo(() => buildEmployeeDirectoryIndex(employeeOptions), [employeeOptions]);
 
@@ -520,16 +551,16 @@ function Projects() {
   const filteredEmployees = useMemo(() => {
     const query = teamSearch.trim().toLowerCase();
     if (!query) {
-      return employeeOptions;
+      return selectableEmployeeOptions;
     }
 
-    return employeeOptions.filter((employee) => [
+    return selectableEmployeeOptions.filter((employee) => [
       employee.name,
       employee.department,
       employee.role,
       employee.id,
     ].some((value) => String(value || '').toLowerCase().includes(query)));
-  }, [employeeOptions, teamSearch]);
+  }, [selectableEmployeeOptions, teamSearch]);
   const selectedTeamLeader = useMemo(() => (
     teamLeaderOptions.find((employee) => employee.id === projectForm.teamLeadId) || null
   ), [projectForm.teamLeadId, teamLeaderOptions]);
@@ -1013,19 +1044,23 @@ function normalizeProjectRows(items = []) {
   });
 }
 
-function normalizeEmployees(rows = []) {
-  return (Array.isArray(rows) ? rows : []).map((employee, index) => ({
-    ...employee,
-    id: employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`,
-    employeeId: employee.employeeId || employee.employeeCode || employee.id || `EMP-${index + 1}`,
-    employeeCode: employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`,
-    name: employee.displayName || employee.name || employee.employeeName || `Employee ${index + 1}`,
-    department: employee.department || employee.departmentName || '-',
-    role: employee.jobTitle || employee.role || '-',
-    designation: employee.designation || employee.jobTitle || employee.role || '-',
-    accessRole: employee.accessRole || '',
-    avatar: employee.avatar || getInitialsFromId(employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`),
-  }));
+function normalizeEmployees(rows = [], userRows = []) {
+  const accessRoleLookup = buildAccessRoleLookup(userRows);
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((employee) => !isLegacyRemovedEmployee(employee))
+    .map((employee, index) => ({
+      ...employee,
+      id: employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`,
+      employeeId: employee.employeeId || employee.employeeCode || employee.id || `EMP-${index + 1}`,
+      employeeCode: employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`,
+      name: employee.displayName || employee.name || employee.employeeName || `Employee ${index + 1}`,
+      department: employee.department || employee.departmentName || '-',
+      role: employee.jobTitle || employee.role || '-',
+      designation: employee.designation || employee.jobTitle || employee.role || '-',
+      accessRole: employee.accessRole || accessRoleLookup.get(normalizeLookupValue(employee.employeeCode || employee.employeeId || employee.id)) || '',
+      avatar: employee.avatar || getInitialsFromId(employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`),
+    }));
 }
 
 function normalizeTeamMembers(teamMembers, teamLabel) {
@@ -1071,7 +1106,7 @@ function getProjectTeamMemberDetails(project, employeeDirectory) {
     return storedDetails;
   }
 
-  return buildTeamMemberDetails(project.teamMembers, employeeDirectory);
+  return buildTeamMemberDetails(project.teamMembers, employeeDirectory).filter((member) => !isLegacyRemovedEmployee(member));
 }
 
 function normalizeProjectMemberDetails(teamMemberDetails, fallbackMemberIds = []) {
@@ -1104,13 +1139,17 @@ function normalizeProjectMemberDetails(teamMemberDetails, fallbackMemberIds = []
       role: String(member.role || member.jobTitle || '').trim(),
       avatar: String(member.avatar || getInitialsFromId(memberId || displayName)).trim(),
     };
-  }).filter((member) => member.id || member.name || member.displayName);
+  }).filter((member) => (member.id || member.name || member.displayName) && !isLegacyRemovedEmployee(member));
 }
 
 function buildEmployeeDirectoryIndex(employees) {
   const index = new Map();
 
   (Array.isArray(employees) ? employees : []).forEach((employee) => {
+    if (isLegacyRemovedEmployee(employee)) {
+      return;
+    }
+
     const normalizedEmployee = {
       id: employee.id || employee.employeeCode || employee.employeeId || '',
       name: employee.name || employee.displayName || '',
@@ -1139,6 +1178,42 @@ function buildEmployeeDirectoryIndex(employees) {
 
 function normalizeLookupValue(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function isLegacyRemovedEmployee(employee) {
+  const normalizedId = normalizeLookupValue(employee?.employeeCode || employee?.employeeId || employee?.id);
+  const normalizedEmail = normalizeLookupValue(employee?.email);
+  const normalizedName = normalizeLookupValue(employee?.name || employee?.displayName || employee?.employeeName);
+
+  return [
+    normalizedId === 'tl001',
+    normalizedId === 'kv005',
+    normalizedEmail === 'rohan@kavya.hr',
+    normalizedName === 'rohandas',
+    normalizedName === 'rohan',
+  ].some(Boolean);
+}
+
+function buildAccessRoleLookup(userRows) {
+  const index = new Map();
+
+  (Array.isArray(userRows) ? userRows : []).forEach((user) => {
+    const accessRole = normalizeAccessRole(user.role || '');
+    const keys = [
+      user.employeeId,
+      user.userId,
+      user.email,
+    ];
+
+    keys.forEach((value) => {
+      const key = normalizeLookupValue(value);
+      if (key) {
+        index.set(key, accessRole);
+      }
+    });
+  });
+
+  return index;
 }
 
 function projectToForm(project, managerName, managerId) {
@@ -1321,6 +1396,35 @@ function isTeamLeaderEmployee(employee) {
   return designation === 'team lead' || accessRole === 'team lead';
 }
 
+function isSelectableEmployee(employee) {
+  const accessRole = normalizeRoleLabel(employee.accessRole || '');
+  if (accessRole) {
+    return accessRole === 'employee';
+  }
+
+  const designation = normalizeRoleLabel(employee.designation || employee.jobTitle || employee.role || '');
+  return ![
+    'team lead',
+    'project manager',
+    'hr manager',
+    'hr executive',
+    'hr',
+  ].includes(designation);
+}
+
 function normalizeRoleLabel(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function dedupeEmployeeOptions(rows) {
+  const seen = new Set();
+  return (Array.isArray(rows) ? rows : []).filter((employee) => {
+    const key = String(employee.employeeId || employee.id || employee.userId || employee.email || '').trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }

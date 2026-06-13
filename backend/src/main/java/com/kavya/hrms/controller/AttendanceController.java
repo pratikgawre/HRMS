@@ -6,16 +6,16 @@ import com.kavya.hrms.repository.AttendanceRecordRepository;
 import com.kavya.hrms.service.AttendanceAutoCheckoutService;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -55,7 +55,7 @@ public class AttendanceController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     attendanceAutoCheckoutService.finalizeOpenAttendanceRecords();
     AttendanceRecord saved = attendanceRecordRepository.save(record);
-    notifyAttendanceChange(List.of(saved), "Attendance updated", accessRole, userId, "updated");
+    notifyAttendanceChange(List.of(saved), accessRole, userId, determineAttendanceVerb(saved));
     return saved;
   }
 
@@ -69,12 +69,12 @@ public class AttendanceController {
     attendanceRecordRepository.deleteAll();
     List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(records);
     if (existingCount > 0) {
-      notifyAttendanceChange(saved, "Attendance updated", accessRole, userId, "updated");
+      notifyAttendanceChange(saved, accessRole, userId, "updated");
     }
     return saved;
   }
 
-  private void notifyAttendanceChange(List<AttendanceRecord> records, String title, String accessRole, String userId, String verb) {
+  private void notifyAttendanceChange(List<AttendanceRecord> records, String accessRole, String userId, String verb) {
     Set<String> employeeIds = records.stream()
         .map(AttendanceRecord::getEmployeeId)
         .filter(value -> value != null && !value.isBlank())
@@ -85,9 +85,11 @@ public class AttendanceController {
         .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.toCollection(LinkedHashSet::new));
 
+    String title = buildAttendanceTitle(records, verb);
     String message = buildAttendanceMessage(records, verb);
+
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.attendanceRecipients(),
         title,
         message,
         "attendance",
@@ -103,6 +105,57 @@ public class AttendanceController {
         "bulk",
         accessRole,
         "System");
+  }
+
+  private String determineAttendanceVerb(AttendanceRecord record) {
+    if (record == null) {
+      return "updated";
+    }
+
+    String status = String.valueOf(record.getStatus() == null ? "" : record.getStatus()).trim().toLowerCase();
+    boolean hasCheckIn = record.getCheckIn() != null && !record.getCheckIn().isBlank();
+    boolean hasCheckOut = record.getCheckOut() != null && !record.getCheckOut().isBlank() && !"-".equals(record.getCheckOut());
+
+    if (hasCheckIn && !hasCheckOut) {
+      return "check-in recorded";
+    }
+    if (hasCheckOut) {
+      return "check-out recorded";
+    }
+    if ("late".equals(status)) {
+      return "marked late";
+    }
+    if ("leave".equals(status)) {
+      return "marked leave";
+    }
+    return "updated";
+  }
+
+  private String buildAttendanceTitle(List<AttendanceRecord> records, String verb) {
+    String normalizedVerb = String.valueOf(verb == null ? "" : verb).trim().toLowerCase();
+    if (normalizedVerb.contains("check-in")) {
+      return "Check-in recorded";
+    }
+    if (normalizedVerb.contains("check-out")) {
+      return "Check-out recorded";
+    }
+    if (normalizedVerb.contains("late")) {
+      return "Attendance marked late";
+    }
+    if (normalizedVerb.contains("leave")) {
+      return "Attendance marked as leave";
+    }
+    if (records != null && !records.isEmpty()) {
+      AttendanceRecord first = records.get(0);
+      String status = String.valueOf(first.getStatus() == null ? "" : first.getStatus()).trim();
+      if ("late".equalsIgnoreCase(status)) {
+        return "Attendance marked late";
+      }
+      if ("leave".equalsIgnoreCase(status)) {
+        return "Attendance marked as leave";
+      }
+    }
+    return "Attendance updated";
   }
 
   private String buildAttendanceMessage(List<AttendanceRecord> records, String verb) {

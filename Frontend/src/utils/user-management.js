@@ -35,7 +35,7 @@ export function saveUsers(users) {
 
 export function buildUserAccess({ employee, accessRole, status = 'Active', existingUser }) {
   const employeeId = employee.employeeCode || employee.id || existingUser?.employeeId;
-  const email = String(employee.email || existingUser?.email || '').trim().toLowerCase();
+  const email = String(employee.generatedUsername || employee.email || existingUser?.email || '').trim().toLowerCase();
 
   return {
     userId: existingUser?.userId || `USR-${Date.now()}`,
@@ -45,7 +45,7 @@ export function buildUserAccess({ employee, accessRole, status = 'Active', exist
     role: accessRole,
     status,
     permissions: getPermissions(accessRole),
-    password: existingUser?.password || 'employee123',
+    password: employee.generatedPassword || existingUser?.password || 'employee123',
     avatar: employee.avatar || existingUser?.avatar || getInitials(employee.displayName || employee.name || ''),
     profilePicture: employee.profilePicture || existingUser?.profilePicture || '',
     department: employee.department || existingUser?.department || '',
