@@ -30,6 +30,7 @@ function TeamAttendance() {
   const [dateRange, setDateRange] = useState('day');
   const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(new Date()));
   const [selectedMonth, setSelectedMonth] = useState(() => getMonthInputValue(new Date()));
+  const [searchText, setSearchText] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -100,6 +101,20 @@ function TeamAttendance() {
 
   const rows = useMemo(() => (
     teamRows
+      .filter((row) => {
+        const query = searchText.trim().toLowerCase();
+        if (!query) {
+          return true;
+        }
+
+        return [
+          row.employee,
+          row.employeeName,
+          row.name,
+          row.employeeId,
+          row.employeeCode,
+        ].some((value) => String(value || '').toLowerCase().includes(query));
+      })
       .filter((row) => {
         const matchesStatus = status === 'All' || row.status === status;
         const matchesRange = isRowWithinSelectedRange(row, dateRange, selectedDate, selectedMonth);
@@ -174,6 +189,17 @@ function TeamAttendance() {
 
       <Section title="Team Attendance Register" action={role !== 'employee' ? 'My Attendance' : ''} actionTo={role !== 'employee' ? '/employee/attendance' : undefined}>
         <div className="page-toolbar compact">
+          <label className="toolbar-search">
+            <i className="ri-search-line" aria-hidden="true" />
+            <input
+              type="search"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search employee name or ID"
+              aria-label="Search employee name or ID"
+            />
+          </label>
+
           <select value={dateRange} onChange={(event) => setDateRange(event.target.value)}>
             <option value="day">Day</option>
             <option value="last7">Last 7 Days</option>

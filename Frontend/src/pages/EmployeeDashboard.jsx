@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
+import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
 import { CardGrid, Hero, Section } from './AdminDashboard.jsx';
 import { announcements as fallbackAnnouncements } from '../data/dummyData.js';
 import {
@@ -16,7 +17,7 @@ import {
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { safeApiRequest } from '../utils/api.js';
-import { getEmployeeLeaveSummary, normalizeLeaveTypes, DEFAULT_LEAVE_TYPES } from '../utils/leaveBalance.js';
+import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, getLeavePagePath, normalizeLeaveTypes } from '../utils/leaveBalance.js';
 
 function EmployeeDashboard() {
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
@@ -207,6 +208,10 @@ function EmployeeDashboard() {
     <>
       <Hero title="My Dashboard" copy="Your attendance snapshot, leave balance, upcoming notices, and profile activity in one personal workspace." />
       <CardGrid stats={employeeStats} />
+
+      <Section title="My Leaves" action="Open" actionTo={getLeavePagePath('employee')}>
+        <LeaveBalanceStrip summary={leaveSummary} />
+      </Section>
 
       {message && (
         <div className="user-alert" role="status">
