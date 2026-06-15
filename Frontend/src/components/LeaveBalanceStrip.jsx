@@ -15,29 +15,45 @@ function LeaveBalanceStrip({ summary, className = '' }) {
   }
 
   return (
-    <div className={`leave-balance-strip ${className}`.trim()}>
+    <div
+      className={`leave-balance-strip ${className}`.trim()}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+        gap: '0.8rem',
+        alignItems: 'stretch',
+      }}
+    >
       {cards.map((card) => (
         <article
           key={card.title}
           className="leave-balance-card"
-          style={{ color: leaveToneColors[card.tone] || leaveToneColors.blue }}
-        >
+          style={{
+            minWidth: 0,
+            minHeight: '146px',
+            padding: '0.95rem 1rem',
+            color: leaveToneColors[card.tone] || leaveToneColors.blue,
+            borderRadius: '18px',
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 251, 250, 0.92))',
+            boxShadow: '0 16px 36px rgba(24, 35, 47, 0.08)',
+            border: '1px solid rgba(201, 221, 221, 0.88)',
+          }}
+          >
           <div className="leave-balance-card-icon">
             <i className={card.icon} aria-hidden="true" />
           </div>
           <div className="leave-balance-card-content">
-            <span>{card.label}</span>
-            <strong>{card.title}</strong>
+            <strong style={{ marginBottom: '0.5rem' }}>{card.title}</strong>
             {(() => {
               const [mainValue, ...restValue] = String(card.value || '').split(' ');
               return (
-            <div className="leave-balance-card-value">
+            <div className="leave-balance-card-value" style={{ marginBottom: '0.45rem' }}>
                 <b>{mainValue}</b>
                 <small>{restValue.join(' ')}</small>
               </div>
               );
             })()}
-            <p>{card.delta}</p>
+            <p style={{ marginTop: '0.1rem' }}>{card.delta}</p>
           </div>
         </article>
       ))}
