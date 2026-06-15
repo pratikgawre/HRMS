@@ -4,12 +4,10 @@ import com.kavya.hrms.model.Asset;
 import com.kavya.hrms.model.AssetAssignment;
 import com.kavya.hrms.repository.AssetRepository;
 import com.kavya.hrms.repository.AssetAssignmentRepository;
-import java.util.ArrayList;
-import java.util.HashMap;
+import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Logger;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,14 +27,17 @@ public class AssetController {
   private static final Logger LOGGER = Logger.getLogger(AssetController.class.getName());
   private final AssetRepository assetRepository;
   private final AssetAssignmentRepository assetAssignmentRepository;
+  private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
 
   public AssetController(
       AssetRepository assetRepository,
       AssetAssignmentRepository assetAssignmentRepository,
+      EmployeeRepository employeeRepository,
       NotificationService notificationService) {
     this.assetRepository = assetRepository;
     this.assetAssignmentRepository = assetAssignmentRepository;
+    this.employeeRepository = employeeRepository;
     this.notificationService = notificationService;
   }
 
@@ -46,7 +47,7 @@ public class AssetController {
   }
 
   @GetMapping("/my-assets")
-  public List<Map<String, Object>> myAssets(
+  public List<Asset> myAssets(
     @RequestParam(required = false) String employeeId,
     @RequestHeader(value = "X-Kavya-Employee-Id", required = false) String employeeHeader
   ) {
@@ -58,44 +59,26 @@ public class AssetController {
       return List.of();
     }
 
-    List<AssetAssignment> assignments = assetAssignmentRepository.findByEmployeeIdOrderByAssignedDateDesc(resolvedEmployeeId);
-    LOGGER.info(() -> "[AssetController] asset assignments found=" + assignments.size());
+    String resolvedEmployeeName = resolveEmployeeName(resolvedEmployeeId);
+    List<Asset> allAssets = assetRepository.findAll();
+    List<AssetAssignment> matchingAssignments = assetAssignmentRepository.findAll().stream()
+      .filter((assignment) -> isAssignmentForEmployee(assignment, resolvedEmployeeId, resolvedEmployeeName))
+      .toList();
 
-    if (assignments.isEmpty()) {
-      return List.of();
-    }
+    List<Asset> response = allAssets.stream()
+      .filter((asset) -> isAssignedToEmployee(asset, resolvedEmployeeId, resolvedEmployeeName) || hasMatchingAssignment(asset, matchingAssignments))
+      .map((asset) -> mergeAssignment(asset, matchingAssignments))
+      .toList();
 
-    Map<String, Asset> assetsById = new HashMap<>();
-    assetRepository.findAll().forEach((asset) -> assetsById.put(normalize(asset.getId()), asset));
+    List<Asset> assignmentOnlyAssets = matchingAssignments.stream()
+      .filter((assignment) -> !containsAsset(response, assignment))
+      .map(this::toAsset)
+      .toList();
 
-    List<Map<String, Object>> response = new ArrayList<>();
-    for (AssetAssignment assignment : assignments) {
-      Asset asset = Optional.ofNullable(assetsById.get(normalize(assignment.getAssetId())))
-        .orElseGet(() -> findAssetByCodeOrId(assignment.getAssetCode(), assignment.getAssetId()).orElse(null));
+    List<Asset> finalResponse = java.util.stream.Stream.concat(response.stream(), assignmentOnlyAssets.stream()).toList();
 
-      if (asset == null) {
-        LOGGER.warning(() -> "[AssetController] No asset found for assignment id=" + assignment.getId() + ", assetId=" + assignment.getAssetId() + ", assetCode=" + assignment.getAssetCode());
-        continue;
-      }
-
-      Map<String, Object> item = new HashMap<>();
-      item.put("id", asset.getId());
-      item.put("asset_code", valueOrFallback(asset.getAssetCode(), assignment.getAssetCode()));
-      item.put("asset_name", valueOrFallback(asset.getAssetName(), assignment.getAssetName()));
-      item.put("category", asset.getCategory());
-      item.put("brand", asset.getBrand());
-      item.put("model", asset.getModel());
-      item.put("assigned_date", assignment.getAssignedDate());
-      item.put("condition", valueOrFallback(assignment.getCondition(), asset.getCondition()));
-      item.put("status", valueOrFallback(assignment.getStatus(), asset.getStatus()));
-      item.put("employee_id", assignment.getEmployeeId());
-      item.put("employee_name", assignment.getEmployeeName());
-      item.put("asset_id", assignment.getAssetId());
-      response.add(item);
-    }
-
-    LOGGER.info(() -> "[AssetController] my-assets returning=" + response.size());
-    return response;
+    LOGGER.info(() -> "[AssetController] my-assets returning=" + finalResponse.size());
+    return finalResponse;
   }
 
   @PostMapping
@@ -182,19 +165,118 @@ public class AssetController {
     return name + " was " + action + " for " + assignedTo + ".";
   }
 
-  private Optional<Asset> findAssetByCodeOrId(String assetCode, String assetId) {
-    String normalizedCode = normalize(assetCode);
-    String normalizedId = normalize(assetId);
-    return assetRepository.findAll().stream()
-      .filter((asset) -> normalize(asset.getAssetCode()).equals(normalizedCode) || normalize(asset.getId()).equals(normalizedId))
-      .findFirst();
-  }
-
   private String normalize(String value) {
     return value == null ? "" : value.trim();
   }
 
-  private String valueOrFallback(String primary, String fallback) {
-    return primary != null && !primary.isBlank() ? primary : fallback;
+  private String resolveEmployeeName(String employeeId) {
+    return employeeRepository.findAll().stream()
+      .filter(employee -> employeeId.equals(employee.getEmployeeCode()) || employeeId.equals(employee.getEmployeeId()) || employeeId.equals(employee.getId()))
+      .map(employee -> Optional.ofNullable(employee.getDisplayName()).orElse(employee.getName()))
+      .findFirst()
+      .orElse(employeeId);
+  }
+
+  private boolean isAssignedToEmployee(Asset asset, String employeeId, String employeeName) {
+    String assignedTo = normalize(asset.getAssignedTo());
+    String normalizedEmployeeId = normalize(employeeId);
+    String normalizedEmployeeName = normalize(employeeName);
+
+    if (assignedTo.isBlank() || "-".equals(assignedTo)) {
+      return false;
+    }
+
+    return assignedTo.equals(normalizedEmployeeId) || assignedTo.equalsIgnoreCase(normalizedEmployeeName);
+  }
+
+  private boolean isAssignmentForEmployee(AssetAssignment assignment, String employeeId, String employeeName) {
+    if (assignment == null) {
+      return false;
+    }
+
+    String assignedEmployeeId = normalize(assignment.getEmployeeId());
+    String assignedEmployeeName = normalize(assignment.getEmployeeName());
+    String normalizedEmployeeId = normalize(employeeId);
+    String normalizedEmployeeName = normalize(employeeName);
+
+    return (!assignedEmployeeId.isBlank() && assignedEmployeeId.equals(normalizedEmployeeId))
+        || (!assignedEmployeeName.isBlank() && assignedEmployeeName.equalsIgnoreCase(normalizedEmployeeName));
+  }
+
+  private Asset mergeAssignment(Asset asset, List<AssetAssignment> assignments) {
+    if (asset == null || assignments == null || assignments.isEmpty()) {
+      return asset;
+    }
+
+    String assetId = normalize(asset.getId());
+    String assetCode = normalize(asset.getAssetCode());
+    AssetAssignment matched = assignments.stream()
+      .filter((assignment) -> matchesAsset(assetId, assetCode, assignment))
+      .findFirst()
+      .orElse(null);
+
+    if (matched == null) {
+      return asset;
+    }
+
+    if (!normalize(matched.getEmployeeId()).isBlank()) {
+      asset.setAssignedTo(matched.getEmployeeId());
+    } else if (!normalize(matched.getEmployeeName()).isBlank()) {
+      asset.setAssignedTo(matched.getEmployeeName());
+    }
+
+    if (!normalize(matched.getStatus()).isBlank()) {
+      asset.setStatus(matched.getStatus());
+    }
+
+    return asset;
+  }
+
+  private boolean hasMatchingAssignment(Asset asset, List<AssetAssignment> assignments) {
+    if (asset == null || assignments == null || assignments.isEmpty()) {
+      return false;
+    }
+
+    String assetId = normalize(asset.getId());
+    String assetCode = normalize(asset.getAssetCode());
+    return assignments.stream().anyMatch((assignment) -> matchesAsset(assetId, assetCode, assignment));
+  }
+
+  private boolean containsAsset(List<Asset> assets, AssetAssignment assignment) {
+    if (assets == null || assignment == null) {
+      return false;
+    }
+
+    String assignmentAssetId = normalize(assignment.getAssetId());
+    String assignmentAssetCode = normalize(assignment.getAssetCode());
+    return assets.stream().anyMatch((asset) -> {
+      String assetId = normalize(asset.getId());
+      String assetCode = normalize(asset.getAssetCode());
+      return (!assetId.isBlank() && (assetId.equals(assignmentAssetId) || assetId.equals(assignmentAssetCode)))
+          || (!assetCode.isBlank() && (assetCode.equals(assignmentAssetId) || assetCode.equals(assignmentAssetCode)));
+    });
+  }
+
+  private Asset toAsset(AssetAssignment assignment) {
+    Asset asset = new Asset();
+    asset.setId(!normalize(assignment.getAssetId()).isBlank() ? assignment.getAssetId() : assignment.getId());
+    asset.setAssetCode(!normalize(assignment.getAssetCode()).isBlank() ? assignment.getAssetCode() : assignment.getAssetId());
+    asset.setAssetName(!normalize(assignment.getAssetName()).isBlank() ? assignment.getAssetName() : "Asset");
+    asset.setStatus(!normalize(assignment.getStatus()).isBlank() ? assignment.getStatus() : "Assigned");
+    asset.setAssignedTo(!normalize(assignment.getEmployeeName()).isBlank() ? assignment.getEmployeeName() : assignment.getEmployeeId());
+    asset.setCondition(!normalize(assignment.getCondition()).isBlank() ? assignment.getCondition() : "Good");
+    return asset;
+  }
+
+  private boolean matchesAsset(String assetId, String assetCode, AssetAssignment assignment) {
+    if (assignment == null) {
+      return false;
+    }
+
+    String assignmentAssetId = normalize(assignment.getAssetId());
+    String assignmentAssetCode = normalize(assignment.getAssetCode());
+
+    return (!assetId.isBlank() && (assetId.equals(assignmentAssetId) || assetId.equals(assignmentAssetCode)))
+        || (!assetCode.isBlank() && (assetCode.equals(assignmentAssetId) || assetCode.equals(assignmentAssetCode)));
   }
 }
