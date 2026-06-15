@@ -2,13 +2,14 @@ package com.kavya.hrms.controller;
 
 import com.kavya.hrms.dto.AdminDashboardSummary;
 import com.kavya.hrms.dto.EmployeeDashboardSummary;
+import com.kavya.hrms.model.Asset;
 import com.kavya.hrms.model.AttendanceRecord;
 import com.kavya.hrms.model.LeaveRequest;
 import com.kavya.hrms.model.SystemSettings;
 import com.kavya.hrms.model.TaskItem;
 import com.kavya.hrms.repository.AnnouncementRepository;
 import com.kavya.hrms.repository.AttendanceRecordRepository;
-import com.kavya.hrms.repository.AssetAssignmentRepository;
+import com.kavya.hrms.repository.AssetRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
@@ -38,7 +39,7 @@ public class DashboardController {
   private final LeaveRequestRepository leaveRequestRepository;
   private final AnnouncementRepository announcementRepository;
   private final AttendanceRecordRepository attendanceRecordRepository;
-  private final AssetAssignmentRepository assetAssignmentRepository;
+  private final AssetRepository assetRepository;
   private final TaskRepository taskRepository;
   private final SystemSettingsRepository systemSettingsRepository;
 
@@ -47,14 +48,14 @@ public class DashboardController {
       LeaveRequestRepository leaveRequestRepository,
       AnnouncementRepository announcementRepository,
       AttendanceRecordRepository attendanceRecordRepository,
-      AssetAssignmentRepository assetAssignmentRepository,
+      AssetRepository assetRepository,
       TaskRepository taskRepository,
       SystemSettingsRepository systemSettingsRepository) {
     this.employeeRepository = employeeRepository;
     this.leaveRequestRepository = leaveRequestRepository;
     this.announcementRepository = announcementRepository;
     this.attendanceRecordRepository = attendanceRecordRepository;
-    this.assetAssignmentRepository = assetAssignmentRepository;
+    this.assetRepository = assetRepository;
     this.taskRepository = taskRepository;
     this.systemSettingsRepository = systemSettingsRepository;
   }
@@ -126,7 +127,8 @@ public class DashboardController {
     tasks.setNavigateTo(List.of("/employee/tasks"));
     response.setTasks(tasks);
 
-    long assetCount = assetAssignmentRepository.findByEmployeeIdOrderByAssignedDateDesc(employeeId).stream()
+    long assetCount = assetRepository.findAll().stream()
+        .filter(asset -> isAssetAssignedToEmployee(asset, employeeId, response.getEmployeeName()))
         .filter(asset -> asset.getStatus() == null || !"Returned".equalsIgnoreCase(asset.getStatus()))
         .count();
     EmployeeDashboardSummary.CardMetric assets = new EmployeeDashboardSummary.CardMetric();
@@ -219,6 +221,19 @@ public class DashboardController {
         || taskAssignedToName.equals(normalizedEmployeeName)
         || taskOwner.equals(normalizedEmployeeId)
         || taskOwner.equals(normalizedEmployeeName);
+  }
+
+  private boolean isAssetAssignedToEmployee(Asset asset, String employeeId, String employeeName) {
+    if (asset == null) {
+      return false;
+    }
+
+    String normalizedEmployeeId = normalize(employeeId);
+    String normalizedEmployeeName = normalize(employeeName);
+    String assignedTo = normalize(Optional.ofNullable(asset.getAssignedTo()).orElse(""));
+
+    return assignedTo.equals(normalizedEmployeeId)
+        || assignedTo.equals(normalizedEmployeeName);
   }
 
   private record LeaveTotals(int remaining, int used) {}

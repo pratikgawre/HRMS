@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
+import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
 import { dashboardStats, people, quickActions, todayFocus } from '../data/dummyData.js';
 import { getInitialLeaveRequests, setLeaveRequestsCache } from '../utils/leaveStorage.js';
 import { getStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
@@ -9,9 +10,10 @@ import { getStoredAnnouncements, setAnnouncementsCache } from '../utils/announce
 import { getInitialAttendanceRows, getTodayLabel, refreshStoredAttendanceRows } from '../utils/attendanceStorage.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
+import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, getLeavePagePath, normalizeLeaveTypes } from '../utils/leaveBalance.js';
+import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 
 const DASHBOARD_REFRESH_MS = 15000;
-let todayFocusCache = todayFocus;
 
 function normalizeDashboardEmployee(employee, index = 0) {
   const displayName = employee.displayName || employee.name || employee.employeeName || 'Employee';
@@ -82,13 +84,24 @@ function getInitials(name) {
     .toUpperCase() || 'EM';
 }
 
+function normalizeFocusItems(items) {
+  return (Array.isArray(items) ? items : []).map((item, index) => ({
+    title: String(item?.title || `Focus item ${index + 1}`).trim(),
+    meta: String(item?.meta || '').trim(),
+    progress: Math.min(100, Math.max(0, Number(item?.progress) || 0)),
+    tone: String(item?.tone || 'default').trim() || 'default',
+  })).filter((item) => item.title);
+}
+
 function AdminDashboard() {
   const [dashboardLeaveRequests, setDashboardLeaveRequests] = useState(getInitialDashboardLeaves);
   const [dashboardEmployees, setDashboardEmployees] = useState(getInitialDashboardEmployees);
   const [dashboardAnnouncements, setDashboardAnnouncements] = useState(getInitialDashboardAnnouncements);
   const [dashboardAttendanceRows, setDashboardAttendanceRows] = useState(getInitialAttendanceRows);
+  const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [isOpenRolesModalOpen, setIsOpenRolesModalOpen] = useState(false);
   const navigate = useNavigate();
+  const currentEmployee = getCurrentEmployeeIdentity();
   const pendingLeaveRequests = dashboardLeaveRequests.filter((request) => request.status === 'Pending');
   const urgentPendingLeaves = pendingLeaveRequests.filter((request) => Number(request.days) >= 3).length;
   const openRoles = dashboardAnnouncements.filter((item) => String(item.category || '').toLowerCase() === 'vacancy');
@@ -99,6 +112,7 @@ function AdminDashboard() {
   const presentRate = dashboardEmployees.length
     ? Math.round((presentTodayCount / dashboardEmployees.length) * 100)
     : 0;
+  const leaveSummary = useMemo(() => getEmployeeLeaveSummary(leaveTypes, dashboardLeaveRequests, currentEmployee), [currentEmployee, dashboardLeaveRequests, leaveTypes]);
   const adminStats = dashboardStats.admin.map((stat, index) => (index === 0
     ? {
       ...stat,
@@ -169,6 +183,11 @@ function AdminDashboard() {
         setAnnouncementsCache(normalized);
       });
     };
+    const refreshLeaveTypes = () => {
+      safeApiRequest('/settings', { leaveTypes: DEFAULT_LEAVE_TYPES })
+        .then((payload) => setLeaveTypes(normalizeLeaveTypes(payload?.leaveTypes, DEFAULT_LEAVE_TYPES)))
+        .catch(() => setLeaveTypes(DEFAULT_LEAVE_TYPES));
+    };
     const refreshAttendance = () => {
       setDashboardAttendanceRows(getInitialAttendanceRows());
       refreshStoredAttendanceRows()
@@ -179,6 +198,7 @@ function AdminDashboard() {
     refreshLeaveRequests();
     refreshEmployees();
     refreshAnnouncements();
+    refreshLeaveTypes();
     refreshAttendance();
 
     window.addEventListener('storage', refreshLeaveRequests);
@@ -188,6 +208,7 @@ function AdminDashboard() {
     window.addEventListener('kavyaLeaveRequestsChanged', refreshLeaveRequests);
     window.addEventListener('kavyaEmployeesChanged', refreshEmployees);
     window.addEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
+    window.addEventListener('kavyaSettingsChanged', refreshLeaveTypes);
     window.addEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
     const intervalId = window.setInterval(() => {
       refreshLeaveRequests();
@@ -204,6 +225,7 @@ function AdminDashboard() {
       window.removeEventListener('kavyaLeaveRequestsChanged', refreshLeaveRequests);
       window.removeEventListener('kavyaEmployeesChanged', refreshEmployees);
       window.removeEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
+      window.removeEventListener('kavyaSettingsChanged', refreshLeaveTypes);
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
       window.clearInterval(intervalId);
     };
@@ -214,6 +236,9 @@ function AdminDashboard() {
       
       <QuickActions detailOverrides={quickActionDetails} />
       <CardGrid stats={adminStats} />
+      <Section title="My Leaves" action="Open" actionTo={getLeavePagePath('admin')}>
+        <LeaveBalanceStrip summary={leaveSummary} />
+      </Section>
       <div className="admin-sections-stack">
         <Section title="Employee Directory" action="View all" actionTo="/admin/employees">
           <DataTable columns={employeeColumns} rows={dashboardEmployees.slice(0, 4)} />
@@ -641,31 +666,60 @@ export function QuickActions({ detailOverrides = {}, labelOverrides = {}, pathOv
 }
 
 export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, wellnessAnnouncements = [] }) {
-  const [focusItems, setFocusItems] = useState(todayFocusCache);
+  const [focusItems, setFocusItems] = useState(todayFocus);
   const [isPlanDayOpen, setIsPlanDayOpen] = useState(false);
   const [generatedFocusItems, setGeneratedFocusItems] = useState(null);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [planError, setPlanError] = useState('');
   const [planToast, setPlanToast] = useState('');
   const [selectedReminder, setSelectedReminder] = useState(null);
+  const accessRole = getSessionValue('kavyaAccessRole') || 'Employee';
+  const appRole = getSessionValue('kavyaRole') || 'employee';
+  const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId') || '';
 
   const saveFocusItems = (next) => {
-    todayFocusCache = next;
     setFocusItems(next);
   };
 
   const openPlanDay = () => {
-    setGeneratedFocusItems(null);
     setPlanError('');
     setIsPlanDayOpen(true);
   };
 
   const closePlanDay = () => {
     setIsPlanDayOpen(false);
-    setGeneratedFocusItems(null);
     setPlanError('');
     setIsGeneratingPlan(false);
   };
+
+  useEffect(() => {
+    let active = true;
+
+    const loadSavedFocusPlan = async () => {
+      try {
+        const savedPlan = await apiRequest(`/focus-plans/latest?role=${encodeURIComponent(accessRole)}&userId=${encodeURIComponent(userId)}`);
+        if (!active || !savedPlan) {
+          return;
+        }
+
+        const normalizedItems = normalizeFocusItems(savedPlan.items);
+        if (normalizedItems.length > 0) {
+          saveFocusItems(normalizedItems);
+          setGeneratedFocusItems(normalizedItems);
+        }
+      } catch {
+        if (active) {
+          setFocusItems(todayFocus);
+        }
+      }
+    };
+
+    loadSavedFocusPlan();
+
+    return () => {
+      active = false;
+    };
+  }, [accessRole, userId]);
 
   useEffect(() => {
     if (!planToast) {
@@ -679,8 +733,9 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
     return () => window.clearTimeout(timer);
   }, [planToast]);
 
-  const planFromRealtime = () => {
+  const planFromRealtime = async () => {
     setIsGeneratingPlan(true);
+    setPlanError('');
 
     const next = [
       { title: 'Leave approvals', meta: `${pendingLeaves} pending`, progress: Math.min(100, 40 + (pendingLeaves * 8)), tone: 'orange' },
@@ -688,11 +743,28 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
       { title: 'Team coverage', meta: `${employees} employees`, progress: Math.min(100, 55 + (employees > 0 ? 20 : 0)), tone: 'green' },
     ];
 
-    saveFocusItems(next);
-    setGeneratedFocusItems(next);
-    setPlanError('');
-    setIsGeneratingPlan(false);
-    setPlanToast('Focus plan generated from realtime stats.');
+    try {
+      const savedPlan = await apiRequest('/focus-plans', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'Today Focus',
+          items: next,
+          role: appRole,
+          accessRole,
+          userId,
+          createdByName: getSessionValue('kavyaEmployeeName') || '',
+        }),
+      });
+
+      const normalizedItems = normalizeFocusItems(savedPlan?.items || next);
+      saveFocusItems(normalizedItems);
+      setGeneratedFocusItems(normalizedItems);
+      setPlanToast('Focus plan saved successfully.');
+    } catch {
+      setPlanError('Focus plan could not be saved right now.');
+    } finally {
+      setIsGeneratingPlan(false);
+    }
   };
 
   return (

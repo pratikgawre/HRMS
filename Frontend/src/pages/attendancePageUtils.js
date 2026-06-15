@@ -192,11 +192,6 @@ export function getVisibleTeamEmployeeIds({ role, currentEmployeeId, currentEmpl
     return visibleIds;
   }
 
-  if (normalizedRole === 'employee') {
-    visibleIds.add(currentId);
-    return visibleIds;
-  }
-
   if (normalizedRole === 'admin' || normalizedRole === 'hr') {
     employeeList.forEach((employee) => {
       const employeeId = String(employee.employeeId || employee.id || '').trim();
@@ -207,7 +202,10 @@ export function getVisibleTeamEmployeeIds({ role, currentEmployeeId, currentEmpl
     return visibleIds;
   }
 
-  visibleIds.add(currentId);
+  if (normalizedRole === 'employee') {
+    visibleIds.add(currentId);
+    return visibleIds;
+  }
 
   const employeeById = new Map(
     employeeList
@@ -232,61 +230,54 @@ export function getVisibleTeamEmployeeIds({ role, currentEmployeeId, currentEmpl
       .forEach((name) => {
         if (!employeeByName.has(name)) {
           employeeByName.set(name, employeeId);
-        }
-      });
+      }
+    });
   });
 
   const seeds = new Set([currentId]);
+  const ownedProjects = projectList.filter((project) => isProjectOwnedByRole(project, normalizedRole, currentId, currentName));
 
-  employeeList.forEach((employee) => {
-    const employeeId = String(employee.employeeId || '').trim();
-    const managerId = String(employee.managerId || employee.reportingManagerId || '').trim();
-    const teamLeadId = String(employee.teamLeadId || '').trim();
-
-    if (managerId === currentId || teamLeadId === currentId) {
-      seeds.add(employeeId);
-    }
-  });
-
-  projectList.forEach((project) => {
-    const projectManagerId = String(project.managerId || '').trim();
-    const projectManagerName = String(project.manager || '').trim().toLowerCase();
-    const projectTeamLeadId = String(project.teamLeadId || '').trim();
-    const projectTeamLeadName = String(project.teamLeadName || project.teamLead || '').trim().toLowerCase();
-    const isProjectOwner = normalizedRole === 'projectmanager'
-      ? projectManagerId === currentId || projectManagerName === currentName
-      : normalizedRole === 'teamlead'
-        ? projectTeamLeadId === currentId || projectTeamLeadName === currentName
-        : projectManagerId === currentId || projectManagerName === currentName || projectTeamLeadId === currentId || projectTeamLeadName === currentName;
-
-    if (!isProjectOwner) {
-      return;
-    }
-
-    [
-      project.teamLeadId,
-      project.teamLead,
-      project.teamLeadName,
-    ].forEach((value) => addEmployeeSeed(seeds, value, employeeById, employeeByName));
-
-    (Array.isArray(project.teamMembers) ? project.teamMembers : []).forEach((memberId) => {
-      addEmployeeSeed(seeds, memberId, employeeById, employeeByName);
-    });
-
-    (Array.isArray(project.teamMemberDetails) ? project.teamMemberDetails : []).forEach((member) => {
-      if (!member || typeof member !== 'object') {
-        return;
-      }
-
+  ownedProjects.forEach((project) => {
+    if (normalizedRole === 'projectmanager') {
       [
-        member.id,
-        member.employeeCode,
-        member.name,
-        member.displayName,
-        member.employeeName,
+        project.teamLeadId,
+        project.teamLead,
+        project.teamLeadName,
       ].forEach((value) => addEmployeeSeed(seeds, value, employeeById, employeeByName));
-    });
+    }
+
+    if (normalizedRole === 'teamlead' || normalizedRole === 'projectmanager') {
+      (Array.isArray(project.teamMembers) ? project.teamMembers : []).forEach((memberId) => {
+        addEmployeeSeed(seeds, memberId, employeeById, employeeByName);
+      });
+
+      (Array.isArray(project.teamMemberDetails) ? project.teamMemberDetails : []).forEach((member) => {
+        if (!member || typeof member !== 'object') {
+          return;
+        }
+
+        [
+          member.id,
+          member.employeeCode,
+          member.name,
+          member.displayName,
+          member.employeeName,
+        ].forEach((value) => addEmployeeSeed(seeds, value, employeeById, employeeByName));
+      });
+    }
   });
+
+  if (ownedProjects.length === 0) {
+    employeeList.forEach((employee) => {
+      const employeeId = String(employee.employeeId || employee.id || '').trim();
+      const managerId = String(employee.managerId || employee.reportingManagerId || '').trim();
+      const teamLeadId = String(employee.teamLeadId || '').trim();
+
+      if (managerId === currentId || teamLeadId === currentId) {
+        seeds.add(employeeId);
+      }
+    });
+  }
 
   const queue = [...seeds].filter(Boolean);
   while (queue.length > 0) {
@@ -307,7 +298,31 @@ export function getVisibleTeamEmployeeIds({ role, currentEmployeeId, currentEmpl
     });
   }
 
+  if (currentId && normalizedRole !== 'admin' && normalizedRole !== 'hr' && normalizedRole !== 'employee') {
+    visibleIds.delete(currentId);
+  }
+
   return visibleIds;
+}
+
+function isProjectOwnedByRole(project, normalizedRole, currentId, currentName) {
+  const projectManagerId = String(project?.managerId || '').trim();
+  const projectManagerName = String(project?.manager || '').trim().toLowerCase();
+  const projectTeamLeadId = String(project?.teamLeadId || '').trim();
+  const projectTeamLeadName = String(project?.teamLeadName || project?.teamLead || '').trim().toLowerCase();
+
+  if (normalizedRole === 'projectmanager') {
+    return projectManagerId === currentId || projectManagerName === currentName;
+  }
+
+  if (normalizedRole === 'teamlead') {
+    return projectTeamLeadId === currentId || projectTeamLeadName === currentName;
+  }
+
+  return projectManagerId === currentId
+    || projectManagerName === currentName
+    || projectTeamLeadId === currentId
+    || projectTeamLeadName === currentName;
 }
 
 function addEmployeeSeed(targetSet, value, employeeById, employeeByName) {

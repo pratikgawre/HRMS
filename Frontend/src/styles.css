@@ -1126,7 +1126,7 @@ a:focus-visible {
   overflow-x: hidden;
   flex-direction: column;
   height: 100vh;
-  padding: 1.35rem 1rem;
+  padding: 0.9rem 1rem 1.1rem;
   color: var(--sidebar-text);
   border-right: 1px solid rgba(201, 221, 221, 0.9);
   background:
@@ -1138,18 +1138,22 @@ a:focus-visible {
 
 .brand {
   flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  margin-bottom: 1.75rem;
-  padding: 0 0.5rem;
+  gap: 0.35rem;
+  margin-bottom: 0.55rem;
+  padding: 0.05rem 0.35rem 0.2rem;
+  text-align: center;
 }
 
 .brand-logo {
   display: block;
-  width: 46px;
-  height: 46px;
+  width: 120px;
+  height: 120px;
   flex-shrink: 0;
   object-fit: contain;
-  border-radius: 14px;
+  border-radius: 18px;
 }
 
 .brand > div {
@@ -1159,9 +1163,10 @@ a:focus-visible {
 .brand strong {
   display: block;
   color: var(--dark-text);
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 900;
   line-height: 1.15;
+  letter-spacing: 0.01em;
 }
 
 .sidebar-nav {
@@ -1170,7 +1175,7 @@ a:focus-visible {
   flex: 1 1 auto;
   align-content: start;
   gap: 0.35rem;
-  padding: 0.15rem 0.15rem 1rem 0;
+  padding: 0 0.15rem 1rem 0;
   scrollbar-width: thin;
   -ms-overflow-style: auto;
 }
@@ -1221,8 +1226,8 @@ a:focus-visible {
 
 .sidebar-card {
   flex: 0 0 auto;
-  margin-top: 1rem;
-  padding: 1rem;
+  margin-top: 0.65rem;
+  padding: 0.72rem 0.8rem;
   border: 1px solid rgba(201, 221, 221, 0.88);
   border-radius: var(--radius);
   background:
@@ -1233,26 +1238,29 @@ a:focus-visible {
 
 .sidebar-card > i {
   display: grid;
-  width: 36px;
-  height: 36px;
-  margin-bottom: 0.75rem;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 0.5rem;
   place-items: center;
   color: #fff;
   border-radius: var(--radius);
   background: var(--primary);
+  font-size: 0.95rem;
 }
 
 .sidebar-card p,
 .sidebar-card span {
   margin: 0;
   color: var(--muted-text);
-  font-size: 0.82rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
 
 .sidebar-card strong {
   display: block;
-  margin: 0.25rem 0;
+  margin: 0.15rem 0;
   color: var(--dark-text);
+  font-size: 0.92rem;
   font-weight: 900;
 }
 
@@ -2062,6 +2070,28 @@ a:focus-visible {
   gap: 1rem;
 }
 
+.card-grid.employee-card-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.employee-card-row .dashboard-card {
+  min-height: 132px;
+  padding: 1rem;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 0.7rem;
+}
+
+.employee-card-row .card-icon {
+  width: 42px;
+  height: 42px;
+  font-size: 1.2rem;
+}
+
+.employee-card-row .dashboard-card strong {
+  font-size: 1.55rem;
+}
+
 .admin-sections-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2078,6 +2108,11 @@ a:focus-visible {
   min-height: 142px;
   padding: 1.25rem;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.my-asset-summary-card {
+  min-height: 92px;
+  padding: 0.8rem 1.25rem;
 }
 
 .dashboard-card::after {
@@ -2372,6 +2407,46 @@ a:focus-visible {
 
 .assets-stack .section-card {
   width: 100%;
+}
+
+.my-asset-summary-card {
+  grid-template-columns: 50px minmax(0, 1fr);
+  align-items: start;
+  min-height: 160px;
+}
+
+.my-asset-summary-card .card-icon {
+  margin-top: 0.1rem;
+}
+
+.my-asset-summary-card__container {
+  grid-column: 2;
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+}
+
+.my-asset-summary-card__item,
+.my-asset-summary-card__empty {
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.95rem;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(201, 221, 221, 0.8);
+}
+
+.my-asset-summary-card__item strong,
+.my-asset-summary-card__empty {
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.my-asset-summary-card__item small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted-text);
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .asset-banner {
@@ -7410,6 +7485,11 @@ img.profile-avatar.large {
   .dashboard-card {
     grid-template-columns: 44px minmax(0, 1fr);
     padding: 1rem;
+  }
+
+  .my-asset-summary-card {
+    min-height: 88px;
+    padding: 0.75rem 1rem;
   }
 
   .asset-table-head {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
+import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
 import { CardGrid, Hero, Section } from './AdminDashboard.jsx';
 import { announcements as fallbackAnnouncements } from '../data/dummyData.js';
 import {
@@ -16,7 +17,7 @@ import {
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { safeApiRequest } from '../utils/api.js';
-import { getEmployeeLeaveSummary, normalizeLeaveTypes, DEFAULT_LEAVE_TYPES } from '../utils/leaveBalance.js';
+import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, getLeavePagePath, normalizeLeaveTypes } from '../utils/leaveBalance.js';
 
 function EmployeeDashboard() {
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
@@ -83,14 +84,6 @@ function EmployeeDashboard() {
         onClick: () => navigate('/employee/tasks'),
       },
       {
-        label: 'My Assets',
-        value: '00',
-        delta: 'Assigned to you',
-        tone: 'green',
-        icon: 'ri-briefcase-4-line',
-        onClick: () => navigate('/employee/assets'),
-      },
-      {
         label: 'Announcements',
         value: '00',
         delta: 'Latest updates',
@@ -104,7 +97,6 @@ function EmployeeDashboard() {
       dashboardSummary.attendance,
       dashboardSummary.leaveBalance,
       dashboardSummary.tasks,
-      dashboardSummary.assets,
       dashboardSummary.announcements,
     ] : fallbackStats;
 
@@ -208,6 +200,10 @@ function EmployeeDashboard() {
       <Hero title="My Dashboard" copy="Your attendance snapshot, leave balance, upcoming notices, and profile activity in one personal workspace." />
       <CardGrid stats={employeeStats} />
 
+      <Section title="My Leaves" action="Open" actionTo={getLeavePagePath('employee')}>
+        <LeaveBalanceStrip summary={leaveSummary} />
+      </Section>
+
       {message && (
         <div className="user-alert" role="status">
           <i className="ri-checkbox-circle-line" aria-hidden="true" />
@@ -243,8 +239,15 @@ function EmployeeDashboard() {
 
       <div className="dashboard-grid" style={{ display: 'block', marginTop: '16px' }}>
         <Section title="Latest Announcements" action="Read all">
-          <div className="announcement-list">
-            {latestAnnouncements.slice(0, 3).map((item) => (
+          <div
+            className="announcement-list"
+            style={{
+              maxHeight: '372px',
+              overflowY: 'auto',
+              paddingRight: '6px',
+            }}
+          >
+            {latestAnnouncements.map((item) => (
               <article key={item.id}>
                 <span>{item.date}</span>
                 <strong>{item.title}</strong>
@@ -256,8 +259,15 @@ function EmployeeDashboard() {
       </div>
 
       <Section title="Wellbeing Reminders" className="wellbeing-section">
-        <div className="wellbeing-list wellbeing-list--single-row">
-          {wellnessAnnouncements.slice(0, 3).map((item) => (
+        <div
+          className="wellbeing-list wellbeing-list--single-row"
+          style={{
+            maxHeight: '372px',
+            overflowY: 'auto',
+            paddingRight: '6px',
+          }}
+        >
+          {wellnessAnnouncements.map((item) => (
             <button key={item.id} type="button">
               <i className="ri-heart-pulse-line" aria-hidden="true" />
               <div>

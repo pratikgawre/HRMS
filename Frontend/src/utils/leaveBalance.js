@@ -1,6 +1,7 @@
 export const DEFAULT_LEAVE_TYPES = [
   { name: 'Casual Leave', days: 12 },
   { name: 'Sick Leave', days: 10 },
+  { name: 'Paid Leave', days: 18 },
   { name: 'Earned Leave', days: 18 },
   { name: 'Work From Home', days: 0 },
 ];
@@ -71,6 +72,37 @@ export function getLeaveTypeOptions(leaveTypes) {
   return getLeaveTypeNames(leaveTypes);
 }
 
+export function getLeavePagePath(role) {
+  const normalizedRole = String(role || '').trim();
+
+  switch (normalizedRole) {
+    case 'admin':
+      return '/admin/leave-management';
+    case 'hr':
+      return '/hr/leave-approval';
+    case 'teamLead':
+      return '/team-lead/leave-review';
+    case 'projectManager':
+      return '/project-manager/leave-review';
+    case 'employee':
+    default:
+      return '/employee/leave-requests';
+  }
+}
+
+export function buildLeaveBalanceCards(summary) {
+  return (Array.isArray(summary?.balances) ? summary.balances : []).map((item) => ({
+    label: 'Leave Balance',
+    title: item.name,
+    value: `${item.remaining} of ${item.days} days`,
+    delta: item.remaining === item.days
+      ? 'Unused so far'
+      : `${item.used} used so far`,
+    tone: getLeaveTone(item.name),
+    icon: getLeaveIcon(item.name),
+  }));
+}
+
 function matchesEmployee(request, employeeId, employeeName) {
   const requestEmployeeId = String(request?.employeeId || '').trim();
   const requestEmployeeName = String(request?.employee || '').trim();
@@ -88,4 +120,20 @@ function isApprovedStatus(status) {
 function normalizeDays(value) {
   const numeric = Number.parseInt(value, 10);
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
+}
+
+function getLeaveIcon(name) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized.includes('sick')) return 'ri-first-aid-kit-line';
+  if (normalized.includes('work from home')) return 'ri-home-office-line';
+  if (normalized.includes('earned')) return 'ri-award-line';
+  return 'ri-calendar-check-line';
+}
+
+function getLeaveTone(name) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized.includes('sick')) return 'orange';
+  if (normalized.includes('work from home')) return 'pink';
+  if (normalized.includes('earned')) return 'green';
+  return 'blue';
 }
