@@ -492,39 +492,45 @@ function formatRequesterRole(role) {
 }
 
 function buildLeaveSummary(summary, requests) {
-  const requestList = Array.isArray(requests) ? requests : [];
-  const totalTakenDays = Number(summary?.totalUsed || 0);
-  const pendingCount = requestList.filter((request) => String(request.status || '').toLowerCase() === 'pending').length;
-  const approvedCount = requestList.filter((request) => String(request.status || '').toLowerCase() === 'approved').length;
-  const rejectedCount = requestList.filter((request) => String(request.status || '').toLowerCase() === 'rejected').length;
-
-  return [
-    {
-      label: 'Total Leaves Taken',
-      value: String(totalTakenDays),
-      delta: 'Approved leave days',
-      tone: 'green',
-    },
-    {
-      label: 'Pending Requests',
-      value: String(pendingCount),
-      delta: 'Waiting for HR review',
-      tone: 'orange',
-    },
-    {
-      label: 'Approved Requests',
-      value: String(approvedCount),
-      delta: 'Confirmed leaves',
-      tone: 'blue',
-    },
-    {
-      label: 'Rejected Requests',
-      value: String(rejectedCount),
-      delta: 'Closed requests',
-      tone: 'pink',
-    },
+  const balances = Array.isArray(summary?.balances) ? summary.balances : [];
+  const cards = [
+    { name: 'Casual Leave', tone: 'blue' },
+    { name: 'Sick Leave', tone: 'orange' },
+    { name: 'Earned Leave', tone: 'green' },
+    { name: 'Work From Home', tone: 'pink' },
   ];
+
+  return cards.map((card) => {
+    const matched = balances.find((item) => String(item.name || '').toLowerCase() === card.name.toLowerCase());
+    const allocated = Number(matched?.days || 0);
+    const used = Number(matched?.used || 0);
+    const remaining = Number(matched?.remaining || 0);
+
+    return {
+      label: card.name,
+      value: String(remaining),
+      delta: `${used}/${allocated} used`,
+      tone: card.tone,
+    };
+  });
 }
 
+function getLeaveBalanceIcon(name) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized.includes('sick')) return 'ri-first-aid-kit-line';
+  if (normalized.includes('paid')) return 'ri-money-rupee-circle-line';
+  if (normalized.includes('work from home')) return 'ri-home-office-line';
+  if (normalized.includes('earned')) return 'ri-award-line';
+  return 'ri-calendar-check-line';
+}
+
+function getLeaveBalanceTone(name) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized.includes('sick')) return 'orange';
+  if (normalized.includes('paid')) return 'green';
+  if (normalized.includes('work from home')) return 'pink';
+  if (normalized.includes('earned')) return 'green';
+  return 'blue';
+}
 export default LeaveRequests;
 

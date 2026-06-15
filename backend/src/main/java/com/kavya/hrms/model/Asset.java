@@ -15,7 +15,10 @@ public class Asset {
   private String serialNo;
   private String purchaseDate;
   private String status;
+  private String assignedToEmployeeId;
+
   private String assignedTo;
+
   private String condition;
   private String location;
 
@@ -37,8 +40,13 @@ public class Asset {
   public void setPurchaseDate(String purchaseDate) { this.purchaseDate = purchaseDate; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
+  public String getAssignedToEmployeeId() { return assignedToEmployeeId; }
+  public void setAssignedToEmployeeId(String assignedToEmployeeId) { this.assignedToEmployeeId = assignedToEmployeeId; }
+
   public String getAssignedTo() { return assignedTo; }
   public void setAssignedTo(String assignedTo) { this.assignedTo = assignedTo; }
+
+
   public String getCondition() { return condition; }
   public void setCondition(String condition) { this.condition = condition; }
   public String getLocation() { return location; }

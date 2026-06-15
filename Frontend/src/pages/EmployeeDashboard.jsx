@@ -84,14 +84,6 @@ function EmployeeDashboard() {
         onClick: () => navigate('/employee/tasks'),
       },
       {
-        label: 'My Assets',
-        value: '00',
-        delta: 'Assigned to you',
-        tone: 'green',
-        icon: 'ri-briefcase-4-line',
-        onClick: () => navigate('/employee/assets'),
-      },
-      {
         label: 'Announcements',
         value: '00',
         delta: 'Latest updates',
@@ -105,7 +97,6 @@ function EmployeeDashboard() {
       dashboardSummary.attendance,
       dashboardSummary.leaveBalance,
       dashboardSummary.tasks,
-      dashboardSummary.assets,
       dashboardSummary.announcements,
     ] : fallbackStats;
 
@@ -248,8 +239,15 @@ function EmployeeDashboard() {
 
       <div className="dashboard-grid" style={{ display: 'block', marginTop: '16px' }}>
         <Section title="Latest Announcements" action="Read all">
-          <div className="announcement-list">
-            {latestAnnouncements.slice(0, 3).map((item) => (
+          <div
+            className="announcement-list"
+            style={{
+              maxHeight: '372px',
+              overflowY: 'auto',
+              paddingRight: '6px',
+            }}
+          >
+            {latestAnnouncements.map((item) => (
               <article key={item.id}>
                 <span>{item.date}</span>
                 <strong>{item.title}</strong>
@@ -261,8 +259,15 @@ function EmployeeDashboard() {
       </div>
 
       <Section title="Wellbeing Reminders" className="wellbeing-section">
-        <div className="wellbeing-list wellbeing-list--single-row">
-          {wellnessAnnouncements.slice(0, 3).map((item) => (
+        <div
+          className="wellbeing-list wellbeing-list--single-row"
+          style={{
+            maxHeight: '372px',
+            overflowY: 'auto',
+            paddingRight: '6px',
+          }}
+        >
+          {wellnessAnnouncements.map((item) => (
             <button key={item.id} type="button">
               <i className="ri-heart-pulse-line" aria-hidden="true" />
               <div>

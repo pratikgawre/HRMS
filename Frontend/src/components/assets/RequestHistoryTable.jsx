@@ -12,7 +12,7 @@ function RequestHistoryTable({
       <div className="asset-table-head">
         <div>
           <h4>{title}</h4>
-          <p>{workflow}</p>
+          {workflow ? <p>{workflow}</p> : null}
         </div>
       </div>
       <div className="table-responsive">
@@ -82,7 +82,7 @@ export function ReplacementRequestTable(props) {
   return (
     <RequestHistoryTable
       title="Replacement Requests"
-      workflow="Pending -> Approved -> Asset Replaced"
+      workflow=""
       renderReason={(request) => request.reason}
       {...props}
     />
@@ -93,7 +93,7 @@ export function RepairRequestTable(props) {
   return (
     <RequestHistoryTable
       title="Repair Requests"
-      workflow="Pending -> In Progress -> Resolved"
+      workflow=""
       renderIssue={(request) => request.issue}
       {...props}
     />
@@ -104,7 +104,7 @@ export function ReturnRequestTable(props) {
   return (
     <RequestHistoryTable
       title="Return Requests"
-      workflow="Pending Approval -> Approved -> Returned"
+      workflow=""
       renderReason={(request) => request.reason}
       {...props}
     />

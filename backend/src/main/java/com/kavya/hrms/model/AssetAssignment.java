@@ -16,6 +16,8 @@ public class AssetAssignment {
   private String returnDate;
   private String condition;
   private String status;
+  private String dispatchReason;
+  private String dispatchedBy;
 
   public String getId() { return id; }
   public void setId(String id) { this.id = id; }
@@ -37,4 +39,8 @@ public class AssetAssignment {
   public void setCondition(String condition) { this.condition = condition; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
+  public String getDispatchReason() { return dispatchReason; }
+  public void setDispatchReason(String dispatchReason) { this.dispatchReason = dispatchReason; }
+  public String getDispatchedBy() { return dispatchedBy; }
+  public void setDispatchedBy(String dispatchedBy) { this.dispatchedBy = dispatchedBy; }
 }

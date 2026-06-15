@@ -586,10 +586,13 @@ function EmployeeTasksView() {
       <section className="dashboard-card-grid" style={{ marginBottom: '0.9rem' }}>
         {(() => {
           const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
+          const isPendingTask = (value) => normalizeStatus(value) === 'pending';
+          const isActiveTask = (value) => ['active', 'in progress', 'in-progress'].includes(normalizeStatus(value));
+          const isCompletedTask = (value) => normalizeStatus(value) === 'completed';
           const total = employeeTasks.length;
-          const pending = employeeTasks.filter((t) => normalizeStatus(t.status) === 'pending').length;
-          const inProgress = employeeTasks.filter((t) => normalizeStatus(t.status) === 'in progress').length;
-          const completed = employeeTasks.filter((t) => normalizeStatus(t.status) === 'completed').length;
+          const pending = employeeTasks.filter((t) => isPendingTask(t.status)).length;
+          const inProgress = employeeTasks.filter((t) => isActiveTask(t.status)).length;
+          const completed = employeeTasks.filter((t) => isCompletedTask(t.status)).length;
           const cards = [
             { label: 'Total Tasks', value: String(total).padStart(2, '0'), delta: 'Assigned to you', tone: 'blue', icon: 'ri-task-line' },
             { label: 'Pending', value: String(pending).padStart(2, '0'), delta: 'Needs attention', tone: 'orange', icon: 'ri-time-line' },
