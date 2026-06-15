@@ -41,6 +41,12 @@ public class AssetAssignmentController {
     if (assignment.getStatus() == null || assignment.getStatus().isBlank()) {
       assignment.setStatus("Assigned");
     }
+    if (assignment.getDispatchReason() == null) {
+      assignment.setDispatchReason("");
+    }
+    if (assignment.getDispatchedBy() == null) {
+      assignment.setDispatchedBy("");
+    }
     return repository.save(assignment);
   }
 
