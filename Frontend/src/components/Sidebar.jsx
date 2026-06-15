@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import kavyaLogo from '../assets/logo.png';
 
 const menus = {
   admin: [
@@ -89,10 +90,9 @@ function Sidebar({ role, isOpen, onClose }) {
     <>
       <aside className={`sidebar ${isOpen ? 'is-open' : ''}`}>
         <div className="brand">
-          <span className="brand-mark">K</span>
+          <img className="brand-logo" src={kavyaLogo} alt="Kavya HR 360" />
           <div>
-            <strong>Kavya</strong>
-            <small>HRMS Suite</small>
+            <strong>Kavya HR 360</strong>
           </div>
         </div>
 

@@ -211,13 +211,6 @@ function AdminDashboard() {
 
   return (
     <>
-<<<<<<< HEAD
-      <Hero
-        title="Admin Dashboard"
-        copy=""
-        liveStatus={`Live sync · ${lastSyncedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
-      />
-=======
       
       <QuickActions detailOverrides={quickActionDetails} />
       <CardGrid stats={adminStats} />
@@ -650,13 +643,10 @@ export function QuickActions({ detailOverrides = {}, labelOverrides = {}, pathOv
 export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, wellnessAnnouncements = [] }) {
   const [focusItems, setFocusItems] = useState(todayFocusCache);
   const [isPlanDayOpen, setIsPlanDayOpen] = useState(false);
-<<<<<<< HEAD
   const [generatedFocusItems, setGeneratedFocusItems] = useState(null);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [planError, setPlanError] = useState('');
   const [planToast, setPlanToast] = useState('');
-=======
->>>>>>> origin/master
   const [selectedReminder, setSelectedReminder] = useState(null);
 
   const saveFocusItems = (next) => {
@@ -664,7 +654,6 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
     setFocusItems(next);
   };
 
-<<<<<<< HEAD
   const openPlanDay = () => {
     setGeneratedFocusItems(null);
     setPlanError('');
@@ -690,22 +679,24 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
     return () => window.clearTimeout(timer);
   }, [planToast]);
 
-  
-
   const planFromRealtime = () => {
+    setIsGeneratingPlan(true);
+
     const next = [
       { title: 'Leave approvals', meta: `${pendingLeaves} pending`, progress: Math.min(100, 40 + (pendingLeaves * 8)), tone: 'orange' },
       { title: 'Hiring pipeline', meta: `${openRoles} open roles`, progress: Math.min(100, 35 + (openRoles * 10)), tone: 'blue' },
       { title: 'Team coverage', meta: `${employees} employees`, progress: Math.min(100, 55 + (employees > 0 ? 20 : 0)), tone: 'green' },
     ];
+
     saveFocusItems(next);
-    setIsPlanDayOpen(false);
->>>>>>> origin/master
+    setGeneratedFocusItems(next);
+    setPlanError('');
+    setIsGeneratingPlan(false);
+    setPlanToast('Focus plan generated from realtime stats.');
   };
 
   return (
     <div className="insight-grid">
-<<<<<<< HEAD
       {planToast && (
         <div className="save-toast" role="status" aria-live="polite">
           <span className="save-toast-icon" aria-hidden="true">
@@ -718,12 +709,10 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
           <span className="save-toast-accent" aria-hidden="true" />
         </div>
       )}
-
-
       <section className="section-card">
         <div className="section-heading">
           <h3>Today Focus</h3>
-          <button type="button" onClick={() => setIsPlanDayOpen(true)}>Plan day</button>
+          <button type="button" onClick={openPlanDay}>Plan day</button>
         </div>
         <div className="focus-list">
           {focusItems.map((item) => (
@@ -757,19 +746,18 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
         </div>
       </Section>
       {isPlanDayOpen && (
-        <div className="smart-summary-backdrop" role="presentation" onClick={() => setIsPlanDayOpen(false)}>
+        <div className="smart-summary-backdrop" role="presentation" onClick={closePlanDay}>
           <section className="open-roles-modal" role="dialog" aria-modal="true" aria-label="Plan day focus" onClick={(event) => event.stopPropagation()}>
             <div className="open-roles-modal-head">
               <div>
                 <p className="eyebrow">Today Focus</p>
                 <h3>Plan day</h3>
               </div>
-              <button type="button" onClick={() => setIsPlanDayOpen(false)} aria-label="Close plan day">
+              <button type="button" onClick={closePlanDay} aria-label="Close plan day">
                 <i className="ri-close-line" aria-hidden="true" />
               </button>
             </div>
             <div className="open-roles-modal-body">
-< HEAD
               {generatedFocusItems ? (
                 <>
                   <p className="notification-empty">Focus plan generated from latest realtime stats.</p>
@@ -797,12 +785,6 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
                   {isGeneratingPlan ? 'Generating...' : 'Generate Plan'}
                 </button>
                 <button type="button" onClick={closePlanDay}>Close</button>
-=======
-              <p className="notification-empty">Create focus plan from latest realtime stats.</p>
-              <div className="notification-actions">
-                <button type="button" onClick={planFromRealtime}>Generate Plan</button>
-                <button type="button" onClick={() => setIsPlanDayOpen(false)}>Cancel</button>
->>>>>>> origin/master
               </div>
             </div>
           </section>
@@ -835,3 +817,4 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
 }
 
 export default AdminDashboard;
+

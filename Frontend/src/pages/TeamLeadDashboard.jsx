@@ -1,8 +1,14 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
-import { attendanceRows, dashboardStats, leaveRequests, people, tasks } from '../data/dummyData.js';
+import { announcements as fallbackAnnouncements, leaveRequests as fallbackLeaveRequests, people as fallbackPeople } from '../data/dummyData.js';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section, leaveColumns } from './AdminDashboard.jsx';
 import { attendanceColumns } from './EmployeeDashboard.jsx';
-import { taskColumns } from './Tasks.jsx';
+import { getTodayLabel } from '../utils/attendanceStorage.js';
+import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
+import { safeApiRequest } from '../utils/api.js';
+import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, normalizeLeaveTypes } from '../utils/leaveBalance.js';
+import { loadTasksWithSeed } from '../utils/taskStorage.js';
 
 function TeamLeadDashboard() {
   const navigate = useNavigate();
@@ -26,7 +32,7 @@ function TeamLeadDashboard() {
       safeApiRequest('/announcements', fallbackAnnouncements),
       safeApiRequest('/settings', { leaveTypes: DEFAULT_LEAVE_TYPES }),
       safeApiRequest('/leaves/summary/current', null),
-      loadTasksWithSeed(fallbackTasks),
+      loadTasksWithSeed(),
     ]).then(([employeeRows, attendanceRows, leaveRows, announcementRows, settingsPayload, summaryPayload, taskRows]) => {
       setEmployees(normalizeEmployees(employeeRows));
       setAttendance(normalizeAttendanceRows(attendanceRows));
@@ -137,8 +143,6 @@ function TeamLeadDashboard() {
   };
 
   const reviewLink = '/team-lead/leave-review?status=Pending';
-  const tasksLink = '/team-lead/tasks?status=Pending';
-
   return (
     <>
       <Hero title="Team Lead Dashboard" copy="Coordinate team attendance, task ownership, leave requests, and day-to-day delivery updates." />
