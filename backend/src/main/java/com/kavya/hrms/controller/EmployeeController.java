@@ -51,7 +51,7 @@ public class EmployeeController {
 
     List<Employee> filtered = new ArrayList<>();
     for (Employee employee : normalizedEmployees) {
-      if (normalizedFilter.equals(normalizeAccessRole(resolveAccessRole(employee)))) {
+      if (matchesAccessRole(employee, normalizedFilter)) {
         filtered.add(employee);
       }
     }
@@ -154,11 +154,6 @@ public class EmployeeController {
       return "";
     }
 
-    String direct = normalizeAccessRole(employee.getAccessRole());
-    if (!direct.isBlank()) {
-      return direct;
-    }
-
     String employeeId = firstNonBlank(employee.getEmployeeId(), employee.getEmployeeCode(), employee.getId());
     String email = trimToNull(employee.getEmail());
 
@@ -170,7 +165,12 @@ public class EmployeeController {
       matchedUser = appUserRepository.findByEmailIgnoreCase(email);
     }
 
-    return matchedUser.map(AppUser::getRole).map(this::normalizeAccessRole).orElse("");
+    String resolvedFromUser = matchedUser.map(AppUser::getRole).map(this::normalizeAccessRole).orElse("");
+    if (!resolvedFromUser.isBlank()) {
+      return resolvedFromUser;
+    }
+
+    return normalizeAccessRole(employee.getAccessRole());
   }
 
   private String normalizeAccessRole(String accessRole) {
@@ -186,6 +186,47 @@ public class EmployeeController {
     if ("teamlead".equals(normalized)) return "Team Lead";
     if ("employee".equals(normalized)) return "Employee";
     return "";
+  }
+
+  private boolean matchesAccessRole(Employee employee, String normalizedFilter) {
+    String resolvedRole = normalizeAccessRole(resolveAccessRole(employee));
+    if (!normalizedFilter.equals(resolvedRole)) {
+      return false;
+    }
+
+    if (!"Employee".equals(normalizedFilter)) {
+      return true;
+    }
+
+    return !isHrLikeEmployee(employee) && !isHigherPrivilegeEmployee(employee);
+  }
+
+  private boolean isHigherPrivilegeEmployee(Employee employee) {
+    String designation = normalizeRoleLabel(firstNonBlank(employee.getJobTitle(), employee.getRole(), employee.getAccessRole()));
+    return designation.contains("team lead")
+        || designation.contains("project manager")
+        || designation.contains("hr manager");
+  }
+
+  private boolean isHrLikeEmployee(Employee employee) {
+    String text = normalizeRoleLabel(String.join(" ",
+        safeText(employee.getDepartment()),
+        safeText(employee.getJobTitle()),
+        safeText(employee.getRole()),
+        safeText(employee.getAccessRole())));
+    return text.contains("hr")
+        || text.contains("people ops")
+        || text.contains("human resources")
+        || text.contains("recruit")
+        || text.contains("talent");
+  }
+
+  private String normalizeRoleLabel(String value) {
+    return trimToNull(value) == null ? "" : value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+  }
+
+  private String safeText(String value) {
+    return trimToNull(value) == null ? "" : value.trim();
   }
 
   private String firstNonBlank(String... values) {

@@ -37,7 +37,13 @@ function mapEmployees() {
     status: person.status,
     avatar: person.avatar,
     email: fallbackEmployeeEmail(person.id),
-    accessRole: person.id === 'KV003' ? 'Team Lead' : person.id === 'KV004' ? 'Project Manager' : 'Employee',
+    accessRole: person.id === 'KV002'
+      ? 'HR Manager'
+      : person.id === 'KV003'
+        ? 'Team Lead'
+        : person.id === 'KV004'
+          ? 'Project Manager'
+          : 'Employee',
   }));
 }
 

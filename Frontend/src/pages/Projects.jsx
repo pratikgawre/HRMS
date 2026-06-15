@@ -1058,7 +1058,9 @@ function normalizeEmployees(rows = [], userRows = []) {
       department: employee.department || employee.departmentName || '-',
       role: employee.jobTitle || employee.role || '-',
       designation: employee.designation || employee.jobTitle || employee.role || '-',
-      accessRole: employee.accessRole || accessRoleLookup.get(normalizeLookupValue(employee.employeeCode || employee.employeeId || employee.id)) || '',
+      accessRole: accessRoleLookup.get(normalizeLookupValue(employee.employeeCode || employee.employeeId || employee.id))
+        || employee.accessRole
+        || '',
       avatar: employee.avatar || getInitialsFromId(employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`),
     }));
 }
@@ -1399,21 +1401,39 @@ function isTeamLeaderEmployee(employee) {
 function isSelectableEmployee(employee) {
   const accessRole = normalizeRoleLabel(employee.accessRole || '');
   if (accessRole) {
-    return accessRole === 'employee';
+    return accessRole === 'employee' && !isHrLikeEmployee(employee) && !isHigherPrivilegeEmployee(employee);
   }
 
-  const designation = normalizeRoleLabel(employee.designation || employee.jobTitle || employee.role || '');
-  return ![
-    'team lead',
-    'project manager',
-    'hr manager',
-    'hr executive',
-    'hr',
-  ].includes(designation);
+  return !isHrLikeEmployee(employee) && !isHigherPrivilegeEmployee(employee);
 }
 
 function normalizeRoleLabel(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function isHigherPrivilegeEmployee(employee) {
+  const designation = normalizeRoleLabel(employee.designation || employee.jobTitle || employee.role || employee.accessRole || '');
+  return designation.includes('team lead') || designation.includes('project manager') || designation.includes('hr manager');
+}
+
+function isHrLikeEmployee(employee) {
+  const text = normalizeRoleLabel([
+    employee.department,
+    employee.designation,
+    employee.jobTitle,
+    employee.role,
+    employee.accessRole,
+  ].filter(Boolean).join(' '));
+
+  return [
+    'hr',
+    'hr manager',
+    'hr executive',
+    'people ops',
+    'human resources',
+    'recruit',
+    'talent',
+  ].some((needle) => text.includes(needle));
 }
 
 function dedupeEmployeeOptions(rows) {

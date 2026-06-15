@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
-import DashboardCard from '../components/DashboardCard.jsx';
+import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
@@ -23,13 +23,18 @@ function LeaveRequests() {
   const [requests, setRequests] = useState(getInitialLeaveRequests);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
+  const [searchText, setSearchText] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
-  const leaveSummary = useMemo(
-    () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee), requests),
+  const leaveBalanceSummary = useMemo(
+    () => getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee),
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
+  );
+  const leaveSummary = useMemo(
+    () => buildLeaveSummary(leaveBalanceSummary, requests),
+    [leaveBalanceSummary, requests],
   );
   const leaveTypeOptions = useMemo(() => getLeaveTypeOptions(leaveTypes), [leaveTypes]);
 
@@ -57,7 +62,22 @@ function LeaveRequests() {
     return request.employeeId === currentEmployee.employeeId;
   }), [requests, role, currentEmployee.employeeId]);
 
-  const rows = useMemo(() => visibleRequests.filter((request) => status === 'All' || request.status === status), [visibleRequests, status]);
+  const rows = useMemo(() => visibleRequests
+    .filter((request) => status === 'All' || request.status === status)
+    .filter((request) => {
+      const query = searchText.trim().toLowerCase();
+      if (!query) {
+        return true;
+      }
+
+      return [
+        request.employee,
+        request.employeeId,
+        request.type,
+        request.reason,
+        request.status,
+      ].some((value) => String(value || '').toLowerCase().includes(query));
+    }), [visibleRequests, status, searchText]);
 
   useEffect(() => {
     const refreshRequests = () => {
@@ -244,7 +264,8 @@ function LeaveRequests() {
     if (created && created.id) {
       await refreshRequests();
     } else {
-      setRequests((current) => [newRequest, ...current]);
+      setMessage('Leave request could not be saved right now.');
+      return;
     }
 
     setForm(getEmptyLeaveForm(currentEmployee, leaveTypes));
@@ -268,6 +289,9 @@ function LeaveRequests() {
       });
       if (saved && saved.id) {
         await refreshRequests();
+      } else {
+        setMessage('Leave request update could not be saved right now.');
+        return;
       }
     }
 
@@ -285,26 +309,11 @@ function LeaveRequests() {
         </div>
       )}
 
+      <Section title="My Leaves">
+        <LeaveBalanceStrip summary={leaveBalanceSummary} />
+      </Section>
+
       <Section title="Leave Request Queue">
-        {(role === 'employee' || role === 'hr' || role === 'teamLead' || role === 'projectManager') && (
-          <section
-            className="leave-summary-grid"
-            aria-label="Leave request summary"
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.85rem', width: '100%', marginBottom: '1.5rem' }}
-          >
-            {leaveSummary.map((item) => (
-              <DashboardCard
-                key={item.label}
-                label={item.label}
-                value={item.value}
-                delta={item.delta}
-                tone={item.tone}
-                className="leave-summary-card"
-                style={{ minHeight: '108px', padding: '0.8rem 0.9rem' }}
-              />
-            ))}
-          </section>
-        )}
         <div className="page-toolbar" style={{ gap: '1.2rem', marginTop: '1.5rem' }}>
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>
@@ -313,6 +322,18 @@ function LeaveRequests() {
             <option>Approved</option>
             <option>Rejected</option>
           </select>
+          {role !== 'employee' && (
+            <label className="toolbar-search">
+              <i className="ri-search-line" aria-hidden="true" />
+              <input
+                type="search"
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Search employee, type, reason..."
+                aria-label="Search leave requests"
+              />
+            </label>
+          )}
           {canCreateRequest && (
             <button className="toolbar-primary" type="button" onClick={() => {
               setFileErrors({});
@@ -503,22 +524,6 @@ function buildLeaveSummary(summary, requests) {
       tone: 'pink',
     },
   ];
-}
-
-function getLeaveBalanceIcon(name) {
-  const normalized = String(name || '').toLowerCase();
-  if (normalized.includes('sick')) return 'ri-first-aid-kit-line';
-  if (normalized.includes('work from home')) return 'ri-home-office-line';
-  if (normalized.includes('earned')) return 'ri-award-line';
-  return 'ri-calendar-check-line';
-}
-
-function getLeaveBalanceTone(name) {
-  const normalized = String(name || '').toLowerCase();
-  if (normalized.includes('sick')) return 'orange';
-  if (normalized.includes('work from home')) return 'pink';
-  if (normalized.includes('earned')) return 'green';
-  return 'blue';
 }
 
 export default LeaveRequests;

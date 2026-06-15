@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
+import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
 import { announcements as fallbackAnnouncements, leaveRequests as fallbackLeaveRequests, people as fallbackPeople } from '../data/dummyData.js';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section, leaveColumns } from './AdminDashboard.jsx';
 import { attendanceColumns } from './EmployeeDashboard.jsx';
 import { getTodayLabel } from '../utils/attendanceStorage.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { safeApiRequest } from '../utils/api.js';
-import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, normalizeLeaveTypes } from '../utils/leaveBalance.js';
+import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, getLeavePagePath, normalizeLeaveTypes } from '../utils/leaveBalance.js';
 import { loadTasksWithSeed } from '../utils/taskStorage.js';
 
 function TeamLeadDashboard() {
@@ -17,12 +18,17 @@ function TeamLeadDashboard() {
   const [attendance, setAttendance] = useState([]);
   const [liveTasks, setLiveTasks] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
+  const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [announcements, setAnnouncements] = useState([]);
   const [employeeLeaveSummary, setEmployeeLeaveSummary] = useState({
     totalAllotted: 0,
     totalTaken: 0,
     totalRemaining: 0,
   });
+  const leaveBalanceSummary = useMemo(
+    () => getEmployeeLeaveSummary(leaveTypes, leaveRequests, currentEmployee),
+    [currentEmployee, leaveRequests, leaveTypes],
+  );
 
   const refreshDashboard = () => {
     Promise.all([
@@ -38,6 +44,7 @@ function TeamLeadDashboard() {
       setAttendance(normalizeAttendanceRows(attendanceRows));
       setLeaveRequests(normalizeLeaveRows(leaveRows));
       setAnnouncements(normalizeAnnouncementRows(announcementRows));
+      setLeaveTypes(normalizeLeaveTypes(settingsPayload?.leaveTypes, DEFAULT_LEAVE_TYPES));
       setEmployeeLeaveSummary(normalizeEmployeeLeaveSummary(summaryPayload, settingsPayload, leaveRows, currentEmployee));
       setLiveTasks(Array.isArray(taskRows) ? taskRows : []);
     });
@@ -148,6 +155,9 @@ function TeamLeadDashboard() {
       <Hero title="Team Lead Dashboard" copy="Coordinate team attendance, task ownership, leave requests, and day-to-day delivery updates." />
       <QuickActions detailOverrides={quickActionDetails} labelOverrides={quickActionLabels} pathOverrides={quickActionPaths} />
       <CardGrid stats={summaryCards} />
+      <Section title="My Leaves" action="Open" actionTo={getLeavePagePath('teamLead')}>
+        <LeaveBalanceStrip summary={leaveBalanceSummary} />
+      </Section>
       <Section title="Leave Review" action="Review" actionTo={reviewLink}>
         <DataTable columns={leaveColumns} rows={leaveRequests} />
       </Section>

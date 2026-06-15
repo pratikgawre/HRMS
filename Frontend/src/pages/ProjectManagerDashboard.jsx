@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
+import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { safeApiRequest } from '../utils/api.js';
-import { getEmployeeLeaveSummary, normalizeLeaveTypes, DEFAULT_LEAVE_TYPES } from '../utils/leaveBalance.js';
+import { getEmployeeLeaveSummary, getLeavePagePath, normalizeLeaveTypes, DEFAULT_LEAVE_TYPES } from '../utils/leaveBalance.js';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section } from './AdminDashboard.jsx';
 import { taskColumns } from './Tasks.jsx';
 
@@ -159,6 +160,9 @@ function ProjectManagerDashboard() {
       <Hero title="Project Manager Dashboard" copy="Track project progress, milestones, delivery tasks, and team capacity in one workspace." />
       <QuickActions detailOverrides={quickActionDetails} labelOverrides={quickActionLabels} />
       <CardGrid stats={dashboardStats} />
+      <Section title="My Leaves" action="Open" actionTo={getLeavePagePath('projectManager')}>
+        <LeaveBalanceStrip summary={leaveSummary} />
+      </Section>
       <div className="project-manager-stack">
         <Section className="active-projects-table-section" title="Active Projects" action="Manage Projects" actionOnClick={() => navigate('/project-manager/projects')}>
           <DataTable columns={dashboardProjectColumns} rows={liveProjects} emptyMessage="No projects available." />
