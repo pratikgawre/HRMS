@@ -4569,6 +4569,40 @@ a:focus-visible {
   color: var(--primary-dark);
 }
 
+.project-group-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.project-team-group {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid rgba(201, 221, 221, 0.9);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-soft);
+}
+
+.project-team-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.project-team-group-head strong {
+  display: block;
+  color: var(--dark-text);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.project-team-group-head small {
+  color: var(--muted-text);
+  font-weight: 800;
+}
+
 .project-member-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6181,9 +6215,40 @@ img.profile-avatar.large {
   font-weight: 700;
 }
 
+.task-summary-card-compact {
+  align-self: start;
+  min-height: 100%;
+}
+
+.task-assignment-inline {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.95fr) minmax(320px, 1.2fr);
+  gap: 0.85rem;
+  grid-column: 1 / -1;
+  align-items: start;
+}
+
+.task-assignment-stack {
+  display: grid;
+  gap: 0.85rem;
+  align-content: start;
+}
+
+.task-empty-inline {
+  margin: 0;
+  min-height: 100%;
+  align-self: center;
+}
+
 .task-tab-panel {
   display: grid;
   gap: 1rem;
+}
+
+@media (max-width: 1024px) {
+  .task-assignment-inline {
+    grid-template-columns: 1fr;
+  }
 }
 
 .task-panel {

@@ -5,6 +5,7 @@ import com.kavya.hrms.repository.TaskRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.List;
+import java.time.OffsetDateTime;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,6 +52,9 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
+      task.setCreatedDateTime(OffsetDateTime.now().toString());
+    }
     TaskItem saved = taskRepository.save(task);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),

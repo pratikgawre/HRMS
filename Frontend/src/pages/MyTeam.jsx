@@ -5,8 +5,185 @@ import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
+import { buildTeamLeadAssignmentGroups, getEmployeeId, getEmployeeName, normalizeLookupValue } from '../utils/teamLeadAssignments.js';
 
 function MyTeam() {
+  const role = getSessionValue('kavyaRole') || 'employee';
+  if (role === 'teamLead') {
+    return <TeamLeadMyTeamView />;
+  }
+
+  return <DefaultMyTeamView />;
+}
+
+function TeamLeadMyTeamView() {
+  const navigate = useNavigate();
+  const currentEmployeeId = getSessionValue('kavyaEmployeeId');
+  const [employees, setEmployees] = useState([]);
+  const [projects, setProjects] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+
+    const refreshTeamData = () => {
+      Promise.all([
+        safeApiRequest('/employees', []),
+        safeApiRequest('/projects', []),
+      ]).then(([employeeRows, projectRows]) => {
+        if (!active) {
+          return;
+        }
+
+        setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
+        setProjects(Array.isArray(projectRows) ? projectRows : []);
+      });
+    };
+
+    refreshTeamData();
+    const intervalId = window.setInterval(refreshTeamData, 15000);
+    window.addEventListener('focus', refreshTeamData);
+    window.addEventListener('kavyaEmployeesChanged', refreshTeamData);
+    window.addEventListener('kavyaProjectsChanged', refreshTeamData);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshTeamData);
+      window.removeEventListener('kavyaEmployeesChanged', refreshTeamData);
+      window.removeEventListener('kavyaProjectsChanged', refreshTeamData);
+    };
+  }, []);
+
+  const assignmentData = useMemo(
+    () => buildTeamLeadAssignmentGroups(projects, employees, currentEmployeeId),
+    [currentEmployeeId, employees, projects],
+  );
+
+  const memberProjectMap = useMemo(() => {
+    const map = new Map();
+    assignmentData.groups.forEach((group) => {
+      group.teamMembers.forEach((member) => {
+        const key = normalizeLookupValue(getEmployeeId(member));
+        if (!key) {
+          return;
+        }
+
+        const current = map.get(key) || {
+          ...member,
+          projects: [],
+        };
+        current.projects = Array.from(new Set([...(current.projects || []), group.name]));
+        map.set(key, current);
+      });
+    });
+    return map;
+  }, [assignmentData.groups]);
+
+  const uniqueMemberRows = useMemo(() => (
+    Array.from(memberProjectMap.values()).map((member) => {
+      const source = assignmentData.employeeDirectory.get(normalizeLookupValue(getEmployeeId(member)));
+      return {
+        id: getEmployeeId(member),
+        avatar: member.avatar || source?.avatar || getInitials(getEmployeeName(member)),
+        name: getEmployeeName(member),
+        role: member.role || source?.role || '-',
+        department: member.department || source?.department || '-',
+        projects: member.projects.join(', '),
+        status: source?.status || '-',
+      };
+    })
+  ), [assignmentData.employeeDirectory, memberProjectMap]);
+
+  const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
+  const totalAssignments = assignmentData.groups.reduce((sum, group) => sum + group.teamMemberCount, 0);
+  const cards = [
+    { label: 'Team Members', value: String(assignmentData.totalTeamMembers).padStart(2, '0'), delta: 'From Team Assignment', tone: 'blue', icon: 'ri-team-line' },
+    { label: 'Projects', value: String(assignmentData.totalProjects).padStart(2, '0'), delta: 'Assigned to you', tone: 'green', icon: 'ri-folder-chart-line' },
+    { label: 'Active Members', value: String(activeTeamMembers).padStart(2, '0'), delta: 'Active team members', tone: 'orange', icon: 'ri-user-heart-line' },
+    { label: 'Assignments', value: String(totalAssignments).padStart(2, '0'), delta: 'Project-wise mapping', tone: 'pink', icon: 'ri-links-line' },
+  ];
+
+  const memberColumns = [
+    {
+      key: 'name',
+      label: 'Team Member',
+      render: (row) => (
+        <div className="employee-cell">
+          <span>{row.avatar}</span>
+          <div>
+            <strong>{row.name}</strong>
+            <small>{row.id}</small>
+          </div>
+        </div>
+      ),
+    },
+    { key: 'role', label: 'Designation' },
+    { key: 'department', label: 'Department' },
+    { key: 'projects', label: 'Projects' },
+    { key: 'status', label: 'Status' },
+  ];
+
+  const cardRoutes = {
+    'Team Members': '/team-lead/team',
+    Projects: '/team-lead/team',
+    'Active Members': '/team-lead/team',
+    Assignments: '/team-lead/tasks',
+  };
+
+  return (
+    <>
+      <Hero title="My Team" copy="View only the employees assigned to you through Team Assignment, grouped by project and counted from live project mapping records." />
+
+      <section className="dashboard-card-grid">
+        {cards.map((card) => (
+          <DashboardCard
+            key={card.label}
+            {...card}
+            onClick={() => navigate(cardRoutes[card.label] || '/team-lead/team')}
+          />
+        ))}
+      </section>
+
+      <Section title="Team Members" action="Assignment Summary">
+        <DataTable columns={memberColumns} rows={uniqueMemberRows} emptyMessage="No team members found." />
+      </Section>
+
+      <Section title="Project-wise Team Members" action={`${assignmentData.totalProjects} Projects`}>
+        <div className="project-group-list">
+          {assignmentData.groups.length > 0 ? assignmentData.groups.map((group) => (
+            <div key={group.id} className="project-team-group">
+              <div className="project-team-group-head">
+                <div>
+                  <strong>{group.name}</strong>
+                  <small>{group.projectCode || group.id}</small>
+                </div>
+                <span className="project-action-chip">{group.teamMemberCount} member{group.teamMemberCount === 1 ? '' : 's'}</span>
+              </div>
+              <DataTable
+                columns={memberColumns.slice(0, 4)}
+                rows={group.teamMembers.map((member) => {
+                  const source = assignmentData.employeeDirectory.get(normalizeLookupValue(getEmployeeId(member)));
+                  return {
+                    id: getEmployeeId(member),
+                    avatar: member.avatar || source?.avatar || getInitials(getEmployeeName(member)),
+                    name: getEmployeeName(member),
+                    role: member.role || source?.role || '-',
+                    department: member.department || source?.department || '-',
+                  };
+                })}
+                emptyMessage="No team members assigned to this project."
+              />
+            </div>
+          )) : (
+            <p className="project-empty-state">No project assignments found for the current Team Lead.</p>
+          )}
+        </div>
+      </Section>
+    </>
+  );
+}
+
+function DefaultMyTeamView() {
   const navigate = useNavigate();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isTeamLead = role === 'teamLead';
@@ -158,7 +335,7 @@ function MyTeam() {
           <DashboardCard
             key={card.label}
             {...card}
-            onClick={() => navigate(cardRoutes[card.label] || `${roleBasePath}/team`)}
+            onClick={() => navigate(cardRoutes[card.label] || '/team-lead/team')}
           />
         ))}
       </section>
