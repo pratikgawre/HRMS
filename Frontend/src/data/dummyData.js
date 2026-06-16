@@ -1,14 +1,21 @@
 export const people = [
   {
+    id: 'TL001',
+    name: 'Rohan Das',
+    role: 'Team Lead',
+    department: 'Engineering',
+    status: 'Active',
+    avatar: 'RD'
+  },
+
+  {
     id: 'KV001',
     name: 'Aarav Sharma',
     role: 'Product Designer',
     department: 'Design',
     status: 'Active',
     avatar: 'AS',
-    managerId: 'KV003',
-    reportingManagerId: 'KV003',
-    teamLeadId: 'KV003'
+    teamLeadId: 'TL001'
   },
 
   {
@@ -18,33 +25,37 @@ export const people = [
     department: 'People Ops',
     status: 'Active',
     avatar: 'MN',
-    managerId: 'KV002',
-    reportingManagerId: 'KV002',
-    teamLeadId: 'KV002'
+    teamLeadId: 'TL001'
   },
 
   {
     id: 'KV003',
     name: 'Kabir Khan',
-    role: 'Team Lead',
+    role: 'Frontend Engineer',
     department: 'Engineering',
-    status: 'Active',
+    status: 'On Leave',
     avatar: 'KK',
-    managerId: 'KV004',
-    reportingManagerId: 'KV004',
-    teamLeadId: 'KV004'
+    teamLeadId: 'TL001'
   },
 
   {
     id: 'KV004',
     name: 'Isha Patel',
-    role: 'Project Manager',
-    department: 'Delivery',
+    role: 'Finance Analyst',
+    department: 'Finance',
     status: 'Active',
     avatar: 'IP',
-    managerId: '',
-    reportingManagerId: '',
-    teamLeadId: ''
+    teamLeadId: 'TL001'
+  },
+
+  {
+    id: 'KV005',
+    name: 'Rohan Das',
+    role: 'QA Engineer',
+    department: 'Quality',
+    status: 'Active',
+    avatar: 'RD',
+    teamLeadId: 'TL001'
   }
 ];
 
@@ -121,47 +132,14 @@ export const wellbeingTips = [
 export const tasks = [
   { id: 'TSK-101', title: 'Finalize sprint board', owner: 'Kabir Khan', priority: 'High', due: '25 Apr', status: 'Pending' },
   { id: 'TSK-102', title: 'Review onboarding checklist', owner: 'Meera Nair', priority: 'Medium', due: '26 Apr', status: 'Active' },
-  { id: 'TSK-103', title: 'QA release sign-off', owner: 'Kabir Khan', priority: 'High', due: '27 Apr', status: 'Pending' },
+  { id: 'TSK-103', title: 'QA release sign-off', owner: 'Rohan Das', priority: 'High', due: '27 Apr', status: 'Pending' },
   { id: 'TSK-104', title: 'Design handoff audit', owner: 'Aarav Sharma', priority: 'Low', due: '28 Apr', status: 'Approved' },
 ];
 
 export const projects = [
-  {
-    id: 'PRJ-01',
-    name: 'Employee Self Service',
-    manager: 'Isha Patel',
-    managerId: 'KV004',
-    teamLead: 'Kabir Khan',
-    teamLeadId: 'KV003',
-    teamMembers: ['KV003', 'KV001'],
-    team: '2 members',
-    progress: '72%',
-    status: 'Active',
-  },
-  {
-    id: 'PRJ-02',
-    name: 'Payroll Automation',
-    manager: 'Isha Patel',
-    managerId: 'KV004',
-    teamLead: 'Kabir Khan',
-    teamLeadId: 'KV003',
-    teamMembers: ['KV003', 'KV001'],
-    team: '2 members',
-    progress: '54%',
-    status: 'Pending',
-  },
-  {
-    id: 'PRJ-03',
-    name: 'Attendance Insights',
-    manager: 'Isha Patel',
-    managerId: 'KV004',
-    teamLead: 'Kabir Khan',
-    teamLeadId: 'KV003',
-    teamMembers: ['KV003', 'KV001'],
-    team: '2 members',
-    progress: '88%',
-    status: 'Approved',
-  },
+  { id: 'PRJ-01', name: 'Employee Self Service', manager: 'Priya Menon', team: '8 members', progress: '72%', status: 'Active' },
+  { id: 'PRJ-02', name: 'Payroll Automation', manager: 'Nikhil Rao', team: '6 members', progress: '54%', status: 'Pending' },
+  { id: 'PRJ-03', name: 'Attendance Insights', manager: 'Priya Menon', team: '5 members', progress: '88%', status: 'Approved' },
 ];
 
 export const salaryRecords = [
@@ -239,11 +217,11 @@ export const salaryRecords = [
   },
   {
     id: 'PAY-1001',
-    employeeId: 'KV003',
-    employeeName: 'Kabir Khan',
-    role: 'Frontend Engineer',
-    ownerRole: 'teamLead',
-    department: 'Engineering',
+    employeeId: 'KV005',
+    employeeName: 'Rohan Das',
+    role: 'QA Lead',
+    ownerRole: 'admin',
+    department: 'Quality',
     month: 'April',
     year: '2026',
     basic: 70000,

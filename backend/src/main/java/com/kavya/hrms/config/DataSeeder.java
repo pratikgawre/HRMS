@@ -2,14 +2,12 @@ package com.kavya.hrms.config;
 
 import com.kavya.hrms.model.Announcement;
 import com.kavya.hrms.model.AppUser;
-import com.kavya.hrms.model.Employee;
 import com.kavya.hrms.model.LeaveRequest;
 import com.kavya.hrms.model.Project;
 import com.kavya.hrms.model.SystemSettings;
 import com.kavya.hrms.model.TaskItem;
 import com.kavya.hrms.repository.AnnouncementRepository;
 import com.kavya.hrms.repository.AppUserRepository;
-import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
@@ -24,7 +22,6 @@ import org.springframework.context.annotation.Configuration;
 public class DataSeeder {
   @Bean
   CommandLineRunner seedData(
-      EmployeeRepository employeeRepository,
       AppUserRepository appUserRepository,
       LeaveRequestRepository leaveRequestRepository,
       AnnouncementRepository announcementRepository,
@@ -32,7 +29,6 @@ public class DataSeeder {
       ProjectRepository projectRepository,
       SystemSettingsRepository settingsRepository) {
     return args -> {
-      purgeLegacyRohanRecords(employeeRepository, appUserRepository);
       seedUser(appUserRepository, "admin@gmail.com", "admin123", "admin", "ADMIN-001", "Admin Kavya");
       seedUser(appUserRepository, "hr@gmail.com", "hr123", "hr", "HR-001", "Meera Nair");
       seedUser(appUserRepository, "teamlead@gmail.com", "teamlead123", "teamLead", "KV003", "Kabir Khan");
@@ -79,7 +75,7 @@ public class DataSeeder {
       if (taskRepository.count() == 0) {
         taskRepository.save(buildTask("TSK-101", "Finalize sprint board", "Kabir Khan", "High", "25 Apr 2026", "Pending"));
         taskRepository.save(buildTask("TSK-102", "Review onboarding checklist", "Meera Nair", "Medium", "26 Apr 2026", "Active"));
-        taskRepository.save(buildTask("TSK-103", "QA release sign-off", "Kabir Khan", "High", "27 Apr 2026", "Pending"));
+        taskRepository.save(buildTask("TSK-103", "QA release sign-off", "Rohan Das", "High", "27 Apr 2026", "Pending"));
         taskRepository.save(buildTask("TSK-104", "Design handoff audit", "Aarav Sharma", "Low", "28 Apr 2026", "Completed"));
       }
 
@@ -152,71 +148,6 @@ public class DataSeeder {
       user.setUserId("USR-" + employeeId);
     }
     appUserRepository.save(user);
-  }
-
-  private void purgeLegacyRohanRecords(EmployeeRepository employeeRepository, AppUserRepository appUserRepository) {
-    List<Employee> legacyEmployees = employeeRepository.findAll().stream()
-        .filter(this::isLegacyRohanEmployee)
-        .toList();
-    if (!legacyEmployees.isEmpty()) {
-      employeeRepository.deleteAll(legacyEmployees);
-    }
-
-    List<AppUser> legacyUsers = appUserRepository.findAll().stream()
-        .filter(this::isLegacyRohanUser)
-        .toList();
-    if (!legacyUsers.isEmpty()) {
-      appUserRepository.deleteAll(legacyUsers);
-    }
-  }
-
-  private boolean isLegacyRohanEmployee(Employee employee) {
-    if (employee == null) {
-      return false;
-    }
-
-    return matchesLegacyRohan(
-        employee.getEmployeeId(),
-        employee.getEmployeeCode(),
-        employee.getId(),
-        employee.getDisplayName(),
-        employee.getName(),
-        employee.getEmail());
-  }
-
-  private boolean isLegacyRohanUser(AppUser user) {
-    if (user == null) {
-      return false;
-    }
-
-    return matchesLegacyRohan(
-        user.getUserId(),
-        user.getEmployeeId(),
-        user.getEmployeeName(),
-        user.getEmail());
-  }
-
-  private boolean matchesLegacyRohan(String... values) {
-    for (String value : values) {
-      String normalized = normalizeLegacyValue(value);
-      if (normalized.equals("rohandas")
-          || normalized.equals("rohan")
-          || normalized.equals("tl001")
-          || normalized.equals("kv005")
-          || normalized.equals("rohan@kavya.hr")) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  private String normalizeLegacyValue(String value) {
-    if (value == null) {
-      return "";
-    }
-
-    return value.trim().toLowerCase().replace(" ", "");
   }
 
   private TaskItem buildTask(String id, String title, String owner, String priority, String dueDate, String status) {

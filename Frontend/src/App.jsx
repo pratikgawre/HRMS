@@ -6,7 +6,6 @@ import AdminDashboard from './pages/AdminDashboard.jsx';
 import HRDashboard from './pages/HRDashboard.jsx';
 import EmployeeDashboard from './pages/EmployeeDashboard.jsx';
 import EmployeeAttendance from './pages/EmployeeAttendance.jsx';
-import TeamAttendance from './pages/TeamAttendance.jsx';
 import LeaveRequests from './pages/LeaveRequests.jsx';
 import Announcements from './pages/Announcements.jsx';
 import Profile from './pages/Profile.jsx';
@@ -51,7 +50,6 @@ function App() {
             <Route path="/admin/users" element={<UserManagement />} />
             <Route path="/admin/employees" element={<Employees />} />
             <Route path="/admin/attendance" element={<EmployeeAttendance />} />
-            <Route path="/admin/team-attendance" element={<TeamAttendance />} />
             <Route path="/admin/leave-management" element={<LeaveRequests />} />
             <Route path="/admin/payroll" element={<Payroll />} />
             <Route path="/admin/assets" element={<Assets />} />
@@ -72,7 +70,6 @@ function App() {
             <Route path="/hr/assets" element={<Assets />} />
             <Route path="/hr/employees" element={<Employees />} />
             <Route path="/hr/attendance" element={<EmployeeAttendance />} />
-            <Route path="/hr/team-attendance" element={<TeamAttendance />} />
             <Route path="/hr/leave-approval" element={<LeaveRequests />} />
             <Route path="/hr/payroll" element={<Payroll />} />
             <Route path="/hr/announcements" element={<Announcements />} />
@@ -87,7 +84,6 @@ function App() {
             <Route path="/team-lead/dashboard" element={<TeamLeadDashboard />} />
             <Route path="/team-lead/team" element={<MyTeam />} />
             <Route path="/team-lead/attendance" element={<EmployeeAttendance />} />
-            <Route path="/team-lead/team-attendance" element={<TeamAttendance />} />
             <Route path="/team-lead/tasks" element={<Tasks />} />
             <Route path="/team-lead/leave-review" element={<LeaveRequests />} />
             <Route path="/team-lead/payroll" element={<Payroll />} />
@@ -107,7 +103,6 @@ function App() {
             <Route path="/project-manager/tasks" element={<Tasks />} />
             <Route path="/project-manager/leave-review" element={<LeaveRequests />} />
             <Route path="/project-manager/attendance" element={<EmployeeAttendance />} />
-            <Route path="/project-manager/team-attendance" element={<TeamAttendance />} />
             <Route path="/project-manager/payroll" element={<Payroll />} />
             <Route path="/project-manager/announcements" element={<Announcements />} />
             <Route path="/project-manager/support" element={<SupportTickets />} />

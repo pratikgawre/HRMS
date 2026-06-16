@@ -25,34 +25,17 @@ public final class NotificationAudience {
     return roles;
   }
 
-  public static Set<String> attendanceRecipients() { return roles("admin", "hr", "projectmanager", "teamlead"); }
-
-  public static Set<String> leaveRecipients() { return roles("admin", "hr", "projectmanager", "teamlead"); }
-
-  public static Set<String> payrollRecipients() { return roles("admin", "hr"); }
-
-  public static Set<String> projectRecipients() { return roles("admin", "hr", "projectmanager", "teamlead"); }
-
-  public static Set<String> taskRecipients() { return roles("admin", "hr", "projectmanager", "teamlead"); }
-
-  public static Set<String> employeeRecipients() { return roles("admin", "hr"); }
-
-  public static Set<String> assetRecipients() { return roles("admin", "hr", "projectmanager"); }
+  public static Set<String> leaveRecipients(String accessRoleHeader) {
+    Set<String> roles = operationalRecipients(accessRoleHeader);
+    roles.add("hr");
+    roles.add("teamlead");
+    roles.add("projectmanager");
+    return roles;
+  }
 
   public static Set<String> companyWideRecipients() {
     Set<String> roles = new LinkedHashSet<>();
     roles.add("all");
-    return roles;
-  }
-
-  private static Set<String> roles(String... values) {
-    Set<String> roles = new LinkedHashSet<>();
-    for (String value : values) {
-      String normalized = normalizeAccessRole(value);
-      if (!normalized.isBlank()) {
-        roles.add(normalized);
-      }
-    }
     return roles;
   }
 }

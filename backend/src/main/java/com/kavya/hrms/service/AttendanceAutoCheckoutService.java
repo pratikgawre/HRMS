@@ -89,7 +89,6 @@ public class AttendanceAutoCheckoutService {
 
     AttendanceRecord updated = cloneRecord(record);
     updated.setCheckOut(formatTime(checkoutMoment.toLocalTime()));
-    updated.setCheckOutAt(checkoutMoment.toString());
     updated.setWorkedHours(formatDuration(workedMinutes));
     updated.setTotalHours(formatDuration(workedMinutes));
     updated.setStatus(status);
@@ -198,13 +197,10 @@ public class AttendanceAutoCheckoutService {
     clone.setDate(record.getDate());
     clone.setCheckIn(record.getCheckIn());
     clone.setCheckOut(record.getCheckOut());
-    clone.setCheckInAt(record.getCheckInAt());
-    clone.setCheckOutAt(record.getCheckOutAt());
     clone.setWorkedHours(record.getWorkedHours());
     clone.setTotalHours(record.getTotalHours());
     clone.setStatus(record.getStatus());
     clone.setRemarks(record.getRemarks());
-    clone.setLateCheckInCount(record.getLateCheckInCount());
     return clone;
   }
 

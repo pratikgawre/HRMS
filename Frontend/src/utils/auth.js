@@ -3,7 +3,7 @@ import { getUsers, saveUsers } from './user-management.js';
 import { getStoredEmployees } from './employeeStorage.js';
 import { clearSessionValues, getSessionValue, setSessionValue } from './appSession.js';
 
-const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+const API_BASE = '/api';
 
 const legacyUsers = {
   'admin@gmail.com': { password: 'admin123', role: 'Super Admin', employeeId: 'ADMIN-001', employeeName: 'Admin Kavya', avatar: 'AK', department: 'Platform', designation: 'System Admin' },

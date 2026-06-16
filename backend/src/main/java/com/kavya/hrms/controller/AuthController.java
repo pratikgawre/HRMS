@@ -12,9 +12,7 @@ import java.time.Instant;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -39,8 +37,8 @@ public class AuthController {
 
   @PostMapping("/login")
   public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-    String requestedEmail = normalizeEmail(request.getEmail());
-    return resolveLoginUser(requestedEmail)
+    return appUserRepository.findAllByEmailIgnoreCase(request.getEmail()).stream()
+      .findFirst()
       .map(user -> {
         if (!String.valueOf(user.getPassword()).equals(String.valueOf(request.getPassword()))) {
           return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials"));
@@ -142,58 +140,6 @@ public class AuthController {
     response.setTwoFactorRequired(false);
     response.setMessage(message);
     return response;
-  }
-
-  private Optional<AppUser> resolveLoginUser(String requestedEmail) {
-    if (requestedEmail == null || requestedEmail.isBlank()) {
-      return Optional.empty();
-    }
-
-    List<AppUser> exactMatches = appUserRepository.findAllByEmailIgnoreCase(requestedEmail);
-    if (!exactMatches.isEmpty()) {
-      return exactMatches.stream().findFirst();
-    }
-
-    return appUserRepository.findAll().stream()
-      .filter(user -> matchesGeneratedLogin(user, requestedEmail))
-      .findFirst();
-  }
-
-  private boolean matchesGeneratedLogin(AppUser user, String requestedEmail) {
-    if (user == null || requestedEmail == null || requestedEmail.isBlank()) {
-      return false;
-    }
-
-    String employeeName = user.getEmployeeName();
-    if (employeeName == null || employeeName.isBlank()) {
-      return false;
-    }
-
-    return requestedEmail.equals(buildGeneratedLoginId(employeeName));
-  }
-
-  private String buildGeneratedLoginId(String employeeName) {
-    String[] parts = employeeName.trim().toLowerCase(Locale.ROOT).split("\\s+");
-    if (parts.length == 0 || parts[0].isBlank()) {
-      return "";
-    }
-
-    String firstName = sanitizeLoginPart(parts[0]);
-    String lastName = parts.length > 1 ? sanitizeLoginPart(parts[1]) : "";
-    if (firstName.isBlank()) {
-      return "";
-    }
-
-    String localPart = lastName.isBlank() ? firstName : firstName + "." + lastName;
-    return localPart + "@kavyainfoweb.com";
-  }
-
-  private String sanitizeLoginPart(String value) {
-    return value == null ? "" : value.trim().replaceAll("[^a-z0-9]", "");
-  }
-
-  private String normalizeEmail(String email) {
-    return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
   }
 
   private LoginResponse twoFactorRequired() {

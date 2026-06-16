@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Hero, Section } from "./AdminDashboard.jsx";
 import { apiRequest } from "../utils/api.js";
 import { getSessionValue } from "../utils/appSession.js";
@@ -45,20 +45,6 @@ function getDefaultForm() {
   };
 }
 
-function getAnnouncementTime(item) {
-  const postedAtTime = new Date(item?.postedAt || "").getTime();
-  if (!Number.isNaN(postedAtTime)) {
-    return postedAtTime;
-  }
-
-  const dateLabelTime = new Date(item?.dateLabel || "").getTime();
-  if (!Number.isNaN(dateLabelTime)) {
-    return dateLabelTime;
-  }
-
-  return 0;
-}
-
 function Announcements() {
   const role = getSessionValue("kavyaAccessRole") || getSessionValue("kavyaRole") || "Employee";
   const roleKey = normalizeRoleKey(role);
@@ -73,13 +59,12 @@ function Announcements() {
   const [saving, setSaving] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [undoState, setUndoState] = useState(null);
+  const undoTimerRef = useRef(null);
 
   const filteredAnnouncements = useMemo(() => {
-    const items = !filterCategory
-      ? announcements
-      : announcements.filter((item) => toLower(item.category) === toLower(filterCategory));
-
-    return [...items].sort((a, b) => getAnnouncementTime(b) - getAnnouncementTime(a));
+    if (!filterCategory) return announcements;
+    return announcements.filter((item) => toLower(item.category) === toLower(filterCategory));
   }, [announcements, filterCategory]);
 
   const clearMessage = () => setMessage("");
@@ -198,6 +183,13 @@ function Announcements() {
     setErrors({});
   };
 
+  const clearUndoTimer = () => {
+    if (undoTimerRef.current) {
+      window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+  };
+
   const deleteAnnouncement = async (announcementId) => {
     try {
       await apiRequest(`/announcements/${announcementId}`, { method: "DELETE" });
@@ -211,17 +203,44 @@ function Announcements() {
     }
   };
 
-  const confirmDeleteAnnouncement = async () => {
-    if (!deleteTarget) {
-      return;
-    }
-
-    const announcementId = deleteTarget.id;
-    setDeleteTarget(null);
+  const canManageAnnouncement = () => canCreate;
+  const openDeleteConfirm = (announcement) => setDeleteTarget(announcement);
+  const closeDeleteConfirm = () => setDeleteTarget(null);
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    const announcement = deleteTarget;
+    const announcementId = announcement.id;
+    closeDeleteConfirm();
+    clearUndoTimer();
     await deleteAnnouncement(announcementId);
+    setUndoState({
+      announcement,
+      expiresAt: Date.now() + 8000,
+    });
+    undoTimerRef.current = window.setTimeout(() => {
+      setUndoState(null);
+      undoTimerRef.current = null;
+    }, 8000);
   };
 
-  const canManageAnnouncement = () => canCreate;
+  const handleUndoDelete = async () => {
+    if (!undoState?.announcement) return;
+    const restored = undoState.announcement;
+    clearUndoTimer();
+    setUndoState(null);
+    try {
+      await apiRequest("/announcements", {
+        method: "POST",
+        body: JSON.stringify(restored),
+      });
+      setAnnouncements((current) => [restored, ...current]);
+      setMessage("Announcement restored successfully");
+    } catch (error) {
+      setMessage(error.message || "Failed to restore announcement");
+    }
+  };
+
+  useEffect(() => () => clearUndoTimer(), []);
 
   return (
     <>
@@ -288,7 +307,7 @@ function Announcements() {
                     <i className="ri-edit-line" aria-hidden="true" />
                     Edit
                   </button>
-                  <button type="button" className="danger" onClick={() => setDeleteTarget(item)}>
+                  <button type="button" className="danger" onClick={() => openDeleteConfirm(item)}>
                     <i className="ri-delete-bin-line" aria-hidden="true" />
                     Delete
                   </button>
@@ -312,30 +331,39 @@ function Announcements() {
       )}
 
       {deleteTarget && (
-        <div className="settings-modal-backdrop" role="presentation" onClick={() => setDeleteTarget(null)}>
+        <div className="announcement-delete-backdrop" role="presentation" onClick={closeDeleteConfirm}>
           <section
-            className="settings-modal settings-modal--error announcement-delete-modal"
+            className="announcement-delete-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="Delete announcement confirmation"
+            aria-label="Delete announcement"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="settings-modal-icon">
-              <i className="ri-delete-bin-line" aria-hidden="true" />
+            <div className="announcement-delete-icon" aria-hidden="true">
+              <i className="ri-delete-bin-line" />
             </div>
-            <div className="settings-modal-copy">
-              <strong>Delete announcement?</strong>
-              <span>This announcement will be removed permanently.</span>
+            <div className="announcement-delete-copy">
+              <h3>Delete announcement?</h3>
+              <p>This announcement will be removed permanently.</p>
             </div>
             <div className="announcement-delete-actions">
-              <button type="button" className="announcement-cancel" onClick={() => setDeleteTarget(null)}>
+              <button type="button" className="announcement-delete-cancel" onClick={closeDeleteConfirm}>
                 No, Keep It
               </button>
-              <button type="button" className="announcement-submit announcement-delete-confirm" onClick={confirmDeleteAnnouncement}>
+              <button type="button" className="announcement-delete-confirm" onClick={handleDeleteConfirm}>
                 Yes, Delete
               </button>
             </div>
           </section>
+        </div>
+      )}
+
+      {undoState?.announcement && (
+        <div className="announcement-undo-toast" role="status" aria-live="polite">
+          <span>Announcement deleted.</span>
+          <button type="button" onClick={handleUndoDelete}>
+            Undo
+          </button>
         </div>
       )}
     </>
