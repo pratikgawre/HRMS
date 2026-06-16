@@ -7,7 +7,6 @@ const menus = {
     { label: 'Dashboard', to: '/admin/dashboard', icon: 'ri-dashboard-line' },
     { label: 'Announcements', to: '/admin/announcements', icon: 'ri-megaphone-line' },
     { label: 'Assets', to: '/admin/assets', icon: 'ri-briefcase-4-line' },
-    { label: 'My Attendance', to: '/admin/attendance', icon: 'ri-time-line' },
     { label: 'Team Attendance', to: '/admin/team-attendance', icon: 'ri-group-line' },
     { label: 'Employees', to: '/admin/employees', icon: 'ri-team-line' },
     { label: 'Leave Management', to: '/admin/leave-management', icon: 'ri-calendar-check-line' },
@@ -91,7 +90,7 @@ function Sidebar({ role, isOpen, onClose }) {
       <aside className={`sidebar ${isOpen ? 'is-open' : ''}`}>
         <div className="brand">
           <img className="brand-logo" src={kavyaLogo} alt="Kavya HR 360" />
-          <div>
+          <div className="brand-copy">
             <strong>Kavya HR 360</strong>
           </div>
         </div>

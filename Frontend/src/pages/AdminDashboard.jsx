@@ -236,9 +236,6 @@ function AdminDashboard() {
       
       <QuickActions detailOverrides={quickActionDetails} />
       <CardGrid stats={adminStats} />
-      <Section title="My Leaves" action="Open" actionTo={getLeavePagePath('admin')}>
-        <LeaveBalanceStrip summary={leaveSummary} />
-      </Section>
       <div className="admin-sections-stack">
         <Section title="Employee Directory" action="View all" actionTo="/admin/employees">
           <DataTable columns={employeeColumns} rows={dashboardEmployees.slice(0, 4)} />
@@ -802,8 +799,8 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
         </div>
       </section>
       <Section title="Wellbeing Reminders">
-        <div className="wellbeing-list">
-          {wellnessAnnouncements.map((item) => (
+        <div className="wellbeing-list wellbeing-list--scroll">
+          {wellnessAnnouncements.slice(0, 3).map((item) => (
             <button key={item.id} type="button" onClick={() => setSelectedReminder(item)}>
               <i className="ri-heart-pulse-line" aria-hidden="true" />
               <div>

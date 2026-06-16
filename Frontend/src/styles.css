@@ -1139,33 +1139,40 @@ a:focus-visible {
 .brand {
   flex: 0 0 auto;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0.35rem;
-  margin-bottom: 0.55rem;
-  padding: 0.05rem 0.35rem 0.2rem;
-  text-align: center;
+  justify-content: flex-start;
+  gap: 0.7rem;
+  margin-bottom: 0.45rem;
+  padding: 0.15rem 0.05rem 0.1rem 0.15rem;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(244, 250, 249, 0.82), rgba(255, 255, 255, 0.66));
+  box-shadow: inset 0 0 0 1px rgba(201, 221, 221, 0.24);
+  text-align: left;
 }
 
 .brand-logo {
   display: block;
-  width: 120px;
-  height: 120px;
+  width: 68px;
+  height: 68px;
   flex-shrink: 0;
   object-fit: contain;
-  border-radius: 18px;
+  object-position: center;
+  border-radius: 14px;
 }
 
-.brand > div {
+.brand-copy {
+  display: grid;
+  align-content: center;
   min-width: 0;
 }
 
 .brand strong {
   display: block;
   color: var(--dark-text);
-  font-size: 1rem;
+  font-size: 0.98rem;
   font-weight: 900;
-  line-height: 1.15;
+  line-height: 1.1;
   letter-spacing: 0.01em;
 }
 
@@ -4835,6 +4842,12 @@ img.profile-avatar {
   text-align: left;
 }
 
+.wellbeing-list--scroll {
+  max-height: 372px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
 .wellbeing-list i {
   display: grid;
   width: 40px;
@@ -4985,6 +4998,27 @@ img.profile-avatar {
   color: var(--danger);
   border-color: rgba(217, 77, 99, 0.24);
   background: rgba(217, 77, 99, 0.08);
+}
+
+.announcement-delete-modal {
+  width: min(500px, 100%);
+}
+
+.announcement-delete-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 0.4rem;
+}
+
+.announcement-delete-actions button {
+  flex: 1 1 160px;
+}
+
+.announcement-delete-confirm {
+  color: #fff;
+  background: linear-gradient(135deg, #d94d63, #b8384d);
 }
 
 .profile-card {

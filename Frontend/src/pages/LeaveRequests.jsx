@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
-<<<<<<< HEAD
-import DashboardCard from '../components/DashboardCard.jsx';
-import { people } from '../data/dummyData.js';
-=======
 import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
->>>>>>> ec47e706cb012d95fa52a5ec77061a0b93f54c2d
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity, getStoredEmployees } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
@@ -28,23 +23,14 @@ function LeaveRequests() {
   const [requests, setRequests] = useState(getInitialLeaveRequests);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
-<<<<<<< HEAD
-  const [searchQuery, setSearchQuery] = useState('');
-=======
   const [searchText, setSearchText] = useState('');
->>>>>>> ec47e706cb012d95fa52a5ec77061a0b93f54c2d
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
-<<<<<<< HEAD
   const [teamMemberIds, setTeamMemberIds] = useState([]);
-  const leaveSummary = useMemo(
-    () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee), requests),
-=======
   const leaveBalanceSummary = useMemo(
     () => getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee),
->>>>>>> ec47e706cb012d95fa52a5ec77061a0b93f54c2d
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
   );
   const leaveSummary = useMemo(
@@ -107,29 +93,12 @@ function LeaveRequests() {
       const currentEmployeeId = normalizeComparable(currentEmployee.employeeId);
       const teamIds = new Set(teamMemberIds.map(normalizeComparable));
 
-<<<<<<< HEAD
       return requestEmployeeId === currentEmployeeId || teamIds.has(requestEmployeeId);
     }
 
     return request.employeeId === currentEmployee.employeeId;
   }), [currentEmployee.employeeId, isReviewerRole, requests, role, teamMemberIds]);
 
-  const rows = useMemo(() => {
-    const query = normalizeComparable(searchQuery);
-
-    return visibleRequests.filter((request) => {
-      if (status !== 'All' && request.status !== status) {
-        return false;
-      }
-
-      if (query && !normalizeComparable(request.employee).includes(query)) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [searchQuery, status, visibleRequests]);
-=======
   const rows = useMemo(() => visibleRequests
     .filter((request) => status === 'All' || request.status === status)
     .filter((request) => {
@@ -146,7 +115,6 @@ function LeaveRequests() {
         request.status,
       ].some((value) => String(value || '').toLowerCase().includes(query));
     }), [visibleRequests, status, searchText]);
->>>>>>> ec47e706cb012d95fa52a5ec77061a0b93f54c2d
 
   useEffect(() => {
     const refreshRequests = () => {
@@ -437,16 +405,6 @@ function LeaveRequests() {
             <option>Approved</option>
             <option>Rejected</option>
           </select>
-<<<<<<< HEAD
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search employee name"
-            aria-label="Search employee name"
-            style={{ minWidth: '220px', padding: '0.55rem 0.8rem' }}
-          />
-=======
           {role !== 'employee' && (
             <label className="toolbar-search">
               <i className="ri-search-line" aria-hidden="true" />
@@ -459,7 +417,6 @@ function LeaveRequests() {
               />
             </label>
           )}
->>>>>>> ec47e706cb012d95fa52a5ec77061a0b93f54c2d
           {canCreateRequest && (
             <button className="toolbar-primary" type="button" onClick={() => {
               setFileErrors({});

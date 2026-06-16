@@ -45,6 +45,20 @@ function getDefaultForm() {
   };
 }
 
+function getAnnouncementTime(item) {
+  const postedAtTime = new Date(item?.postedAt || "").getTime();
+  if (!Number.isNaN(postedAtTime)) {
+    return postedAtTime;
+  }
+
+  const dateLabelTime = new Date(item?.dateLabel || "").getTime();
+  if (!Number.isNaN(dateLabelTime)) {
+    return dateLabelTime;
+  }
+
+  return 0;
+}
+
 function Announcements() {
   const role = getSessionValue("kavyaAccessRole") || getSessionValue("kavyaRole") || "Employee";
   const roleKey = normalizeRoleKey(role);
@@ -58,10 +72,14 @@ function Announcements() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const filteredAnnouncements = useMemo(() => {
-    if (!filterCategory) return announcements;
-    return announcements.filter((item) => toLower(item.category) === toLower(filterCategory));
+    const items = !filterCategory
+      ? announcements
+      : announcements.filter((item) => toLower(item.category) === toLower(filterCategory));
+
+    return [...items].sort((a, b) => getAnnouncementTime(b) - getAnnouncementTime(a));
   }, [announcements, filterCategory]);
 
   const clearMessage = () => setMessage("");
@@ -193,6 +211,16 @@ function Announcements() {
     }
   };
 
+  const confirmDeleteAnnouncement = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    const announcementId = deleteTarget.id;
+    setDeleteTarget(null);
+    await deleteAnnouncement(announcementId);
+  };
+
   const canManageAnnouncement = () => canCreate;
 
   return (
@@ -260,7 +288,7 @@ function Announcements() {
                     <i className="ri-edit-line" aria-hidden="true" />
                     Edit
                   </button>
-                  <button type="button" className="danger" onClick={() => deleteAnnouncement(item.id)}>
+                  <button type="button" className="danger" onClick={() => setDeleteTarget(item)}>
                     <i className="ri-delete-bin-line" aria-hidden="true" />
                     Delete
                   </button>
@@ -281,6 +309,34 @@ function Announcements() {
           onClose={resetForm}
           submitLabel={saving ? "Saving..." : editingId === "new" ? "Post Announcement" : "Update Announcement"}
         />
+      )}
+
+      {deleteTarget && (
+        <div className="settings-modal-backdrop" role="presentation" onClick={() => setDeleteTarget(null)}>
+          <section
+            className="settings-modal settings-modal--error announcement-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete announcement confirmation"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="settings-modal-icon">
+              <i className="ri-delete-bin-line" aria-hidden="true" />
+            </div>
+            <div className="settings-modal-copy">
+              <strong>Delete announcement?</strong>
+              <span>This announcement will be removed permanently.</span>
+            </div>
+            <div className="announcement-delete-actions">
+              <button type="button" className="announcement-cancel" onClick={() => setDeleteTarget(null)}>
+                No, Keep It
+              </button>
+              <button type="button" className="announcement-submit announcement-delete-confirm" onClick={confirmDeleteAnnouncement}>
+                Yes, Delete
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </>
   );

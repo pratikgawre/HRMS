@@ -187,7 +187,7 @@ function TeamAttendance() {
         </article>
       </section>
 
-      <Section title="Team Attendance Register" action={role !== 'employee' ? 'My Attendance' : ''} actionTo={role !== 'employee' ? '/employee/attendance' : undefined}>
+      <Section title="Team Attendance Register">
         <div className="page-toolbar compact">
           <label className="toolbar-search">
             <i className="ri-search-line" aria-hidden="true" />
