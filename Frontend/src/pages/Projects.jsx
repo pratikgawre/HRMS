@@ -73,19 +73,19 @@ function Projects() {
   const [selectedTeamMembers, setSelectedTeamMembers] = useState([]);
   const [isTeamDraftDirty, setIsTeamDraftDirty] = useState(false);
   const [isTeamRosterOpen, setIsTeamRosterOpen] = useState(false);
-  const [savePopup, setSavePopup] = useState('');
+  const [savePopup, setSavePopup] = useState(null);
 
-  useEffect(() => {
-    if (!savePopup) {
-      return undefined;
+  function showProjectToast(text, tone = 'success') {
+    if (!isAdmin) {
+      return;
     }
 
-    const timer = window.setTimeout(() => {
-      setSavePopup('');
-    }, 2200);
+    setSavePopup({ text, tone });
+  }
 
-    return () => window.clearTimeout(timer);
-  }, [savePopup]);
+  function closeProjectToast() {
+    setSavePopup(null);
+  }
 
   const navigateProjectList = useCallback((status = '') => {
     const params = new URLSearchParams({ tab: 'list' });
@@ -341,7 +341,8 @@ function Projects() {
     setSelectedProjectId(project.id);
     setSelectedTeamMembers(Array.isArray(project.teamMembers) ? project.teamMembers : []);
     setIsTeamDraftDirty(false);
-    setMessage(`${project.name} selected.`);
+    setMessage('');
+    showProjectToast(`${project.name} selected.`, 'success');
     if (!canManage) {
       setActiveTab('list');
     }
@@ -369,7 +370,8 @@ function Projects() {
     setProjectForm(projectToForm(project, managerName, managerId));
     setSelectedTeamMembers(Array.isArray(project.teamMembers) ? project.teamMembers : []);
     setIsTeamDraftDirty(false);
-    setMessage(`Editing ${project.name}.`);
+    setMessage('');
+    showProjectToast(`Editing ${project.name}.`, 'success');
     setActiveTab('create');
   }
 
@@ -379,6 +381,7 @@ function Projects() {
     setSelectedTeamMembers([]);
     setIsTeamDraftDirty(false);
     setMessage('');
+    showProjectToast('Project form cleared.', 'success');
   }
 
   async function handleProjectSubmit(event) {
@@ -387,6 +390,7 @@ function Projects() {
     const name = projectForm.name.trim();
     if (!name) {
       setMessage('Please add a project name first.');
+      showProjectToast('Please add a project name first.', 'error');
       return;
     }
 
@@ -425,18 +429,20 @@ function Projects() {
       setSelectedTeamMembers([]);
       setIsTeamDraftDirty(false);
       setActiveTab('list');
-      setSavePopup(editingProjectId ? 'Project updated successfully.' : 'Project created successfully.');
+      showProjectToast(editingProjectId ? 'Project updated successfully.' : 'Project created successfully.', 'success');
       setMessage('');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
       setMessage('Project could not be saved right now.');
+      showProjectToast('Project could not be saved right now.', 'error');
     }
   }
 
   async function handlePatchProject(patch, successMessage) {
     if (!selectedProject) {
       setMessage('Select a project first.');
+      showProjectToast('Select a project first.', 'error');
       return;
     }
 
@@ -459,12 +465,13 @@ function Projects() {
       setSelectedProjectId(normalized.id);
       setSelectedTeamMembers(Array.isArray(normalized.teamMembers) ? normalized.teamMembers : []);
       setIsTeamDraftDirty(false);
-      setSavePopup(successMessage);
+      showProjectToast(successMessage, 'success');
       setMessage('');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
       setMessage('Changes could not be saved.');
+      showProjectToast('Changes could not be saved.', 'error');
     }
   }
 
@@ -502,6 +509,7 @@ function Projects() {
   async function removeProject(project) {
     const confirmed = window.confirm(`Delete ${project.name}?`);
     if (!confirmed) {
+      showProjectToast('Delete cancelled.', 'error');
       return;
     }
 
@@ -510,10 +518,12 @@ function Projects() {
       setProjects((current) => current.filter((item) => item.id !== project.id && item.backendId !== project.id));
       setSelectedProjectId((current) => (current === project.id ? '' : current));
       setMessage(`${project.name} deleted.`);
+      showProjectToast(`${project.name} deleted.`, 'success');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
       setMessage('Project could not be deleted.');
+      showProjectToast('Project could not be deleted.', 'error');
     }
   }
 
@@ -569,17 +579,19 @@ function Projects() {
           </div>
         </div>
 
-      {message && <div className="user-alert"><i className="ri-checkbox-circle-line" aria-hidden="true" /><span>{message}</span></div>}
       {savePopup && (
-        <div className="save-toast" role="status" aria-live="polite">
-          <span className="save-toast-icon" aria-hidden="true">
-            <i className="ri-checkbox-circle-fill" />
+        <div className={`project-toast is-${savePopup.tone || 'success'}`} role="status" aria-live="polite">
+          <span className="project-toast__icon" aria-hidden="true">
+            <i className={savePopup.tone === 'error' ? 'ri-error-warning-line' : 'ri-checkbox-circle-fill'} />
           </span>
-          <div className="save-toast-body">
-            <span className="save-toast-kicker">Saved</span>
-            <strong>{savePopup}</strong>
+          <div className="project-toast__copy">
+            <span>{savePopup.tone === 'error' ? 'Warning' : 'Success'}</span>
+            <strong>{savePopup.text}</strong>
           </div>
-          <span className="save-toast-accent" aria-hidden="true" />
+          <button type="button" className="project-toast__close" onClick={closeProjectToast} aria-label="Dismiss notification">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+          <span className="project-toast__accent" aria-hidden="true" />
         </div>
       )}
 

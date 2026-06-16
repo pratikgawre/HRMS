@@ -201,7 +201,13 @@ function Header({ role, onMenuClick }) {
             </section>
           )}
         </div>
-        <div className="user-chip">
+        <button
+          type="button"
+          className="user-chip user-chip--clickable"
+          onClick={() => navigate(`${roleBasePath}/profile`)}
+          aria-label={`Open ${displayRole} profile`}
+          title={`Open ${displayRole} profile`}
+        >
           {employeeIdentity?.profilePicture ? (
             <img src={employeeIdentity.profilePicture} alt={`${employeeIdentity.employee} profile`} />
           ) : (
@@ -210,7 +216,7 @@ function Header({ role, onMenuClick }) {
           <div>
             <strong>{displayName}</strong>
           </div>
-        </div>
+        </button>
         <button className="logout-btn" onClick={logout}><i className="ri-logout-box-r-line" aria-hidden="true" />Logout</button>
       </div>
     </header>

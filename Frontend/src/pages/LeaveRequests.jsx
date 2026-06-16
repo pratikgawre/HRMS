@@ -18,7 +18,7 @@ const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 function LeaveRequests() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const currentEmployee = getCurrentEmployeeIdentity();
-  const canCreateRequest = true;
+  const canCreateRequest = role !== 'admin';
   const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
   const [requests, setRequests] = useState(getInitialLeaveRequests);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);

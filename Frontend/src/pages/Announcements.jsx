@@ -49,10 +49,12 @@ function Announcements() {
   const role = getSessionValue("kavyaAccessRole") || getSessionValue("kavyaRole") || "Employee";
   const roleKey = normalizeRoleKey(role);
   const canCreate = roleKey === "admin" || roleKey === "superadmin" || roleKey === "hr" || roleKey === "hrmanager";
+  const isAdmin = roleKey === "admin" || roleKey === "superadmin";
 
   const [announcements, setAnnouncements] = useState([]);
   const [editingId, setEditingId] = useState("");
   const [message, setMessage] = useState("");
+  const [deletedAnnouncement, setDeletedAnnouncement] = useState(null);
   const [errors, setErrors] = useState({});
   const [form, setForm] = useState(getDefaultForm());
   const [loading, setLoading] = useState(false);
@@ -68,6 +70,18 @@ function Announcements() {
   }, [announcements, filterCategory]);
 
   const clearMessage = () => setMessage("");
+
+  useEffect(() => {
+    if (!deletedAnnouncement) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setDeletedAnnouncement(null);
+    }, 6000);
+
+    return () => window.clearTimeout(timer);
+  }, [deletedAnnouncement]);
 
   const loadAnnouncements = async () => {
     setLoading(true);
@@ -191,15 +205,43 @@ function Announcements() {
   };
 
   const deleteAnnouncement = async (announcementId) => {
+    if (isAdmin) {
+      const confirmed = window.confirm("Are you sure to delete this announcement?");
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const announcementToRestore = announcements.find((item) => item.id === announcementId) || null;
+
     try {
       await apiRequest(`/announcements/${announcementId}`, { method: "DELETE" });
       setAnnouncements((current) => current.filter((item) => item.id !== announcementId));
       if (editingId === announcementId) {
         resetForm();
       }
+      setDeletedAnnouncement(announcementToRestore);
       setMessage('Announcement deleted successfully');
     } catch (error) {
       setMessage(error.message || 'Failed to delete announcement');
+    }
+  };
+
+  const undoDelete = async () => {
+    if (!deletedAnnouncement) {
+      return;
+    }
+
+    try {
+      await apiRequest("/announcements", {
+        method: "POST",
+        body: JSON.stringify(deletedAnnouncement),
+      });
+      setAnnouncements((current) => [deletedAnnouncement, ...current.filter((item) => item.id !== deletedAnnouncement.id)]);
+      setDeletedAnnouncement(null);
+      setMessage("Delete undone successfully");
+    } catch (error) {
+      setMessage(error.message || "Failed to undo delete");
     }
   };
 
@@ -253,6 +295,16 @@ function Announcements() {
         <div className="announcement-alert" role="status">
           <i className="ri-checkbox-circle-line" aria-hidden="true" />
           <span>{message}</span>
+        </div>
+      )}
+
+      {deletedAnnouncement && (
+        <div className="announcement-alert announcement-alert--undo" role="status">
+          <i className="ri-refresh-line" aria-hidden="true" />
+          <span>Announcement deleted.</span>
+          <button type="button" className="announcement-undo-btn" onClick={undoDelete}>
+            Undo
+          </button>
         </div>
       )}
 

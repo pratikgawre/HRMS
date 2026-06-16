@@ -61,7 +61,7 @@ function getPayrollAvailabilityText(month, year) {
 
 function Payroll() {
   const role = getSessionValue('kavyaRole') || 'employee';
-  const canManagePayroll = role === 'admin' || role === 'hr';
+  const canManagePayroll = role === 'admin';
   const defaultPeriod = getDefaultPayrollPeriod();
   const [selectedMonth, setSelectedMonth] = useState(months[defaultPeriod.monthIndex]);
   const [selectedYear, setSelectedYear] = useState(String(defaultPeriod.year));
@@ -226,6 +226,11 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
         [recordId]: 'Paid',
       };
     });
+    saveStoredPayrollRecords(mergePayrollRecords(savedPayrollRecords, records.map((record) => (
+      record.id === recordId
+        ? { ...record, status: 'Paid', statusManuallySet: true }
+        : record
+    ))));
     setMessage('Payroll payment status updated successfully');
   };
 
@@ -347,12 +352,10 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
                           <i className="ri-exchange-dollar-line" aria-hidden="true" />
                           {record.status === 'Paid' ? 'Paid' : 'Mark Paid'}
                         </button>
-                        {isPayrollPeriodAvailable(record.month, record.year) && (
-                          <button type="button" onClick={() => setSelectedPayslip(record)}>
-                            <i className="ri-file-download-line" aria-hidden="true" />
-                            Payslip
-                          </button>
-                        )}
+                        <button type="button" onClick={() => setSelectedPayslip(record)}>
+                          <i className="ri-file-download-line" aria-hidden="true" />
+                          Payslip
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -896,13 +899,13 @@ function getInitials(name) {
 }
 
 function getInitialPayrollStatuses(storedRecords = []) {
-  const initialStatuses = Object.fromEntries(salaryRecords.map((record) => [record.id, record.status]));
+  const initialStatuses = Object.fromEntries(salaryRecords.map((record) => [record.id, 'Unpaid']));
 
   storedRecords.forEach((record) => {
     const storedStatus = record.status || 'Unpaid';
-    initialStatuses[record.id] = initialStatuses[record.id] === 'Paid' || storedStatus === 'Paid'
+    initialStatuses[record.id] = storedStatus === 'Paid' && Boolean(record.statusManuallySet)
       ? 'Paid'
-      : storedStatus;
+      : 'Unpaid';
   });
 
   return initialStatuses;
@@ -1009,6 +1012,7 @@ function normalizePayrollRecords(rows = []) {
     panNo: record.panNo || record.panCardNo || '-',
     location: record.location || '-',
     status: record.status || 'Unpaid',
+    statusManuallySet: Boolean(record.statusManuallySet),
     attendanceSummary: record.attendanceSummary || '',
     deductionSummary: record.deductionSummary || '',
   }));
@@ -1070,9 +1074,9 @@ function buildPayrollRecords(employees, attendance, leaveRequests, statusOverrid
       aadhaarNo: employee.aadhaarCardNo || '-',
       panNo: employee.panCardNo || '-',
       location: employee.workingLocation || employee.presentCityDistrict || employee.permanentCityDistrict || '-',
-      status: savedRecord?.status === 'Paid' || statusOverrides[id] === 'Paid'
+      status: (savedRecord?.status === 'Paid' && savedRecord?.statusManuallySet) || statusOverrides[id] === 'Paid'
         ? 'Paid'
-        : statusOverrides[id] || savedRecord?.status || (index % 2 === 0 ? 'Unpaid' : 'Paid'),
+        : 'Unpaid',
       attendanceSummary: `${attendanceSummary.payableDays + approvedLeaveDays} paid days, ${approvedLeaveDays} approved leave, ${attendanceSummary.absentDays} absent, ${attendanceSummary.halfDays} half day`,
       deductionSummary: `PF ${formatCurrency(providentFund)}, Gratuity ${formatCurrency(gratuity)}, Prof Tax ${formatCurrency(professionalTax)}, LOP ${formatCurrency(absentDeduction + halfDayDeduction)}`,
     };
@@ -1287,14 +1291,6 @@ function getPayslipDeductions(record) {
 }
 
 function getFilteredPayrollRecords(summaryId, records) {
-  if (summaryId === 'paid') {
-    return records.filter((record) => record.status === 'Paid');
-  }
-
-  if (summaryId === 'unpaid') {
-    return records.filter((record) => record.status !== 'Paid');
-  }
-
   if (summaryId === 'average') {
     return [...records].sort((first, second) => getNetSalary(second) - getNetSalary(first));
   }
