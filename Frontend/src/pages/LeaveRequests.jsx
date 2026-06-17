@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
-<<<<<<< HEAD
-import DashboardCard from '../components/DashboardCard.jsx';
-import { people } from '../data/dummyData.js';
-=======
 import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
->>>>>>> ec47e706cb012d95fa52a5ec77061a0b93f54c2d
+import { people } from '../data/dummyData.js';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity, getStoredEmployees } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
@@ -28,23 +24,15 @@ function LeaveRequests() {
   const [requests, setRequests] = useState(getInitialLeaveRequests);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
-<<<<<<< HEAD
-  const [searchQuery, setSearchQuery] = useState('');
-=======
   const [searchText, setSearchText] = useState('');
->>>>>>> ec47e706cb012d95fa52a5ec77061a0b93f54c2d
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
-<<<<<<< HEAD
   const [teamMemberIds, setTeamMemberIds] = useState([]);
-  const leaveSummary = useMemo(
-    () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee), requests),
-=======
+  const [selectedRequest, setSelectedRequest] = useState(null);
   const leaveBalanceSummary = useMemo(
     () => getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee),
->>>>>>> ec47e706cb012d95fa52a5ec77061a0b93f54c2d
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
   );
   const leaveSummary = useMemo(
@@ -107,29 +95,12 @@ function LeaveRequests() {
       const currentEmployeeId = normalizeComparable(currentEmployee.employeeId);
       const teamIds = new Set(teamMemberIds.map(normalizeComparable));
 
-<<<<<<< HEAD
       return requestEmployeeId === currentEmployeeId || teamIds.has(requestEmployeeId);
     }
 
     return request.employeeId === currentEmployee.employeeId;
   }), [currentEmployee.employeeId, isReviewerRole, requests, role, teamMemberIds]);
 
-  const rows = useMemo(() => {
-    const query = normalizeComparable(searchQuery);
-
-    return visibleRequests.filter((request) => {
-      if (status !== 'All' && request.status !== status) {
-        return false;
-      }
-
-      if (query && !normalizeComparable(request.employee).includes(query)) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [searchQuery, status, visibleRequests]);
-=======
   const rows = useMemo(() => visibleRequests
     .filter((request) => status === 'All' || request.status === status)
     .filter((request) => {
@@ -146,7 +117,16 @@ function LeaveRequests() {
         request.status,
       ].some((value) => String(value || '').toLowerCase().includes(query));
     }), [visibleRequests, status, searchText]);
->>>>>>> ec47e706cb012d95fa52a5ec77061a0b93f54c2d
+
+  const selectedRequestDetails = useMemo(() => {
+    if (!selectedRequest) {
+      return null;
+    }
+
+    return rows.find((request) => request.id === selectedRequest.id)
+      || visibleRequests.find((request) => request.id === selectedRequest.id)
+      || null;
+  }, [rows, selectedRequest, visibleRequests]);
 
   useEffect(() => {
     const refreshRequests = () => {
@@ -312,6 +292,7 @@ function LeaveRequests() {
           ...request,
           fromDate: request.from,
           toDate: request.to,
+          medicalReport: request.medicalReport || null,
         }),
       });
     } catch {
@@ -327,6 +308,7 @@ function LeaveRequests() {
           ...request,
           fromDate: request.from,
           toDate: request.to,
+          medicalReport: request.medicalReport || null,
         }),
       });
     } catch {
@@ -428,7 +410,7 @@ function LeaveRequests() {
         <LeaveBalanceStrip summary={leaveBalanceSummary} />
       </Section>
 
-      <Section title="Leave Request Queue">
+    <Section title="Leave Request Queue">
         <div className="page-toolbar" style={{ gap: '1.2rem', marginTop: '1.5rem' }}>
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>
@@ -437,16 +419,6 @@ function LeaveRequests() {
             <option>Approved</option>
             <option>Rejected</option>
           </select>
-<<<<<<< HEAD
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search employee name"
-            aria-label="Search employee name"
-            style={{ minWidth: '220px', padding: '0.55rem 0.8rem' }}
-          />
-=======
           {role !== 'employee' && (
             <label className="toolbar-search">
               <i className="ri-search-line" aria-hidden="true" />
@@ -459,7 +431,6 @@ function LeaveRequests() {
               />
             </label>
           )}
->>>>>>> ec47e706cb012d95fa52a5ec77061a0b93f54c2d
           {canCreateRequest && (
             <button className="toolbar-primary" type="button" onClick={() => {
               setFileErrors({});
@@ -471,7 +442,12 @@ function LeaveRequests() {
           )}
         </div>
         <div style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-          <DataTable columns={columns} rows={rows} emptyMessage="No leave requests match your filter." />
+          <DataTable
+            columns={columns}
+            rows={rows}
+            emptyMessage="No leave requests match your filter."
+            onRowClick={setSelectedRequest}
+          />
         </div>
       </Section>
 
@@ -488,6 +464,14 @@ function LeaveRequests() {
             setShowForm(false);
             setFileErrors({});
           }}
+        />
+      )}
+
+      {selectedRequestDetails && (
+        <LeaveRequestDetailsModal
+          request={selectedRequestDetails}
+          onClose={() => setSelectedRequest(null)}
+          onDownload={() => downloadMedicalReportAsPdf(selectedRequestDetails)}
         />
       )}
     </>
@@ -561,6 +545,102 @@ function LeaveRequestModal({ currentEmployee, leaveTypeOptions, form, fileErrors
   );
 }
 
+function LeaveRequestDetailsModal({ request, onClose, onDownload }) {
+  const medicalReport = request?.medicalReport;
+  const hasMedicalReport = Boolean(medicalReport?.dataUrl);
+  const isPdf = String(medicalReport?.type || '').toLowerCase() === 'application/pdf';
+
+  return (
+    <div className="payroll-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="payroll-modal leave-request-details-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Leave request details"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="payroll-modal-head">
+          <div>
+            <h3>Leave Details</h3>
+            <p style={{ margin: 0, color: 'var(--muted-text, #64748b)', fontSize: '0.92rem' }}>
+              Clicked request ke full details yahan dikh rahe hain.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close leave details">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="leave-details-grid">
+          <div className="leave-details-card">
+            <span>Employee</span>
+            <strong>{request.employee}</strong>
+            <small>{request.employeeId || '-'}</small>
+          </div>
+          <div className="leave-details-card">
+            <span>Leave Type</span>
+            <strong>{request.type}</strong>
+            <small>{request.status}</small>
+          </div>
+          <div className="leave-details-card">
+            <span>From Date</span>
+            <strong>{request.from || '-'}</strong>
+          </div>
+          <div className="leave-details-card">
+            <span>To Date</span>
+            <strong>{request.to || '-'}</strong>
+          </div>
+          <div className="leave-details-card">
+            <span>Days</span>
+            <strong>{request.days}</strong>
+          </div>
+          <div className="leave-details-card">
+            <span>Requested By</span>
+            <strong>{formatRequesterRole(request.ownerRole)}</strong>
+          </div>
+        </div>
+
+        <div className="leave-details-section">
+          <h4>Reason</h4>
+          <p>{request.reason || '-'}</p>
+        </div>
+
+        <div className="leave-details-section">
+          <h4>Medical Report</h4>
+          {request.type === 'Sick Leave' ? (
+            hasMedicalReport ? (
+              <div className="leave-medical-report">
+                <div>
+                  <strong>{medicalReport.name || 'Doctor prescription'}</strong>
+                  <small>{medicalReport.type || 'application/octet-stream'}</small>
+                </div>
+                <div className="leave-medical-actions">
+                  <span>{isPdf ? 'PDF attached' : 'Prescription attached'}</span>
+                  <button type="button" className="payroll-primary" onClick={onDownload}>
+                    <i className="ri-download-2-line" aria-hidden="true" />
+                    Download PDF
+                  </button>
+                </div>
+                <div className="leave-medical-preview">
+                  {isPdf ? (
+                    <embed src={medicalReport.dataUrl} type="application/pdf" title="Doctor prescription preview" />
+                  ) : (
+                    <img src={medicalReport.dataUrl} alt="Doctor prescription preview" />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p>Medical report not attached.</p>
+            )
+          ) : (
+            <p>This leave type does not require a doctor prescription.</p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function getEmptyLeaveForm(currentEmployee = getCurrentEmployeeIdentity(), leaveTypes = DEFAULT_LEAVE_TYPES) {
   const today = new Date().toISOString().slice(0, 10);
   const employee = currentEmployee.employee;
@@ -574,6 +654,168 @@ function getEmptyLeaveForm(currentEmployee = getCurrentEmployeeIdentity(), leave
     reason: '',
     medicalReport: null,
   };
+}
+
+async function downloadMedicalReportAsPdf(request) {
+  const medicalReport = request?.medicalReport;
+  if (!medicalReport?.dataUrl) {
+    return;
+  }
+
+  const safeBaseName = sanitizeFileName(`${request.employee || 'leave'}-${request.type || 'report'}`);
+  const stamp = new Date().toISOString().slice(0, 10);
+
+  if (String(medicalReport.type || '').toLowerCase() === 'application/pdf') {
+    triggerDownload(medicalReport.dataUrl, `${safeBaseName}-medical-report-${stamp}.pdf`);
+    return;
+  }
+
+  const imageData = await createJpegDataUrl(medicalReport.dataUrl);
+  const pdfBytes = buildSinglePagePdf({
+    title: `${request.employee || 'Employee'} - Medical Report`,
+    subtitle: `${request.type || 'Leave'} | ${request.from || '-'} to ${request.to || '-'}`,
+    details: [
+      `Employee: ${request.employee || '-'}`,
+      `Employee ID: ${request.employeeId || '-'}`,
+      `Leave Type: ${request.type || '-'}`,
+      `From: ${request.from || '-'}`,
+      `To: ${request.to || '-'}`,
+      `Days: ${request.days || '-'}`,
+      `Status: ${request.status || '-'}`,
+      `File: ${medicalReport.name || 'Doctor prescription'}`,
+    ],
+    imageDataUrl: imageData.dataUrl,
+    imageWidth: imageData.width,
+    imageHeight: imageData.height,
+  });
+
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  triggerDownload(URL.createObjectURL(blob), `${safeBaseName}-medical-report-${stamp}.pdf`, true);
+}
+
+function triggerDownload(href, fileName, revoke = false) {
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  if (revoke) {
+    window.setTimeout(() => URL.revokeObjectURL(href), 0);
+  }
+}
+
+function sanitizeFileName(value) {
+  return String(value || 'leave-report')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'leave-report';
+}
+
+function createJpegDataUrl(sourceDataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const maxWidth = 1200;
+        const scale = Math.min(1, maxWidth / (image.naturalWidth || image.width || maxWidth));
+        canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width || maxWidth) * scale));
+        canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height || maxWidth) * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Canvas unavailable'));
+          return;
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve({
+          dataUrl: canvas.toDataURL('image/jpeg', 0.92),
+          width: canvas.width,
+          height: canvas.height,
+        });
+      } catch (error) {
+        reject(error);
+      }
+    };
+    image.onerror = () => reject(new Error('Unable to load prescription image.'));
+    image.crossOrigin = 'anonymous';
+    image.src = sourceDataUrl;
+  });
+}
+
+function buildSinglePagePdf({ title, subtitle, details, imageDataUrl, imageWidth, imageHeight }) {
+  const jpegBase64 = String(imageDataUrl || '').split(',')[1] || '';
+  const imageBytes = atob(jpegBase64);
+  const imageBox = fitImageToBox(imageWidth || 1, imageHeight || 1, 515, 500);
+  const escapedTitle = escapePdfText(title);
+  const escapedSubtitle = escapePdfText(subtitle);
+  const textLines = [
+    `BT /F1 18 Tf 40 790 Td (${escapedTitle}) Tj ET`,
+    `BT /F1 10 Tf 40 770 Td (${escapedSubtitle}) Tj ET`,
+    ...details.map((line, index) => `BT /F1 11 Tf 40 ${740 - (index * 16)} Td (${escapePdfText(line)}) Tj ET`),
+    'q',
+    `1 0 0 1 ${imageBox.x} ${imageBox.y} cm`,
+    `${imageBox.width} 0 0 ${imageBox.height} 0 0 cm`,
+    '/Im0 Do',
+    'Q',
+  ];
+
+  const contentStream = textLines.join('\n');
+  const objects = [];
+  objects.push('1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj');
+  objects.push('2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj');
+  objects.push('3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> /XObject << /Im0 5 0 R >> >> /Contents 6 0 R >> endobj');
+  objects.push('4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj');
+  objects.push(`5 0 obj << /Type /XObject /Subtype /Image /Width ${Math.max(1, Math.round(imageWidth || 1))} /Height ${Math.max(1, Math.round(imageHeight || 1))} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBytes.length} >> stream\n${imageBytes}\nendstream endobj`);
+  objects.push(`6 0 obj << /Length ${contentStream.length} >> stream\n${contentStream}\nendstream endobj`);
+
+  const header = '%PDF-1.4\n';
+  let body = '';
+  const offsets = [0];
+  let cursor = header.length;
+  objects.forEach((object) => {
+    offsets.push(cursor);
+    body += `${object}\n`;
+    cursor += `${object}\n`.length;
+  });
+
+  const xrefStart = header.length + body.length;
+  let xref = 'xref\n0 7\n0000000000 65535 f \n';
+  offsets.slice(1).forEach((offset) => {
+    xref += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  const trailer = `trailer << /Size 7 /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  const pdfString = header + body + xref + trailer;
+  const pdfBytes = new Uint8Array(pdfString.length);
+  for (let index = 0; index < pdfString.length; index += 1) {
+    pdfBytes[index] = pdfString.charCodeAt(index) & 0xff;
+  }
+  return pdfBytes;
+}
+
+function fitImageToBox(width, height, maxWidth, maxHeight) {
+  const safeWidth = Math.max(1, Number(width) || 1);
+  const safeHeight = Math.max(1, Number(height) || 1);
+  const scale = Math.min(maxWidth / safeWidth, maxHeight / safeHeight, 1);
+  const drawWidth = Math.max(1, Math.round(safeWidth * scale));
+  const drawHeight = Math.max(1, Math.round(safeHeight * scale));
+  return {
+    width: drawWidth,
+    height: drawHeight,
+    x: Math.round(40 + ((maxWidth - drawWidth) / 2)),
+    y: Math.round(120 + ((maxHeight - drawHeight) / 2)),
+  };
+}
+
+function escapePdfText(value) {
+  return String(value || '')
+    .replaceAll('\\', '\\\\')
+    .replaceAll('(', '\\(')
+    .replaceAll(')', '\\)');
 }
 
 function getLeaveDays(from, to) {

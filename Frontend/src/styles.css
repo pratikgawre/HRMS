@@ -6296,6 +6296,120 @@ img.profile-avatar.large {
   font-size: 1.25rem;
 }
 
+.leave-request-details-modal {
+  width: min(980px, 100%);
+}
+
+.leave-details-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  padding: 1.25rem;
+}
+
+.leave-details-card,
+.leave-details-section,
+.leave-medical-report {
+  border: 1px solid rgba(201, 221, 221, 0.86);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 252, 251, 0.96));
+}
+
+.leave-details-card {
+  padding: 0.95rem 1rem;
+}
+
+.leave-details-card span,
+.leave-details-section h4 {
+  display: block;
+  margin: 0 0 0.35rem;
+  color: var(--muted-text);
+  font-size: 0.8rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.leave-details-card strong,
+.leave-details-section p,
+.leave-medical-report strong {
+  color: var(--dark-text);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.leave-details-card small,
+.leave-medical-report small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted-text);
+  font-size: 0.84rem;
+}
+
+.leave-details-section {
+  margin: 0 1.25rem 1.25rem;
+  padding: 1rem 1.05rem;
+}
+
+.leave-details-section p {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.leave-medical-report {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.leave-medical-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.leave-medical-actions span {
+  color: var(--muted-text);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.leave-medical-preview {
+  display: grid;
+  overflow: hidden;
+  min-height: 220px;
+  border: 1px solid rgba(201, 221, 221, 0.8);
+  border-radius: calc(var(--radius) - 2px);
+  background: #f7fbfb;
+}
+
+.leave-medical-preview img,
+.leave-medical-preview embed {
+  width: 100%;
+  min-height: 220px;
+  border: 0;
+  object-fit: contain;
+}
+
+@media (max-width: 900px) {
+  .leave-details-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .leave-details-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .leave-medical-actions {
+    align-items: flex-start;
+  }
+}
+
 .salary-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
