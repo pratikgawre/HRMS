@@ -18,6 +18,7 @@ import UserManagement from './pages/UserManagement.jsx';
 import Settings from './pages/Settings.jsx';
 import TeamLeadDashboard from './pages/TeamLeadDashboard.jsx';
 import ProjectManagerDashboard from './pages/ProjectManagerDashboard.jsx';
+import TeamAttendance from './pages/TeamAttendance.jsx';
 import Projects from './pages/Projects.jsx';
 import MyTeam from './pages/MyTeam.jsx';
 import Departments from './pages/Departments.jsx';
@@ -49,7 +50,8 @@ function App() {
             <Route path="/admin/projects" element={<Projects />} />
             <Route path="/admin/users" element={<UserManagement />} />
             <Route path="/admin/employees" element={<Employees />} />
-            <Route path="/admin/attendance" element={<EmployeeAttendance />} />
+            <Route path="/admin/team-attendance" element={<TeamAttendance />} />
+            <Route path="/admin/attendance" element={<Navigate to="/admin/team-attendance" replace />} />
             <Route path="/admin/leave-management" element={<LeaveRequests />} />
             <Route path="/admin/payroll" element={<Payroll />} />
             <Route path="/admin/assets" element={<Assets />} />
@@ -70,6 +72,8 @@ function App() {
             <Route path="/hr/assets" element={<Assets />} />
             <Route path="/hr/employees" element={<Employees />} />
             <Route path="/hr/attendance" element={<EmployeeAttendance />} />
+            <Route path="/hr/my-attendance" element={<EmployeeAttendance />} />
+            <Route path="/hr/team-attendance" element={<TeamAttendance />} />
             <Route path="/hr/leave-approval" element={<LeaveRequests />} />
             <Route path="/hr/payroll" element={<Payroll />} />
             <Route path="/hr/announcements" element={<Announcements />} />
@@ -86,6 +90,8 @@ function App() {
             <Route path="/team-lead/dashboard" element={<TeamLeadDashboard />} />
             <Route path="/team-lead/team" element={<MyTeam />} />
             <Route path="/team-lead/attendance" element={<EmployeeAttendance />} />
+            <Route path="/team-lead/my-attendance" element={<EmployeeAttendance />} />
+            <Route path="/team-lead/team-attendance" element={<TeamAttendance />} />
             <Route path="/team-lead/tasks" element={<Tasks />} />
             <Route path="/team-lead/leave-review" element={<LeaveRequests />} />
             <Route path="/team-lead/payroll" element={<Payroll />} />
@@ -104,7 +110,9 @@ function App() {
             <Route path="/project-manager/assets" element={<Assets />} />
             <Route path="/project-manager/tasks" element={<Tasks />} />
             <Route path="/project-manager/leave-review" element={<LeaveRequests />} />
-            <Route path="/project-manager/attendance" element={<EmployeeAttendance />} />
+            <Route path="/project-manager/team-attendance" element={<TeamAttendance />} />
+            <Route path="/project-manager/my-attendance" element={<EmployeeAttendance viewMode="self" />} />
+            <Route path="/project-manager/attendance" element={<Navigate to="/project-manager/my-attendance" replace />} />
             <Route path="/project-manager/payroll" element={<Payroll />} />
             <Route path="/project-manager/announcements" element={<Announcements />} />
             <Route path="/project-manager/support" element={<SupportTickets />} />

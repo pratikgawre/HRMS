@@ -6,7 +6,7 @@ const menus = {
     { label: 'Dashboard', to: '/admin/dashboard', icon: 'ri-dashboard-line' },
     { label: 'Announcements', to: '/admin/announcements', icon: 'ri-megaphone-line' },
     { label: 'Assets', to: '/admin/assets', icon: 'ri-briefcase-4-line' },
-    { label: 'Attendance', to: '/admin/attendance', icon: 'ri-time-line' },
+    { label: 'Team Attendance', to: '/admin/team-attendance', icon: 'ri-team-line' },
     { label: 'Employees', to: '/admin/employees', icon: 'ri-team-line' },
     { label: 'Leave Management', to: '/admin/leave-management', icon: 'ri-calendar-check-line' },
     { label: 'Payroll/Salary', to: '/admin/payroll', icon: 'ri-money-rupee-circle-line' },
@@ -20,8 +20,9 @@ const menus = {
     { label: 'Dashboard', to: '/hr/dashboard', icon: 'ri-dashboard-line' },
     { label: 'Announcements', to: '/hr/announcements', icon: 'ri-megaphone-line' },
     { label: 'Asset Management', to: '/hr/assets', icon: 'ri-briefcase-4-line' },
-    { label: 'Attendance', to: '/hr/attendance', icon: 'ri-time-line' },
+    { label: 'Team Attendance', to: '/hr/team-attendance', icon: 'ri-team-line' },
     { label: 'Employees', to: '/hr/employees', icon: 'ri-team-line' },
+    { label: 'My Attendance', to: '/hr/attendance', icon: 'ri-time-line' },
     { label: 'Leave Approval', to: '/hr/leave-approval', icon: 'ri-calendar-check-line' },
     { label: 'Payroll/Salary', to: '/hr/payroll', icon: 'ri-money-rupee-circle-line' },
     { label: 'Profile', to: '/hr/profile', icon: 'ri-user-line' },
@@ -36,6 +37,7 @@ const menus = {
     { label: 'Announcements', to: '/team-lead/announcements', icon: 'ri-megaphone-line' },
     { label: 'Leave Review', to: '/team-lead/leave-review', icon: 'ri-calendar-check-line' },
     { label: 'My Attendance', to: '/team-lead/attendance', icon: 'ri-time-line' },
+    { label: 'Team Attendance', to: '/team-lead/team-attendance', icon: 'ri-team-line' },
     { label: 'My Payslip', to: '/team-lead/payroll', icon: 'ri-money-rupee-circle-line' },
     { label: 'My Profile', to: '/team-lead/profile', icon: 'ri-user-line' },
     { label: 'My Team', to: '/team-lead/team', icon: 'ri-team-line' },
@@ -45,7 +47,8 @@ const menus = {
   projectManager: [
     { label: 'Dashboard', to: '/project-manager/dashboard', icon: 'ri-dashboard-line' },
     { label: 'Announcements', to: '/project-manager/announcements', icon: 'ri-megaphone-line' },
-    { label: 'Attendance', to: '/project-manager/attendance', icon: 'ri-time-line' },
+    { label: 'Team Attendance', to: '/project-manager/team-attendance', icon: 'ri-team-line' },
+    { label: 'My Attendance', to: '/project-manager/my-attendance', icon: 'ri-time-line' },
     { label: 'Leave Review', to: '/project-manager/leave-review', icon: 'ri-calendar-check-line' },
     { label: 'My Payslip', to: '/project-manager/payroll', icon: 'ri-money-rupee-circle-line' },
     { label: 'My Profile', to: '/project-manager/profile', icon: 'ri-user-line' },
@@ -67,6 +70,23 @@ const menus = {
     { label: 'Profile', to: '/employee/profile', icon: 'ri-user-line' },
   ],
 };
+
+Object.keys(menus).forEach((role) => {
+  menus[role] = [...menus[role]].sort((first, second) => {
+    const firstIsDashboard = /dashboard/i.test(first.label);
+    const secondIsDashboard = /dashboard/i.test(second.label);
+
+    if (firstIsDashboard && !secondIsDashboard) {
+      return -1;
+    }
+
+    if (!firstIsDashboard && secondIsDashboard) {
+      return 1;
+    }
+
+    return first.label.localeCompare(second.label);
+  });
+});
 
 function Sidebar({ role, isOpen, onClose }) {
   const [now, setNow] = useState(() => new Date());
