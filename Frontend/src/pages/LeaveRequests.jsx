@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
-import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
-import { people } from '../data/dummyData.js';
+import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
@@ -29,10 +28,9 @@ function LeaveRequests() {
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
-  const [teamMemberIds, setTeamMemberIds] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const leaveBalanceSummary = useMemo(
-    () => getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee),
+  const leaveSummary = useMemo(
+    () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee), requests),
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
   );
   const leaveTypeOptions = useMemo(() => getLeaveTypeOptions(leaveTypes), [leaveTypes]);
@@ -58,16 +56,8 @@ function LeaveRequests() {
       return true;
     }
 
-    if (isReviewerRole) {
-      const requestEmployeeId = normalizeComparable(request.employeeId);
-      const currentEmployeeId = normalizeComparable(currentEmployee.employeeId);
-      const teamIds = new Set(teamMemberIds.map(normalizeComparable));
-
-      return requestEmployeeId === currentEmployeeId || teamIds.has(requestEmployeeId);
-    }
-
     return request.employeeId === currentEmployee.employeeId;
-  }), [currentEmployee.employeeId, isReviewerRole, requests, role, teamMemberIds]);
+  }), [requests, role, currentEmployee.employeeId]);
 
   const rows = useMemo(() => visibleRequests
     .filter((request) => status === 'All' || request.status === status)
@@ -324,11 +314,26 @@ function LeaveRequests() {
         </div>
       )}
 
-      <Section title="My Leaves">
-        <LeaveBalanceStrip summary={leaveBalanceSummary} />
-      </Section>
-
-    <Section title="Leave Request Queue">
+      <Section title="Leave Request Queue">
+        {(role === 'employee' || role === 'hr' || role === 'teamLead' || role === 'projectManager') && (
+          <section
+            className="leave-summary-grid"
+            aria-label="Leave request summary"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.85rem', width: '100%', marginBottom: '1.5rem' }}
+          >
+            {leaveSummary.map((item) => (
+              <DashboardCard
+                key={item.label}
+                label={item.label}
+                value={item.value}
+                delta={item.delta}
+                tone={item.tone}
+                className="leave-summary-card"
+                style={{ minHeight: '108px', padding: '0.8rem 0.9rem' }}
+              />
+            ))}
+          </section>
+        )}
         <div className="page-toolbar" style={{ gap: '1.2rem', marginTop: '1.5rem' }}>
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>
@@ -481,7 +486,7 @@ function LeaveRequestDetailsModal({ request, onClose, onDownload }) {
           <div>
             <h3>Leave Details</h3>
             <p style={{ margin: 0, color: 'var(--muted-text, #64748b)', fontSize: '0.92rem' }}>
-              Clicked request ke full details yahan dikh rahe hain.
+              Leave type, dates aur attachment detail yahan dikh rahi hai.
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close leave details">
