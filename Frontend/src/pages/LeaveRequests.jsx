@@ -3,7 +3,7 @@ import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
-import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
+import { refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import {
@@ -20,12 +20,13 @@ function LeaveRequests() {
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
   const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
-  const [requests, setRequests] = useState(getInitialLeaveRequests);
+  const [requests, setRequests] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
   const [searchText, setSearchText] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
+  const [dataState, setDataState] = useState({ loading: true, error: '' });
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -89,8 +90,14 @@ function LeaveRequests() {
   useEffect(() => {
     const refreshRequests = () => {
       refreshStoredLeaveRequests()
-        .then(setRequests)
-        .catch(() => setRequests(getInitialLeaveRequests()));
+        .then((rows) => {
+          setRequests(Array.isArray(rows) ? rows : []);
+          setDataState((current) => ({ ...current, loading: false, error: '' }));
+        })
+        .catch(() => {
+          setRequests([]);
+          setDataState({ loading: false, error: 'Unable to load leave requests right now.' });
+        });
     };
     const refreshLeaveTypes = () => {
       safeApiRequest('/settings', { leaveTypes: DEFAULT_LEAVE_TYPES })
@@ -195,9 +202,11 @@ function LeaveRequests() {
   const refreshRequests = async () => {
     try {
       const stored = await refreshStoredLeaveRequests();
-      setRequests(stored);
+      setRequests(Array.isArray(stored) ? stored : []);
+      setDataState((current) => ({ ...current, loading: false, error: '' }));
     } catch {
-      setRequests(getInitialLeaveRequests());
+      setRequests([]);
+      setDataState({ loading: false, error: 'Unable to load leave requests right now.' });
     }
   };
 
@@ -315,6 +324,18 @@ function LeaveRequests() {
       )}
 
       <Section title="Leave Request Queue">
+        {dataState.loading && (
+          <div className="user-alert" role="status">
+            <i className="ri-loader-4-line" aria-hidden="true" />
+            <span>Loading leave requests...</span>
+          </div>
+        )}
+        {dataState.error && (
+          <div className="user-alert" role="status">
+            <i className="ri-alert-line" aria-hidden="true" />
+            <span>{dataState.error}</span>
+          </div>
+        )}
         {(role === 'employee' || role === 'hr' || role === 'teamLead' || role === 'projectManager') && (
           <section
             className="leave-summary-grid"

@@ -115,7 +115,7 @@ function Tasks() {
   }, []);
 
   const teamLeadProjects = useMemo(() => (
-    isTeamLead ? getSelectableTeamLeadProjects(projects, currentEmployeeId) : []
+    isTeamLead ? getSelectableTeamLeadProjects(projects, currentEmployeeId).filter((project) => isActiveProject(project)) : []
   ), [currentEmployeeId, isTeamLead, projects]);
   const selectedProject = useMemo(() => (
     isTeamLead
@@ -800,51 +800,34 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
                 </select>
               </label>
 
-              <div className="task-assignment-inline">
-                {selectedProject && form.projectId && (
-                  <div className="task-summary-card task-summary-card-compact">
-                    <small>{selectedProject.projectCode || selectedProject.id}</small>
-                    <strong>{selectedProject.name}</strong>
-                    <small>Team members: {Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers.length : 0}</small>
-                  </div>
-                )}
+              <label className="field">
+                <span>Task Title</span>
+                <input
+                  required
+                  disabled={!form.projectId}
+                  value={form.title}
+                  onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                  placeholder={form.projectId ? 'Enter task title' : 'Select a project first'}
+                />
+              </label>
 
-                <div className="task-assignment-stack">
-                  {form.projectId ? (
-                    <label className="field">
-                      <span>Task Title</span>
-                      <input
-                        required
-                        value={form.title}
-                        onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                        placeholder="Enter task title"
-                      />
-                    </label>
-                  ) : (
-                    <p className="project-empty-state task-empty-inline">
-                      Select a project to enter a task title and load eligible assignees.
-                    </p>
-                  )}
-
-                  <label className="field">
-                    <span>Assignee</span>
-                    <select
-                      value={form.assignedToId || ''}
-                      disabled={!form.projectId}
-                      onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}
-                    >
-                      {!form.projectId && <option value="">Select project first</option>}
-                      {form.projectId && <option value="">Select employee</option>}
-                      {form.projectId && assigneeOptions.length === 0 && <option value="">No employees available</option>}
-                      {assigneeOptions.map((employee) => {
-                        const employeeId = getEmployeeId(employee);
-                        const employeeName = getEmployeeName(employee);
-                        return <option key={employeeId} value={employeeId}>{employeeName} - {employee.department || '-'}</option>;
-                      })}
-                    </select>
-                  </label>
-                </div>
-              </div>
+              <label className="field">
+                <span>Assignee</span>
+                <select
+                  value={form.assignedToId || ''}
+                  disabled={!form.projectId}
+                  onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}
+                >
+                  {!form.projectId && <option value="">Select project first</option>}
+                  {form.projectId && <option value="">Select employee</option>}
+                  {form.projectId && assigneeOptions.length === 0 && <option value="">No employees available</option>}
+                  {assigneeOptions.map((employee) => {
+                    const employeeId = getEmployeeId(employee);
+                    const employeeName = getEmployeeName(employee);
+                    return <option key={employeeId} value={employeeId}>{employeeName} - {employee.department || '-'}</option>;
+                  })}
+                </select>
+              </label>
             </>
           ) : (
             <>
@@ -863,6 +846,13 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
                 </select>
               </label>
             </>
+          )}
+          {teamLeadMode && selectedProject && form.projectId && (
+            <div className="task-summary-card task-summary-card-compact">
+              <small>{selectedProject.projectCode || selectedProject.id}</small>
+              <strong>{selectedProject.name}</strong>
+              <small>Team members: {Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers.length : 0}</small>
+            </div>
           )}
           <label className="field">
             <span>Priority</span>
@@ -970,6 +960,11 @@ function normalizeProjectRows(rows) {
     name: project.name || `Project ${index + 1}`,
     status: project.status || 'Planning',
   }));
+}
+
+function isActiveProject(project) {
+  const status = String(project?.status || '').trim().toLowerCase();
+  return !status || status === 'active';
 }
 
 function normalizeTaskRow(task) {

@@ -2,32 +2,28 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section, employeeColumns, leaveColumns } from './AdminDashboard.jsx';
-import { people } from '../data/dummyData.js';
 import {
   applyCheckOutToRecord,
   createCheckInRecord,
   getAttendanceEmployee,
   getLateCheckInCountForMonth,
-  getInitialAttendanceRows,
   getTodayLabel,
   refreshStoredAttendanceRows,
   saveAttendanceRows,
 } from '../utils/attendanceStorage.js';
-import { getStoredEmployees } from '../utils/employeeStorage.js';
-import { getInitialLeaveRequests } from '../utils/leaveStorage.js';
-import { getStoredAnnouncements } from '../utils/announcementStorage.js';
 import { safeApiRequest } from '../utils/api.js';
 
 const DASHBOARD_REFRESH_MS = 15000;
 
 function HRDashboard() {
   const navigate = useNavigate();
-  const [attendance, setAttendance] = useState(getInitialAttendanceRows);
+  const [attendance, setAttendance] = useState([]);
   const [attendanceMessage, setAttendanceMessage] = useState('');
-  const [dashboardEmployees, setDashboardEmployees] = useState(() => getInitialHREmployees());
-  const [dashboardLeaveRequests, setDashboardLeaveRequests] = useState(() => getInitialHRLeaveRequests());
-  const [dashboardAnnouncements, setDashboardAnnouncements] = useState(() => getInitialHRAnnouncements());
+  const [dashboardEmployees, setDashboardEmployees] = useState([]);
+  const [dashboardLeaveRequests, setDashboardLeaveRequests] = useState([]);
+  const [dashboardAnnouncements, setDashboardAnnouncements] = useState([]);
   const [interviewsToday, setInterviewsToday] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
   const attendanceEmployee = getAttendanceEmployee();
   const todayLabel = getTodayLabel();
 
@@ -107,56 +103,61 @@ function HRDashboard() {
         }
       } catch {
         if (active) {
-          setAttendance(getInitialAttendanceRows());
+          setAttendance([]);
         }
       }
     };
-    const refreshEmployees = () => {
-      const cached = getInitialHREmployees();
-      setDashboardEmployees(cached);
-      safeApiRequest('/employees', cached).then((rows) => {
-        const source = Array.isArray(rows) ? rows : cached;
-        const normalized = source.map((employee, index) => normalizeHREmployee(employee, index));
-        setDashboardEmployees(normalized);
-      });
+    const refreshEmployees = async () => {
+      const rows = await safeApiRequest('/employees', []);
+      if (!active) {
+        return;
+      }
+      const source = Array.isArray(rows) ? rows : [];
+      setDashboardEmployees(source.map((employee, index) => normalizeHREmployee(employee, index)));
     };
 
-    const refreshLeaveRequests = () => {
-      const cached = getInitialHRLeaveRequests();
-      setDashboardLeaveRequests(cached);
-      safeApiRequest('/leaves', cached).then((rows) => {
-        const source = Array.isArray(rows) ? rows : cached;
-        const normalized = source.map((request, index) => normalizeLeaveRequest(request, index));
-        setDashboardLeaveRequests(normalized);
-      });
+    const refreshLeaveRequests = async () => {
+      const rows = await safeApiRequest('/leaves', []);
+      if (!active) {
+        return;
+      }
+      const source = Array.isArray(rows) ? rows : [];
+      setDashboardLeaveRequests(source.map((request, index) => normalizeLeaveRequest(request, index)));
     };
 
-    const refreshAnnouncements = () => {
-      const cached = getInitialHRAnnouncements();
-      setDashboardAnnouncements(cached);
-      safeApiRequest('/announcements', cached).then((rows) => {
-        const source = Array.isArray(rows) ? rows : cached;
-        const normalized = source.map((item, index) => normalizeAnnouncement(item, index));
-        setDashboardAnnouncements(normalized);
-      });
+    const refreshAnnouncements = async () => {
+      const rows = await safeApiRequest('/announcements', []);
+      if (!active) {
+        return;
+      }
+      const source = Array.isArray(rows) ? rows : [];
+      setDashboardAnnouncements(source.map((item, index) => normalizeAnnouncement(item, index)));
     };
 
-    const refreshInterviews = () => {
-      const fallback = getInterviewFallbackCount(getInitialHREmployees(), getInitialHRLeaveRequests().filter((request) => String(request.status || '').toLowerCase() === 'pending'), getInitialHRAnnouncements());
+    const refreshInterviews = async () => {
+      const fallback = getInterviewFallbackCount([], [], []);
       setInterviewsToday(fallback);
-      safeApiRequest('/interviews/today', null).then((result) => {
-        const next = parseInterviewCount(result);
-        if (next !== null) {
-          setInterviewsToday(next);
-        }
-      }).catch(() => {});
+      const result = await safeApiRequest('/interviews/today', null);
+      if (!active) {
+        return;
+      }
+      const next = parseInterviewCount(result);
+      if (next !== null) {
+        setInterviewsToday(next);
+      }
     };
 
-    refreshAttendance();
-    refreshEmployees();
-    refreshLeaveRequests();
-    refreshAnnouncements();
-    refreshInterviews();
+    Promise.all([
+      refreshAttendance(),
+      refreshEmployees(),
+      refreshLeaveRequests(),
+      refreshAnnouncements(),
+      refreshInterviews(),
+    ]).finally(() => {
+      if (active) {
+        setDashboardLoading(false);
+      }
+    });
 
     window.addEventListener('storage', refreshAttendance);
     window.addEventListener('storage', refreshEmployees);
@@ -192,6 +193,12 @@ function HRDashboard() {
   return (
     <>
       <Hero title="HR Dashboard" copy="Stay close to hiring, attendance, employee engagement, and requests that need a human touch." />
+      {dashboardLoading && (
+        <div className="user-alert" role="status">
+          <i className="ri-loader-4-line" aria-hidden="true" />
+          <span>Loading HR dashboard data...</span>
+        </div>
+      )}
       <QuickActions detailOverrides={quickActionDetails} />
       <CardGrid stats={hrStats} />
       {attendanceMessage && (
@@ -274,15 +281,15 @@ const attendanceColumns = [
 ];
 
 function getInitialHREmployees() {
-  return getStoredEmployees(people).map((employee, index) => normalizeHREmployee(employee, index));
+  return [];
 }
 
 function getInitialHRLeaveRequests() {
-  return getInitialLeaveRequests().map((request, index) => normalizeLeaveRequest(request, index));
+  return [];
 }
 
 function getInitialHRAnnouncements() {
-  return getStoredAnnouncements().map((item, index) => normalizeAnnouncement(item, index));
+  return [];
 }
 
 function normalizeHREmployee(employee, index = 0) {
