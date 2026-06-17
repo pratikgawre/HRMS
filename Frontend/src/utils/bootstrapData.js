@@ -37,13 +37,7 @@ function mapEmployees() {
     status: person.status,
     avatar: person.avatar,
     email: fallbackEmployeeEmail(person.id),
-    accessRole: person.id === 'KV002'
-      ? 'HR Manager'
-      : person.id === 'KV003'
-        ? 'Team Lead'
-        : person.id === 'KV004'
-          ? 'Project Manager'
-          : 'Employee',
+    accessRole: person.id === 'KV003' ? 'Team Lead' : person.id === 'KV004' ? 'Project Manager' : 'Employee',
   }));
 }
 
@@ -141,9 +135,8 @@ function fallbackEmployeeEmail(employeeId) {
 
 async function loadOrSeed(path, seedPayload) {
   const records = await apiRequest(path).catch(() => null);
-  const normalizedRecords = normalizeListPayload(records);
-  if (normalizedRecords.length > 0) {
-    return normalizedRecords;
+  if (Array.isArray(records) && records.length > 0) {
+    return records;
   }
 
   if (!Array.isArray(seedPayload) || seedPayload.length === 0) {
@@ -151,13 +144,10 @@ async function loadOrSeed(path, seedPayload) {
   }
 
   const saved = await apiRequest(`${path}/bulk`, { method: 'POST', body: JSON.stringify(seedPayload) }).catch(() => seedPayload);
-  const normalizedSaved = normalizeListPayload(saved);
-  return normalizedSaved.length > 0 ? normalizedSaved : seedPayload;
+  return Array.isArray(saved) && saved.length > 0 ? saved : seedPayload;
 }
 
 export async function bootstrapData() {
-  purgeLegacyProfileFromBrowserStorage();
-
   const [employees, users, leaves, anns, attendance] = await Promise.all([
     loadOrSeed('/employees', mapEmployees()),
     loadOrSeed('/users', defaultUsers),
@@ -180,105 +170,4 @@ export async function bootstrapData() {
   window.dispatchEvent(new Event('kavyaProjectsChanged'));
 
   return { employees, users, leaves, anns, attendance, taskRows, projectRows };
-}
-
-function purgeLegacyProfileFromBrowserStorage() {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  const storage = window.localStorage;
-  if (!storage) {
-    return;
-  }
-
-  const matchers = [
-    'rohan das',
-    'rohan',
-    'tl001',
-    'kv005',
-    'rohan@kavya.hr',
-  ];
-
-  const shouldRemove = (value) => {
-    const text = String(value || '').trim().toLowerCase();
-    return matchers.some((matcher) => text === matcher || text.includes(matcher));
-  };
-
-  const shouldRemoveRecord = (record) => {
-    if (!record || typeof record !== 'object') {
-      return false;
-    }
-
-    return [
-      record.id,
-      record.userId,
-      record.employeeId,
-      record.employeeCode,
-      record.email,
-      record.name,
-      record.displayName,
-      record.employeeName,
-      record.employee,
-      record.owner,
-      record.assignedTo,
-      record.assignedToName,
-      record.assignedByName,
-    ].some(shouldRemove);
-  };
-
-  const keysToInspect = [];
-  for (let index = 0; index < storage.length; index += 1) {
-    const key = storage.key(index);
-    if (key) {
-      keysToInspect.push(key);
-    }
-  }
-
-  keysToInspect.forEach((key) => {
-    const raw = storage.getItem(key);
-    if (!raw) {
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        const filtered = parsed.filter((record) => !shouldRemoveRecord(record));
-        if (filtered.length === 0) {
-          storage.removeItem(key);
-        } else if (filtered.length !== parsed.length) {
-          storage.setItem(key, JSON.stringify(filtered));
-        }
-        return;
-      }
-
-      if (shouldRemoveRecord(parsed)) {
-        storage.removeItem(key);
-      }
-    } catch {
-      if (shouldRemove(raw)) {
-        storage.removeItem(key);
-      }
-    }
-  });
-}
-
-function normalizeListPayload(payload) {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  if (!payload || typeof payload !== 'object') {
-    return [];
-  }
-
-  const candidates = [payload.value, payload.rows, payload.items, payload.data];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      return candidate;
-    }
-  }
-
-  return [];
 }

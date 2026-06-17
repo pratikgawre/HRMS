@@ -57,39 +57,6 @@ public class NotificationService {
     return notifyUserIds(targetUserIds, title, message, sourceType, sourceId, createdByRole, createdByName);
   }
 
-  public List<Notification> notifyRolesAndUsers(
-      Collection<String> roles,
-      Collection<String> userIds,
-      String title,
-      String message,
-      String sourceType,
-      String sourceId,
-      String createdByRole,
-      String createdByName,
-      String createdByUserId) {
-    Set<String> targetUserIds = new LinkedHashSet<>();
-
-    if (roles != null) {
-      for (String role : roles) {
-        targetUserIds.addAll(resolveUserIdsForRole(role));
-      }
-    }
-
-    if (userIds != null) {
-      for (String userId : userIds) {
-        if (!isBlank(userId)) {
-          targetUserIds.add(userId);
-        }
-      }
-    }
-
-    if (!isBlank(createdByUserId)) {
-      targetUserIds.add(createdByUserId);
-    }
-
-    return notifyUserIds(targetUserIds, title, message, sourceType, sourceId, createdByRole, createdByName);
-  }
-
   public List<Notification> notifyUsers(
       Collection<String> userIds,
       String title,
@@ -211,4 +178,3 @@ public class NotificationService {
     return value == null || value.trim().isEmpty();
   }
 }
-

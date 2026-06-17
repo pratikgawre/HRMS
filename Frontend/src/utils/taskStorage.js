@@ -17,6 +17,9 @@ export function normalizeTaskRows(rows = []) {
     dueDate: task.dueDate || task.due || '',
     status: task.status || 'Pending',
     projectId: task.projectId || '',
+    projectName: task.projectName || '',
+    projectCode: task.projectCode || '',
+    createdDateTime: task.createdDateTime || task.createdAt || '',
   }));
 }
 
@@ -37,6 +40,9 @@ export function serializeTaskForApi(task) {
     dueDate: task.due || task.dueDate || '',
     status: task.status || 'Pending',
     projectId: task.projectId || '',
+    projectName: task.projectName || '',
+    projectCode: task.projectCode || '',
+    createdDateTime: task.createdDateTime || task.createdAt || '',
   };
 }
 

@@ -16,7 +16,7 @@ import {
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { safeApiRequest } from '../utils/api.js';
-import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, getLeavePagePath, normalizeLeaveTypes } from '../utils/leaveBalance.js';
+import { getEmployeeLeaveSummary, normalizeLeaveTypes, DEFAULT_LEAVE_TYPES } from '../utils/leaveBalance.js';
 
 function EmployeeDashboard() {
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
@@ -197,7 +197,7 @@ function EmployeeDashboard() {
   return (
     <>
       <Hero title="My Dashboard" copy="Your attendance snapshot, leave balance, upcoming notices, and profile activity in one personal workspace." />
-      <CardGrid stats={employeeStats} />
+      <CardGrid stats={employeeStats} className="employee-card-row" />
 
       {message && (
         <div className="user-alert" role="status">

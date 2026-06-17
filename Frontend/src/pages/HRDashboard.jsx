@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
-import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section, employeeColumns, leaveColumns } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
 import {
@@ -18,8 +17,6 @@ import { getStoredEmployees } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests } from '../utils/leaveStorage.js';
 import { getStoredAnnouncements } from '../utils/announcementStorage.js';
 import { safeApiRequest } from '../utils/api.js';
-import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
-import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, getLeavePagePath, normalizeLeaveTypes } from '../utils/leaveBalance.js';
 
 const DASHBOARD_REFRESH_MS = 15000;
 
@@ -29,11 +26,9 @@ function HRDashboard() {
   const [attendanceMessage, setAttendanceMessage] = useState('');
   const [dashboardEmployees, setDashboardEmployees] = useState(() => getInitialHREmployees());
   const [dashboardLeaveRequests, setDashboardLeaveRequests] = useState(() => getInitialHRLeaveRequests());
-  const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [dashboardAnnouncements, setDashboardAnnouncements] = useState(() => getInitialHRAnnouncements());
   const [interviewsToday, setInterviewsToday] = useState(null);
   const attendanceEmployee = getAttendanceEmployee();
-  const employeeIdentity = getCurrentEmployeeIdentity();
   const todayLabel = getTodayLabel();
 
   const pendingLeaveRequests = useMemo(
@@ -51,10 +46,6 @@ function HRDashboard() {
   const wellnessAnnouncements = dashboardAnnouncements.filter((item) => String(item.category || '').toLowerCase() === 'wellness');
   const interviewsFallback = getInterviewFallbackCount(dashboardEmployees, pendingLeaveRequests, dashboardAnnouncements);
   const interviewsCount = interviewsToday ?? interviewsFallback;
-  const leaveSummary = useMemo(
-    () => getEmployeeLeaveSummary(leaveTypes, dashboardLeaveRequests, employeeIdentity),
-    [dashboardLeaveRequests, employeeIdentity, leaveTypes],
-  );
   const myAttendanceRows = useMemo(
     () => attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId),
     [attendance, attendanceEmployee.employeeId]
@@ -149,11 +140,6 @@ function HRDashboard() {
         setDashboardAnnouncements(normalized);
       });
     };
-    const refreshLeaveTypes = () => {
-      safeApiRequest('/settings', { leaveTypes: DEFAULT_LEAVE_TYPES })
-        .then((payload) => setLeaveTypes(normalizeLeaveTypes(payload?.leaveTypes, DEFAULT_LEAVE_TYPES)))
-        .catch(() => setLeaveTypes(DEFAULT_LEAVE_TYPES));
-    };
 
     const refreshInterviews = () => {
       const fallback = getInterviewFallbackCount(getInitialHREmployees(), getInitialHRLeaveRequests().filter((request) => String(request.status || '').toLowerCase() === 'pending'), getInitialHRAnnouncements());
@@ -170,7 +156,6 @@ function HRDashboard() {
     refreshEmployees();
     refreshLeaveRequests();
     refreshAnnouncements();
-    refreshLeaveTypes();
     refreshInterviews();
 
     window.addEventListener('storage', refreshAttendance);
@@ -181,7 +166,6 @@ function HRDashboard() {
     window.addEventListener('kavyaEmployeesChanged', refreshEmployees);
     window.addEventListener('kavyaLeaveRequestsChanged', refreshLeaveRequests);
     window.addEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
-    window.addEventListener('kavyaSettingsChanged', refreshLeaveTypes);
 
     const intervalId = window.setInterval(() => {
       refreshAttendance();
@@ -201,7 +185,6 @@ function HRDashboard() {
       window.removeEventListener('kavyaEmployeesChanged', refreshEmployees);
       window.removeEventListener('kavyaLeaveRequestsChanged', refreshLeaveRequests);
       window.removeEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
-      window.removeEventListener('kavyaSettingsChanged', refreshLeaveTypes);
       window.clearInterval(intervalId);
     };
   }, []);
@@ -211,9 +194,6 @@ function HRDashboard() {
       <Hero title="HR Dashboard" copy="Stay close to hiring, attendance, employee engagement, and requests that need a human touch." />
       <QuickActions detailOverrides={quickActionDetails} />
       <CardGrid stats={hrStats} />
-      <Section title="My Leaves" action="Open" actionTo={getLeavePagePath('hr')}>
-        <LeaveBalanceStrip summary={leaveSummary} />
-      </Section>
       {attendanceMessage && (
         <div className="user-alert" role="status">
           <i className="ri-checkbox-circle-line" aria-hidden="true" />

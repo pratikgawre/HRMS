@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Hero, Section } from "./AdminDashboard.jsx";
 import { apiRequest } from "../utils/api.js";
 import { getSessionValue } from "../utils/appSession.js";
@@ -49,15 +49,20 @@ function Announcements() {
   const role = getSessionValue("kavyaAccessRole") || getSessionValue("kavyaRole") || "Employee";
   const roleKey = normalizeRoleKey(role);
   const canCreate = roleKey === "admin" || roleKey === "superadmin" || roleKey === "hr" || roleKey === "hrmanager";
+  const isAdmin = roleKey === "admin" || roleKey === "superadmin";
 
   const [announcements, setAnnouncements] = useState([]);
   const [editingId, setEditingId] = useState("");
   const [message, setMessage] = useState("");
+  const [deletedAnnouncement, setDeletedAnnouncement] = useState(null);
   const [errors, setErrors] = useState({});
   const [form, setForm] = useState(getDefaultForm());
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filterCategory, setFilterCategory] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [undoState, setUndoState] = useState(null);
+  const undoTimerRef = useRef(null);
 
   const filteredAnnouncements = useMemo(() => {
     if (!filterCategory) return announcements;
@@ -65,6 +70,18 @@ function Announcements() {
   }, [announcements, filterCategory]);
 
   const clearMessage = () => setMessage("");
+
+  useEffect(() => {
+    if (!deletedAnnouncement) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setDeletedAnnouncement(null);
+    }, 6000);
+
+    return () => window.clearTimeout(timer);
+  }, [deletedAnnouncement]);
 
   const loadAnnouncements = async () => {
     setLoading(true);
@@ -180,20 +197,92 @@ function Announcements() {
     setErrors({});
   };
 
+  const clearUndoTimer = () => {
+    if (undoTimerRef.current) {
+      window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+  };
+
   const deleteAnnouncement = async (announcementId) => {
+    if (isAdmin) {
+      const confirmed = window.confirm("Are you sure to delete this announcement?");
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const announcementToRestore = announcements.find((item) => item.id === announcementId) || null;
+
     try {
       await apiRequest(`/announcements/${announcementId}`, { method: "DELETE" });
       setAnnouncements((current) => current.filter((item) => item.id !== announcementId));
       if (editingId === announcementId) {
         resetForm();
       }
+      setDeletedAnnouncement(announcementToRestore);
       setMessage('Announcement deleted successfully');
     } catch (error) {
       setMessage(error.message || 'Failed to delete announcement');
     }
   };
 
+  const undoDelete = async () => {
+    if (!deletedAnnouncement) {
+      return;
+    }
+
+    try {
+      await apiRequest("/announcements", {
+        method: "POST",
+        body: JSON.stringify(deletedAnnouncement),
+      });
+      setAnnouncements((current) => [deletedAnnouncement, ...current.filter((item) => item.id !== deletedAnnouncement.id)]);
+      setDeletedAnnouncement(null);
+      setMessage("Delete undone successfully");
+    } catch (error) {
+      setMessage(error.message || "Failed to undo delete");
+    }
+  };
+
   const canManageAnnouncement = () => canCreate;
+  const openDeleteConfirm = (announcement) => setDeleteTarget(announcement);
+  const closeDeleteConfirm = () => setDeleteTarget(null);
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    const announcement = deleteTarget;
+    const announcementId = announcement.id;
+    closeDeleteConfirm();
+    clearUndoTimer();
+    await deleteAnnouncement(announcementId);
+    setUndoState({
+      announcement,
+      expiresAt: Date.now() + 8000,
+    });
+    undoTimerRef.current = window.setTimeout(() => {
+      setUndoState(null);
+      undoTimerRef.current = null;
+    }, 8000);
+  };
+
+  const handleUndoDelete = async () => {
+    if (!undoState?.announcement) return;
+    const restored = undoState.announcement;
+    clearUndoTimer();
+    setUndoState(null);
+    try {
+      await apiRequest("/announcements", {
+        method: "POST",
+        body: JSON.stringify(restored),
+      });
+      setAnnouncements((current) => [restored, ...current]);
+      setMessage("Announcement restored successfully");
+    } catch (error) {
+      setMessage(error.message || "Failed to restore announcement");
+    }
+  };
+
+  useEffect(() => () => clearUndoTimer(), []);
 
   return (
     <>
@@ -206,6 +295,16 @@ function Announcements() {
         <div className="announcement-alert" role="status">
           <i className="ri-checkbox-circle-line" aria-hidden="true" />
           <span>{message}</span>
+        </div>
+      )}
+
+      {deletedAnnouncement && (
+        <div className="announcement-alert announcement-alert--undo" role="status">
+          <i className="ri-refresh-line" aria-hidden="true" />
+          <span>Announcement deleted.</span>
+          <button type="button" className="announcement-undo-btn" onClick={undoDelete}>
+            Undo
+          </button>
         </div>
       )}
 
@@ -260,7 +359,7 @@ function Announcements() {
                     <i className="ri-edit-line" aria-hidden="true" />
                     Edit
                   </button>
-                  <button type="button" className="danger" onClick={() => deleteAnnouncement(item.id)}>
+                  <button type="button" className="danger" onClick={() => openDeleteConfirm(item)}>
                     <i className="ri-delete-bin-line" aria-hidden="true" />
                     Delete
                   </button>
@@ -281,6 +380,43 @@ function Announcements() {
           onClose={resetForm}
           submitLabel={saving ? "Saving..." : editingId === "new" ? "Post Announcement" : "Update Announcement"}
         />
+      )}
+
+      {deleteTarget && (
+        <div className="announcement-delete-backdrop" role="presentation" onClick={closeDeleteConfirm}>
+          <section
+            className="announcement-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete announcement"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="announcement-delete-icon" aria-hidden="true">
+              <i className="ri-delete-bin-line" />
+            </div>
+            <div className="announcement-delete-copy">
+              <h3>Delete announcement?</h3>
+              <p>This announcement will be removed permanently.</p>
+            </div>
+            <div className="announcement-delete-actions">
+              <button type="button" className="announcement-delete-cancel" onClick={closeDeleteConfirm}>
+                No, Keep It
+              </button>
+              <button type="button" className="announcement-delete-confirm" onClick={handleDeleteConfirm}>
+                Yes, Delete
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {undoState?.announcement && (
+        <div className="announcement-undo-toast" role="status" aria-live="polite">
+          <span>Announcement deleted.</span>
+          <button type="button" onClick={handleUndoDelete}>
+            Undo
+          </button>
+        </div>
       )}
     </>
   );

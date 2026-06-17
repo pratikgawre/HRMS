@@ -79,25 +79,18 @@ function Header({ role, onMenuClick }) {
     navigate(`${targetPath}?search=${encodeURIComponent(searchQuery.trim())}`);
   };
 
-  const handleNotificationClick = async (item) => {
-    const targetPath = buildNotificationTarget(item, role);
-
+  const handleNotificationClick = async (id) => {
     setNotificationItems((current) =>
-      current.map((entry) => (entry.id === item.id ? { ...entry, readStatus: true } : entry)),
+      current.map((item) => (item.id === id ? { ...item, readStatus: true } : item)),
     );
 
     try {
-      await apiRequest(`/notifications/${encodeURIComponent(item.id)}/read`, { method: 'PUT' });
+      await apiRequest(`/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT' });
       window.dispatchEvent(new Event('kavyaNotificationsChanged'));
     } catch {
       setNotificationItems((current) =>
-        current.map((entry) => (entry.id === item.id ? { ...entry, readStatus: false } : entry)),
+        current.map((item) => (item.id === id ? { ...item, readStatus: false } : item)),
       );
-    } finally {
-      setShowNotifications(false);
-      if (targetPath) {
-        navigate(targetPath);
-      }
     }
   };
 
@@ -129,6 +122,10 @@ function Header({ role, onMenuClick }) {
   const logout = () => {
     clearSession();
     navigate('/login', { replace: true });
+  };
+
+  const openProfile = () => {
+    navigate(`${roleBasePath}/profile`);
   };
 
   return (
@@ -188,16 +185,10 @@ function Header({ role, onMenuClick }) {
                     key={item.id}
                     type="button"
                     className={`notification-item ${item.readStatus ? 'is-read' : 'is-unread'}`}
-                    data-tone={getNotificationTone(item)}
-                    onClick={() => handleNotificationClick(item)}
+                    onClick={() => handleNotificationClick(item.id)}
                   >
-                    <span className={`notification-icon tone-${getNotificationTone(item)}`}>
-                      <i className={getNotificationIcon(item)} aria-hidden="true" />
-                    </span>
-                    <div className="notification-copy">
-                      <strong>{item.title}</strong>
-                      <p>{item.message}</p>
-                    </div>
+                    <strong>{item.title}</strong>
+                    <p>{item.message}</p>
                     <small>{formatNotificationMeta(item)}</small>
                   </button>
                 ))}
@@ -214,7 +205,13 @@ function Header({ role, onMenuClick }) {
             </section>
           )}
         </div>
-        <div className="user-chip">
+        <button
+          type="button"
+          className="user-chip user-chip--clickable"
+          onClick={openProfile}
+          aria-label={`Open ${displayRole} profile`}
+          title={`Open ${displayRole} profile`}
+        >
           {employeeIdentity?.profilePicture ? (
             <img src={employeeIdentity.profilePicture} alt={`${employeeIdentity.employee} profile`} />
           ) : (
@@ -223,7 +220,7 @@ function Header({ role, onMenuClick }) {
           <div>
             <strong>{displayName}</strong>
           </div>
-        </div>
+        </button>
         <button className="logout-btn" onClick={logout}><i className="ri-logout-box-r-line" aria-hidden="true" />Logout</button>
       </div>
     </header>
@@ -236,7 +233,6 @@ function getSearchRoutes(role) {
       { path: '/admin/dashboard', keywords: ['dashboard', 'overview', 'home'] },
       { path: '/admin/employees', keywords: ['employee', 'employees', 'staff', 'member', 'people', 'team'] },
       { path: '/admin/users', keywords: ['user', 'users', 'access', 'role', 'account'] },
-      { path: '/admin/team-attendance', keywords: ['team attendance', 'team present', 'team check in', 'team check-out'] },
       { path: '/admin/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
       { path: '/admin/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
       { path: '/admin/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
@@ -251,7 +247,6 @@ function getSearchRoutes(role) {
       { path: '/hr/dashboard', keywords: ['dashboard', 'overview', 'home'] },
       { path: '/hr/employees', keywords: ['employee', 'employees', 'staff', 'member', 'people', 'team'] },
       { path: '/hr/users', keywords: ['user', 'users', 'access', 'role', 'account'] },
-      { path: '/hr/team-attendance', keywords: ['team attendance', 'team present', 'team check in', 'team check-out'] },
       { path: '/hr/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
       { path: '/hr/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
       { path: '/hr/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
@@ -266,7 +261,6 @@ function getSearchRoutes(role) {
     teamLead: [
       { path: '/team-lead/dashboard', keywords: ['dashboard', 'overview', 'home'] },
       { path: '/team-lead/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
-      { path: '/team-lead/team-attendance', keywords: ['team attendance', 'team present', 'team check in', 'team check-out'] },
       { path: '/team-lead/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
       { path: '/team-lead/leave-review', keywords: ['leave', 'vacation', 'absence'] },
       { path: '/team-lead/tasks', keywords: ['task', 'tasks', 'assignment'] },
@@ -280,7 +274,6 @@ function getSearchRoutes(role) {
       { path: '/project-manager/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
       { path: '/project-manager/projects', keywords: ['project', 'projects', 'delivery', 'milestone'] },
       { path: '/project-manager/tasks', keywords: ['task', 'tasks', 'assignment'] },
-      { path: '/project-manager/team-attendance', keywords: ['team attendance', 'team present', 'team check in', 'team check-out'] },
       { path: '/project-manager/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
       { path: '/project-manager/leave-review', keywords: ['leave', 'vacation', 'absence'] },
       { path: '/project-manager/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
@@ -313,157 +306,7 @@ function normalizeNotifications(rows) {
     createdAt: item.createdAt || '',
     createdByRole: item.createdByRole || '',
     createdByName: item.createdByName || '',
-    sourceType: item.sourceType || '',
-    sourceId: item.sourceId || '',
   }));
-}
-
-function buildNotificationTarget(item, role) {
-  const sourceType = normalizeNotificationSource(item);
-  const route = getNotificationRouteForSource(sourceType, role, item);
-  return route || '';
-}
-
-function getNotificationRouteForSource(sourceType, role, item) {
-  const roleRoutes = {
-    admin: {
-      leave: '/admin/leave-management',
-      attendance: '/admin/attendance',
-      project: '/admin/projects',
-      task: '/admin/dashboard',
-      announcement: '/admin/announcements',
-      payroll: '/admin/payroll',
-    },
-    hr: {
-      leave: '/hr/leave-approval',
-      attendance: '/hr/attendance',
-      project: '/hr/projects',
-      task: '/hr/tasks',
-      announcement: '/hr/announcements',
-      payroll: '/hr/payroll',
-    },
-    teamLead: {
-      leave: '/team-lead/leave-review',
-      attendance: '/team-lead/attendance',
-      project: '/team-lead/dashboard',
-      task: '/team-lead/tasks',
-      announcement: '/team-lead/announcements',
-      payroll: '/team-lead/payroll',
-    },
-    projectManager: {
-      leave: '/project-manager/leave-review',
-      attendance: '/project-manager/attendance',
-      project: '/project-manager/projects',
-      task: '/project-manager/tasks',
-      announcement: '/project-manager/announcements',
-      payroll: '/project-manager/payroll',
-    },
-    employee: {
-      leave: '/employee/leave-requests',
-      attendance: '/employee/attendance',
-      project: '/employee/dashboard',
-      task: '/employee/dashboard',
-      announcement: '/employee/announcements',
-      payroll: '/employee/payroll',
-    },
-  };
-
-  const resolvedRole = roleRoutes[role] ? role : 'employee';
-  const baseRoute = roleRoutes[resolvedRole][sourceType] || roleRoutes.employee[sourceType] || roleRoutes.employee.announcement;
-  const query = buildNotificationQuery(sourceType, item);
-  return query ? `${baseRoute}?${query}` : baseRoute;
-}
-
-function buildNotificationQuery(sourceType, item) {
-  const title = String(item?.title || '').toLowerCase();
-  const message = String(item?.message || '').toLowerCase();
-
-  if (sourceType === 'leave') {
-    if (title.includes('approved') || message.includes('approved')) {
-      return 'status=Approved';
-    }
-    if (title.includes('rejected') || message.includes('rejected')) {
-      return 'status=Rejected';
-    }
-    if (title.includes('recommended') || message.includes('recommended')) {
-      return 'status=Recommended';
-    }
-    return 'status=Pending';
-  }
-
-  if (sourceType === 'attendance') {
-    if (title.includes('late') || message.includes('late')) {
-      return 'status=Late';
-    }
-    if (title.includes('leave') || message.includes('leave')) {
-      return 'status=Leave';
-    }
-    return 'status=Present';
-  }
-
-  if (sourceType === 'task') {
-    if (title.includes('completed') || message.includes('completed')) {
-      return 'status=Completed&tab=list';
-    }
-    if (title.includes('assigned') || message.includes('assigned')) {
-      return 'tab=assign';
-    }
-    return 'tab=list';
-  }
-
-  if (sourceType === 'project') {
-    if (title.includes('completed') || message.includes('completed')) {
-      return 'status=Completed&tab=list';
-    }
-    if (title.includes('active') || message.includes('active')) {
-      return 'status=Active&tab=list';
-    }
-    return 'tab=list';
-  }
-
-  return '';
-}
-
-function normalizeNotificationSource(item) {
-  const sourceType = String(item?.sourceType || '').trim().toLowerCase();
-  if (sourceType) {
-    return sourceType;
-  }
-
-  const title = String(item?.title || '').toLowerCase();
-  const message = String(item?.message || '').toLowerCase();
-  const haystack = `${title} ${message}`;
-
-  if (haystack.includes('leave')) return 'leave';
-  if (haystack.includes('attendance') || haystack.includes('check-in') || haystack.includes('check in') || haystack.includes('check-out') || haystack.includes('check out')) return 'attendance';
-  if (haystack.includes('project')) return 'project';
-  if (haystack.includes('task')) return 'task';
-  if (haystack.includes('announcement')) return 'announcement';
-  if (haystack.includes('payroll') || haystack.includes('payslip') || haystack.includes('salary')) return 'payroll';
-
-  return '';
-}
-
-function getNotificationTone(item) {
-  const sourceType = normalizeNotificationSource(item);
-  if (sourceType === 'leave') return 'leave';
-  if (sourceType === 'attendance') return 'attendance';
-  if (sourceType === 'project') return 'project';
-  if (sourceType === 'task') return 'task';
-  if (sourceType === 'announcement') return 'announcement';
-  if (sourceType === 'payroll') return 'payroll';
-  return 'default';
-}
-
-function getNotificationIcon(item) {
-  const sourceType = normalizeNotificationSource(item);
-  if (sourceType === 'leave') return 'ri-calendar-check-line';
-  if (sourceType === 'attendance') return 'ri-time-line';
-  if (sourceType === 'project') return 'ri-folder-chart-line';
-  if (sourceType === 'task') return 'ri-task-line';
-  if (sourceType === 'announcement') return 'ri-megaphone-line';
-  if (sourceType === 'payroll') return 'ri-money-rupee-circle-line';
-  return 'ri-notification-3-line';
 }
 
 function formatNotificationMeta(item) {

@@ -38,37 +38,35 @@ export function getInitialAttendanceRows() {
 }
 
 export function setAttendanceRowsCache(rows) {
-  attendanceRowsCache = finalizeAttendanceRows(extractAttendanceRows(rows));
+  attendanceRowsCache = finalizeAttendanceRows(Array.isArray(rows) ? rows : []);
   window.dispatchEvent(new Event('kavyaAttendanceRowsChanged'));
 }
 
 export function normalizeAttendanceRow(row) {
   const employeeName = row.employee || row.employeeName || '-';
-  const checkInAt = normalizeAttendanceTimestamp(row.checkInAt, row.date || row.dateLabel, row.checkIn);
-  const checkOutAt = normalizeAttendanceTimestamp(row.checkOutAt, row.date || row.dateLabel, row.checkOut);
 
   return {
     ...row,
     employee: employeeName,
     date: row.date || row.dateLabel || '-',
-    dateLabel: row.dateLabel || row.date || '-',
     hours: row.hours || row.workedHours || '-',
     avatar: row.avatar || getInitials(employeeName || row.employeeId || 'EM'),
-    checkInAt,
-    checkOutAt,
     lateCheckInCount: Number(row.lateCheckInCount || 0),
   };
 }
 
 export async function fetchAttendanceRows() {
   const rows = await apiRequest('/attendance');
-  return finalizeAttendanceRows(extractAttendanceRows(rows));
+  return finalizeAttendanceRows(rows);
 }
 
 export async function refreshStoredAttendanceRows() {
   const rawRows = await apiRequest('/attendance');
-  const rows = finalizeAttendanceRows(extractAttendanceRows(rawRows));
+  const rows = finalizeAttendanceRows(rawRows);
   attendanceRowsCache = rows;
+  if (hasAttendanceChanged(rawRows, rows)) {
+    await persistAttendanceRows(rows);
+  }
   return rows;
 }
 
@@ -235,31 +233,6 @@ function getInitials(name) {
     .toUpperCase() || 'EM';
 }
 
-function normalizeAttendanceTimestamp(value, dateLabel, timeLabel) {
-  if (value) {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      return value;
-    }
-  }
-
-  const date = parseAttendanceDate(dateLabel);
-  const time = parseAttendanceTime(timeLabel);
-  if (!date || !time) {
-    return value || '';
-  }
-
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    time.hours,
-    time.minutes,
-    0,
-    0,
-  ).toISOString();
-}
-
 function dedupeAttendanceRows(rows) {
   const uniqueByEmployeeDay = new Map();
 
@@ -281,6 +254,25 @@ function dedupeAttendanceRows(rows) {
 
 function finalizeAttendanceRows(rows, now = new Date()) {
   return dedupeAttendanceRows((Array.isArray(rows) ? rows : []).map(normalizeAttendanceRow).map((row) => finalizeAttendanceRow(row, now)));
+}
+
+function hasAttendanceChanged(firstRows, secondRows) {
+  return attendanceSnapshot(firstRows) !== attendanceSnapshot(secondRows);
+}
+
+function attendanceSnapshot(rows) {
+  return JSON.stringify(dedupeAttendanceRows(rows).map((row) => ({
+    id: row.id || '',
+    employeeId: row.employeeId || '',
+    date: row.date || row.dateLabel || '',
+    checkIn: row.checkIn || '',
+    checkOut: row.checkOut || '',
+    hours: row.hours || '',
+    status: row.status || '',
+    checkInAt: row.checkInAt || '',
+    checkOutAt: row.checkOutAt || '',
+    lateCheckInCount: Number(row.lateCheckInCount || 0),
+  })));
 }
 
 function finalizeAttendanceRow(row, now = new Date()) {
@@ -386,52 +378,6 @@ function parseAttendanceDate(value) {
   return new Date(Number(match[3]), monthIndex, Number(match[1]));
 }
 
-function parseAttendanceTime(value) {
-  const text = String(value || '').trim();
-  if (!text) {
-    return null;
-  }
-
-  const amPmMatch = text.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (amPmMatch) {
-    const rawHours = Number.parseInt(amPmMatch[1], 10);
-    const minutes = Number.parseInt(amPmMatch[2], 10);
-    const meridiem = amPmMatch[3].toUpperCase();
-
-    if (!Number.isFinite(rawHours) || !Number.isFinite(minutes)) {
-      return null;
-    }
-
-    const normalizedHours = rawHours % 12;
-    return {
-      hours: meridiem === 'PM' ? normalizedHours + 12 : normalizedHours,
-      minutes,
-    };
-  }
-
-  const twentyFourHourMatch = text.match(/^(\d{1,2}):(\d{2})$/);
-  if (twentyFourHourMatch) {
-    const hours = Number.parseInt(twentyFourHourMatch[1], 10);
-    const minutes = Number.parseInt(twentyFourHourMatch[2], 10);
-
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
-      return null;
-    }
-
-    return { hours, minutes };
-  }
-
-  const parsed = new Date(`1970-01-01T${text}`);
-  if (!Number.isNaN(parsed.getTime())) {
-    return {
-      hours: parsed.getHours(),
-      minutes: parsed.getMinutes(),
-    };
-  }
-
-  return null;
-}
-
 function isLateCheckIn(checkInDate) {
   if (!checkInDate || Number.isNaN(checkInDate.getTime())) {
     return false;
@@ -504,24 +450,5 @@ function parseMinutesFromHoursLabel(label) {
   const hours = hoursMatch ? Number.parseInt(hoursMatch[1], 10) : 0;
   const minutes = minutesMatch ? Number.parseInt(minutesMatch[1], 10) : 0;
   return (hours * 60) + minutes;
-}
-
-function extractAttendanceRows(payload) {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  if (!payload || typeof payload !== 'object') {
-    return [];
-  }
-
-  const candidates = [payload.value, payload.rows, payload.items, payload.data];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      return candidate;
-    }
-  }
-
-  return [];
 }
 

@@ -1,15 +1,10 @@
 package com.kavya.hrms.controller;
 
-import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.Employee;
-import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,45 +13,22 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/employees")
 public class EmployeeController {
   private final EmployeeRepository employeeRepository;
-  private final AppUserRepository appUserRepository;
   private final NotificationService notificationService;
 
-  public EmployeeController(EmployeeRepository employeeRepository, AppUserRepository appUserRepository, NotificationService notificationService) {
+  public EmployeeController(EmployeeRepository employeeRepository, NotificationService notificationService) {
     this.employeeRepository = employeeRepository;
-    this.appUserRepository = appUserRepository;
     this.notificationService = notificationService;
   }
 
   @GetMapping
-  public List<Employee> list(@RequestParam(required = false) String accessRole) {
-    List<Employee> normalizedEmployees = employeeRepository.findAll().stream()
-        .map(this::normalizeEmployeeAccessRole)
-        .toList();
-
-    if (accessRole == null || accessRole.isBlank()) {
-      return normalizedEmployees;
-    }
-
-    String normalizedFilter = normalizeAccessRole(accessRole);
-    if (normalizedFilter.isBlank()) {
-      return normalizedEmployees;
-    }
-
-    List<Employee> filtered = new ArrayList<>();
-    for (Employee employee : normalizedEmployees) {
-      if (matchesAccessRole(employee, normalizedFilter)) {
-        filtered.add(employee);
-      }
-    }
-
-    return filtered;
+  public List<Employee> list() {
+    return employeeRepository.findAll();
   }
 
   @PostMapping
@@ -66,7 +38,7 @@ public class EmployeeController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     Employee saved = employeeRepository.save(employee);
     notificationService.notifyRoles(
-        NotificationAudience.employeeRecipients(),
+        NotificationAudience.operationalRecipients(accessRole),
         "Employee profile saved",
         buildEmployeeMessage(saved, "saved"),
         "employee",
@@ -86,7 +58,7 @@ public class EmployeeController {
     List<Employee> saved = employeeRepository.saveAll(employees);
     if (existingCount > 0) {
       notificationService.notifyRoles(
-          NotificationAudience.employeeRecipients(),
+          NotificationAudience.operationalRecipients(accessRole),
           "Employee records refreshed",
           "Employee profiles were updated in bulk.",
           "employee",
@@ -107,7 +79,7 @@ public class EmployeeController {
     employee.setEmployeeId(employeeId);
     Employee saved = employeeRepository.save(employee);
     notificationService.notifyRoles(
-        NotificationAudience.employeeRecipients(),
+        NotificationAudience.operationalRecipients(accessRole),
         "Employee profile updated",
         buildEmployeeMessage(saved, "updated"),
         "employee",
@@ -126,7 +98,7 @@ public class EmployeeController {
     Employee current = employeeRepository.findById(employeeId).orElse(null);
     employeeRepository.deleteById(employeeId);
     notificationService.notifyRoles(
-        NotificationAudience.employeeRecipients(),
+        NotificationAudience.operationalRecipients(accessRole),
         "Employee profile removed",
         buildEmployeeMessage(current, "removed"),
         "employee",
@@ -140,111 +112,5 @@ public class EmployeeController {
     String name = employee != null && employee.getDisplayName() != null ? employee.getDisplayName() : "Employee";
     String department = employee != null && employee.getDepartment() != null ? employee.getDepartment() : "unknown department";
     return name + " was " + action + " in " + department + ".";
-  }
-
-  private Employee normalizeEmployeeAccessRole(Employee employee) {
-    if (employee != null) {
-      employee.setAccessRole(resolveAccessRole(employee));
-    }
-    return employee;
-  }
-
-  private String resolveAccessRole(Employee employee) {
-    if (employee == null) {
-      return "";
-    }
-
-    String employeeId = firstNonBlank(employee.getEmployeeId(), employee.getEmployeeCode(), employee.getId());
-    String email = trimToNull(employee.getEmail());
-
-    Optional<AppUser> matchedUser = Optional.empty();
-    if (employeeId != null) {
-      matchedUser = appUserRepository.findByEmployeeId(employeeId);
-    }
-    if (matchedUser.isEmpty() && email != null) {
-      matchedUser = appUserRepository.findByEmailIgnoreCase(email);
-    }
-
-    String resolvedFromUser = matchedUser.map(AppUser::getRole).map(this::normalizeAccessRole).orElse("");
-    if (!resolvedFromUser.isBlank()) {
-      return resolvedFromUser;
-    }
-
-    return normalizeAccessRole(employee.getAccessRole());
-  }
-
-  private String normalizeAccessRole(String accessRole) {
-    String value = trimToNull(accessRole);
-    if (value == null) {
-      return "";
-    }
-
-    String normalized = value.toLowerCase(Locale.ROOT).replace(" ", "");
-    if ("admin".equals(normalized) || "superadmin".equals(normalized)) return "Super Admin";
-    if ("hr".equals(normalized) || "hrmanager".equals(normalized)) return "HR Manager";
-    if ("projectmanager".equals(normalized)) return "Project Manager";
-    if ("teamlead".equals(normalized)) return "Team Lead";
-    if ("employee".equals(normalized)) return "Employee";
-    return "";
-  }
-
-  private boolean matchesAccessRole(Employee employee, String normalizedFilter) {
-    String resolvedRole = normalizeAccessRole(resolveAccessRole(employee));
-    if (!normalizedFilter.equals(resolvedRole)) {
-      return false;
-    }
-
-    if (!"Employee".equals(normalizedFilter)) {
-      return true;
-    }
-
-    return !isHrLikeEmployee(employee) && !isHigherPrivilegeEmployee(employee);
-  }
-
-  private boolean isHigherPrivilegeEmployee(Employee employee) {
-    String designation = normalizeRoleLabel(firstNonBlank(employee.getJobTitle(), employee.getRole(), employee.getAccessRole()));
-    return designation.contains("team lead")
-        || designation.contains("project manager")
-        || designation.contains("hr manager");
-  }
-
-  private boolean isHrLikeEmployee(Employee employee) {
-    String text = normalizeRoleLabel(String.join(" ",
-        safeText(employee.getDepartment()),
-        safeText(employee.getJobTitle()),
-        safeText(employee.getRole()),
-        safeText(employee.getAccessRole())));
-    return text.contains("hr")
-        || text.contains("people ops")
-        || text.contains("human resources")
-        || text.contains("recruit")
-        || text.contains("talent");
-  }
-
-  private String normalizeRoleLabel(String value) {
-    return trimToNull(value) == null ? "" : value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
-  }
-
-  private String safeText(String value) {
-    return trimToNull(value) == null ? "" : value.trim();
-  }
-
-  private String firstNonBlank(String... values) {
-    for (String value : values) {
-      String trimmed = trimToNull(value);
-      if (trimmed != null) {
-        return trimmed;
-      }
-    }
-    return null;
-  }
-
-  private String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 }

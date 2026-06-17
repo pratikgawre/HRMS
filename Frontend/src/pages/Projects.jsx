@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
+import { people } from '../data/dummyData.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { normalizeAccessRole } from '../utils/role-access.js';
 
 export const projectColumns = [
   { key: 'projectCode', label: 'Project Code' },
@@ -34,6 +34,12 @@ export const projectColumns = [
   { key: 'status', label: 'Status' },
 ];
 
+const projectDetailColumns = [
+  { key: 'field', label: 'Field' },
+  { key: 'value', label: 'Value' },
+  { key: 'notes', label: 'Notes' },
+];
+
 const PROJECT_TABS = [
   { id: 'list', label: 'Project List', icon: 'ri-list-check-3' },
   { id: 'create', label: 'Create Project', icon: 'ri-add-circle-line' },
@@ -46,6 +52,7 @@ const PROJECT_TABS = [
 const PROJECT_REFRESH_MS = 10000;
 const PROJECT_SECTION_ID = 'project-create';
 const PROJECT_DETAILS_ID = 'project-selected-details';
+const PROJECT_INLINE_DETAILS_ID = 'project-inline-details';
 
 function Projects() {
   const navigate = useNavigate();
@@ -59,7 +66,6 @@ function Projects() {
 
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [teamLeaders, setTeamLeaders] = useState([]);
   const [activeTab, setActiveTab] = useState(isProjectManager ? 'create' : 'list');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [editingProjectId, setEditingProjectId] = useState('');
@@ -74,19 +80,19 @@ function Projects() {
   const [selectedTeamMembers, setSelectedTeamMembers] = useState([]);
   const [isTeamDraftDirty, setIsTeamDraftDirty] = useState(false);
   const [isTeamRosterOpen, setIsTeamRosterOpen] = useState(false);
-  const [savePopup, setSavePopup] = useState('');
+  const [savePopup, setSavePopup] = useState(null);
 
-  useEffect(() => {
-    if (!savePopup) {
-      return undefined;
+  function showProjectToast(text, tone = 'success') {
+    if (!isAdmin) {
+      return;
     }
 
-    const timer = window.setTimeout(() => {
-      setSavePopup('');
-    }, 2200);
+    setSavePopup({ text, tone });
+  }
 
-    return () => window.clearTimeout(timer);
-  }, [savePopup]);
+  function closeProjectToast() {
+    setSavePopup(null);
+  }
 
   const navigateProjectList = useCallback((status = '') => {
     const params = new URLSearchParams({ tab: 'list' });
@@ -155,77 +161,47 @@ function Projects() {
     };
 
     const loadEmployees = () => {
-      Promise.all([
-        safeApiRequest('/employees?accessRole=Employee', []),
-        safeApiRequest('/users', []),
-      ]).then(([employeeRows, userRows]) => {
+      safeApiRequest('/employees', people)
+        .then((rows) => {
           if (active) {
-            setEmployees(normalizeEmployees(employeeRows, userRows));
+            setEmployees(normalizeEmployees(rows));
           }
         })
         .catch(() => {
           if (active) {
-            setEmployees([]);
+            setEmployees(normalizeEmployees(people));
           }
         });
     };
 
-    const loadTeamLeaders = () => {
-      Promise.all([
-        safeApiRequest('/employees?accessRole=Team Lead', []),
-        safeApiRequest('/users', []),
-      ]).then(([leaderRows, userRows]) => {
-        if (active) {
-          const normalizedLeaders = dedupeEmployeeOptions([
-            ...normalizeEmployees(leaderRows, userRows),
-            ...normalizeEmployees((Array.isArray(userRows) ? userRows : []).filter((user) => normalizeRoleLabel(user.role || '') === 'team lead'), userRows),
-          ]);
-          setTeamLeaders(normalizedLeaders);
-        }
-      }).catch(() => {
-        if (active) {
-          setTeamLeaders([]);
-        }
-      });
-    };
-
     loadProjects();
     loadEmployees();
-    loadTeamLeaders();
 
     const refreshId = window.setInterval(() => {
       loadProjects();
       loadEmployees();
-      loadTeamLeaders();
     }, PROJECT_REFRESH_MS);
     window.addEventListener('focus', loadProjects);
     window.addEventListener('focus', loadEmployees);
-    window.addEventListener('focus', loadTeamLeaders);
     window.addEventListener('kavyaProjectsChanged', loadProjects);
     window.addEventListener('kavyaEmployeesChanged', loadEmployees);
-    window.addEventListener('kavyaEmployeesChanged', loadTeamLeaders);
 
     return () => {
       active = false;
       window.clearInterval(refreshId);
       window.removeEventListener('focus', loadProjects);
       window.removeEventListener('focus', loadEmployees);
-      window.removeEventListener('focus', loadTeamLeaders);
       window.removeEventListener('kavyaProjectsChanged', loadProjects);
       window.removeEventListener('kavyaEmployeesChanged', loadEmployees);
-      window.removeEventListener('kavyaEmployeesChanged', loadTeamLeaders);
     };
   }, []);
 
-  const employeeOptions = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee) && !isLegacyRemovedEmployee(employee)), [employees]);
-  const selectableEmployeeOptions = useMemo(
-    () => employeeOptions.filter((employee) => isSelectableEmployee(employee)),
-    [employeeOptions],
-  );
+  const employeeOptions = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee)), [employees]);
   const teamLeaderOptions = useMemo(() => (
-    [...teamLeaders]
+    employeeOptions
+      .filter((employee) => isTeamLeaderEmployee(employee))
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
-  ), [teamLeaders]);
+  ), [employeeOptions]);
   const employeeLookup = useMemo(() => new Map(employeeOptions.map((employee) => [employee.id, employee])), [employeeOptions]);
   const employeeDirectory = useMemo(() => buildEmployeeDirectoryIndex(employeeOptions), [employeeOptions]);
 
@@ -261,6 +237,7 @@ function Projects() {
       || visibleProjects[0]
       || null
   ), [selectedProjectId, visibleProjects]);
+  const showInlineProjectDetails = role === 'hr' && activeTab === 'list' && Boolean(selectedProject);
   const selectedProjectTeamMembers = useMemo(
     () => getProjectTeamMemberDetails(selectedProject, employeeDirectory),
     [employeeDirectory, selectedProject],
@@ -372,14 +349,16 @@ function Projects() {
     setSelectedProjectId(project.id);
     setSelectedTeamMembers(Array.isArray(project.teamMembers) ? project.teamMembers : []);
     setIsTeamDraftDirty(false);
-    setMessage(`${project.name} selected.`);
+    setMessage('');
+    showProjectToast(`${project.name} selected.`, 'success');
     if (!canManage) {
       setActiveTab('list');
     }
 
     if (options.scrollToDetails) {
       window.setTimeout(() => {
-        document.getElementById(PROJECT_DETAILS_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const target = document.getElementById(showInlineProjectDetails ? PROJECT_INLINE_DETAILS_ID : PROJECT_DETAILS_ID);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 0);
     }
   }
@@ -400,7 +379,8 @@ function Projects() {
     setProjectForm(projectToForm(project, managerName, managerId));
     setSelectedTeamMembers(Array.isArray(project.teamMembers) ? project.teamMembers : []);
     setIsTeamDraftDirty(false);
-    setMessage(`Editing ${project.name}.`);
+    setMessage('');
+    showProjectToast(`Editing ${project.name}.`, 'success');
     setActiveTab('create');
   }
 
@@ -410,6 +390,7 @@ function Projects() {
     setSelectedTeamMembers([]);
     setIsTeamDraftDirty(false);
     setMessage('');
+    showProjectToast('Project form cleared.', 'success');
   }
 
   async function handleProjectSubmit(event) {
@@ -418,6 +399,7 @@ function Projects() {
     const name = projectForm.name.trim();
     if (!name) {
       setMessage('Please add a project name first.');
+      showProjectToast('Please add a project name first.', 'error');
       return;
     }
 
@@ -456,18 +438,20 @@ function Projects() {
       setSelectedTeamMembers([]);
       setIsTeamDraftDirty(false);
       setActiveTab('list');
-      setSavePopup(editingProjectId ? 'Project updated successfully.' : 'Project created successfully.');
+      showProjectToast(editingProjectId ? 'Project updated successfully.' : 'Project created successfully.', 'success');
       setMessage('');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
       setMessage('Project could not be saved right now.');
+      showProjectToast('Project could not be saved right now.', 'error');
     }
   }
 
   async function handlePatchProject(patch, successMessage) {
     if (!selectedProject) {
       setMessage('Select a project first.');
+      showProjectToast('Select a project first.', 'error');
       return;
     }
 
@@ -490,12 +474,13 @@ function Projects() {
       setSelectedProjectId(normalized.id);
       setSelectedTeamMembers(Array.isArray(normalized.teamMembers) ? normalized.teamMembers : []);
       setIsTeamDraftDirty(false);
-      setSavePopup(successMessage);
+      showProjectToast(successMessage, 'success');
       setMessage('');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
       setMessage('Changes could not be saved.');
+      showProjectToast('Changes could not be saved.', 'error');
     }
   }
 
@@ -533,6 +518,7 @@ function Projects() {
   async function removeProject(project) {
     const confirmed = window.confirm(`Delete ${project.name}?`);
     if (!confirmed) {
+      showProjectToast('Delete cancelled.', 'error');
       return;
     }
 
@@ -541,26 +527,28 @@ function Projects() {
       setProjects((current) => current.filter((item) => item.id !== project.id && item.backendId !== project.id));
       setSelectedProjectId((current) => (current === project.id ? '' : current));
       setMessage(`${project.name} deleted.`);
+      showProjectToast(`${project.name} deleted.`, 'success');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
       setMessage('Project could not be deleted.');
+      showProjectToast('Project could not be deleted.', 'error');
     }
   }
 
   const filteredEmployees = useMemo(() => {
     const query = teamSearch.trim().toLowerCase();
     if (!query) {
-      return selectableEmployeeOptions;
+      return employeeOptions;
     }
 
-    return selectableEmployeeOptions.filter((employee) => [
+    return employeeOptions.filter((employee) => [
       employee.name,
       employee.department,
       employee.role,
       employee.id,
     ].some((value) => String(value || '').toLowerCase().includes(query)));
-  }, [selectableEmployeeOptions, teamSearch]);
+  }, [employeeOptions, teamSearch]);
   const selectedTeamLeader = useMemo(() => (
     teamLeaderOptions.find((employee) => employee.id === projectForm.teamLeadId) || null
   ), [projectForm.teamLeadId, teamLeaderOptions]);
@@ -600,17 +588,19 @@ function Projects() {
           </div>
         </div>
 
-      {message && <div className="user-alert"><i className="ri-checkbox-circle-line" aria-hidden="true" /><span>{message}</span></div>}
       {savePopup && (
-        <div className="save-toast" role="status" aria-live="polite">
-          <span className="save-toast-icon" aria-hidden="true">
-            <i className="ri-checkbox-circle-fill" />
+        <div className={`project-toast is-${savePopup.tone || 'success'}`} role="status" aria-live="polite">
+          <span className="project-toast__icon" aria-hidden="true">
+            <i className={savePopup.tone === 'error' ? 'ri-error-warning-line' : 'ri-checkbox-circle-fill'} />
           </span>
-          <div className="save-toast-body">
-            <span className="save-toast-kicker">Saved</span>
-            <strong>{savePopup}</strong>
+          <div className="project-toast__copy">
+            <span>{savePopup.tone === 'error' ? 'Warning' : 'Success'}</span>
+            <strong>{savePopup.text}</strong>
           </div>
-          <span className="save-toast-accent" aria-hidden="true" />
+          <button type="button" className="project-toast__close" onClick={closeProjectToast} aria-label="Dismiss notification">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+          <span className="project-toast__accent" aria-hidden="true" />
         </div>
       )}
 
@@ -625,7 +615,14 @@ function Projects() {
                 key={tab.id}
                 type="button"
                 className={`project-tab ${activeTab === tab.id ? 'is-active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  if (role === 'hr' && tab.id === 'list') {
+                    navigateProjectList(teamFilter === 'All' ? '' : teamFilter);
+                    return;
+                  }
+
+                  setActiveTab(tab.id);
+                }}
                 role="tab"
                 aria-selected={activeTab === tab.id}
               >
@@ -667,6 +664,26 @@ function Projects() {
                   onRowClick={(row) => openProject(row, { scrollToDetails: true })}
                   getRowClassName={(row) => (row.id === selectedProjectId ? 'is-selected-row' : '')}
                 />
+                {showInlineProjectDetails && selectedProject && (
+                  <div className="project-inline-details" id={PROJECT_INLINE_DETAILS_ID}>
+                    <div className="project-inline-details-head">
+                      <div>
+                        <p className="eyebrow">Project Details</p>
+                        <h4>{selectedProject.name}</h4>
+                      </div>
+                      <button type="button" className="project-team-summary" onClick={() => openProject(selectedProject, { scrollToDetails: true })}>
+                        <span>{selectedProject.projectCode}</span>
+                        <small>Selected project</small>
+                      </button>
+                    </div>
+                    <DataTable
+                      columns={projectDetailColumns}
+                      rows={buildProjectDetailRows(selectedProject)}
+                      emptyMessage="No project details available."
+                      getRowClassName={(row) => (row.field === 'Status' ? `is-${String(row.value).toLowerCase().replaceAll(' ', '-')}` : '')}
+                    />
+                  </div>
+                )}
               </>
             )}
 
@@ -1044,25 +1061,19 @@ function normalizeProjectRows(items = []) {
   });
 }
 
-function normalizeEmployees(rows = [], userRows = []) {
-  const accessRoleLookup = buildAccessRoleLookup(userRows);
-
-  return (Array.isArray(rows) ? rows : [])
-    .filter((employee) => !isLegacyRemovedEmployee(employee))
-    .map((employee, index) => ({
-      ...employee,
-      id: employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`,
-      employeeId: employee.employeeId || employee.employeeCode || employee.id || `EMP-${index + 1}`,
-      employeeCode: employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`,
-      name: employee.displayName || employee.name || employee.employeeName || `Employee ${index + 1}`,
-      department: employee.department || employee.departmentName || '-',
-      role: employee.jobTitle || employee.role || '-',
-      designation: employee.designation || employee.jobTitle || employee.role || '-',
-      accessRole: accessRoleLookup.get(normalizeLookupValue(employee.employeeCode || employee.employeeId || employee.id))
-        || employee.accessRole
-        || '',
-      avatar: employee.avatar || getInitialsFromId(employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`),
-    }));
+function normalizeEmployees(rows = []) {
+  return (Array.isArray(rows) ? rows : []).map((employee, index) => ({
+    ...employee,
+    id: employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`,
+    employeeId: employee.employeeId || employee.employeeCode || employee.id || `EMP-${index + 1}`,
+    employeeCode: employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`,
+    name: employee.displayName || employee.name || employee.employeeName || `Employee ${index + 1}`,
+    department: employee.department || employee.departmentName || '-',
+    role: employee.jobTitle || employee.role || '-',
+    designation: employee.designation || employee.jobTitle || employee.role || '-',
+    accessRole: employee.accessRole || '',
+    avatar: employee.avatar || getInitialsFromId(employee.employeeCode || employee.employeeId || employee.id || `EMP-${index + 1}`),
+  }));
 }
 
 function normalizeTeamMembers(teamMembers, teamLabel) {
@@ -1108,7 +1119,7 @@ function getProjectTeamMemberDetails(project, employeeDirectory) {
     return storedDetails;
   }
 
-  return buildTeamMemberDetails(project.teamMembers, employeeDirectory).filter((member) => !isLegacyRemovedEmployee(member));
+  return buildTeamMemberDetails(project.teamMembers, employeeDirectory);
 }
 
 function normalizeProjectMemberDetails(teamMemberDetails, fallbackMemberIds = []) {
@@ -1141,17 +1152,13 @@ function normalizeProjectMemberDetails(teamMemberDetails, fallbackMemberIds = []
       role: String(member.role || member.jobTitle || '').trim(),
       avatar: String(member.avatar || getInitialsFromId(memberId || displayName)).trim(),
     };
-  }).filter((member) => (member.id || member.name || member.displayName) && !isLegacyRemovedEmployee(member));
+  }).filter((member) => member.id || member.name || member.displayName);
 }
 
 function buildEmployeeDirectoryIndex(employees) {
   const index = new Map();
 
   (Array.isArray(employees) ? employees : []).forEach((employee) => {
-    if (isLegacyRemovedEmployee(employee)) {
-      return;
-    }
-
     const normalizedEmployee = {
       id: employee.id || employee.employeeCode || employee.employeeId || '',
       name: employee.name || employee.displayName || '',
@@ -1180,42 +1187,6 @@ function buildEmployeeDirectoryIndex(employees) {
 
 function normalizeLookupValue(value) {
   return String(value || '').trim().toLowerCase();
-}
-
-function isLegacyRemovedEmployee(employee) {
-  const normalizedId = normalizeLookupValue(employee?.employeeCode || employee?.employeeId || employee?.id);
-  const normalizedEmail = normalizeLookupValue(employee?.email);
-  const normalizedName = normalizeLookupValue(employee?.name || employee?.displayName || employee?.employeeName);
-
-  return [
-    normalizedId === 'tl001',
-    normalizedId === 'kv005',
-    normalizedEmail === 'rohan@kavya.hr',
-    normalizedName === 'rohandas',
-    normalizedName === 'rohan',
-  ].some(Boolean);
-}
-
-function buildAccessRoleLookup(userRows) {
-  const index = new Map();
-
-  (Array.isArray(userRows) ? userRows : []).forEach((user) => {
-    const accessRole = normalizeAccessRole(user.role || '');
-    const keys = [
-      user.employeeId,
-      user.userId,
-      user.email,
-    ];
-
-    keys.forEach((value) => {
-      const key = normalizeLookupValue(value);
-      if (key) {
-        index.set(key, accessRole);
-      }
-    });
-  });
-
-  return index;
 }
 
 function projectToForm(project, managerName, managerId) {
@@ -1374,6 +1345,26 @@ function getProjectInitials(name) {
     .toUpperCase() || 'PR';
 }
 
+function buildProjectDetailRows(project) {
+  if (!project) {
+    return [];
+  }
+
+  return [
+    { field: 'Project Code', value: project.projectCode || '-', notes: 'Unique identifier' },
+    { field: 'Project Name', value: project.name || '-', notes: 'Selected project title' },
+    { field: 'Description', value: project.description || 'No description saved.', notes: 'Short project summary' },
+    { field: 'Manager', value: project.manager || '-', notes: project.managerId ? `Employee ID: ${project.managerId}` : 'Project owner' },
+    { field: 'Team Leader', value: project.teamLeadName || '-', notes: project.teamLeadId ? `TL ID: ${project.teamLeadId}` : 'Assigned lead' },
+    { field: 'Team', value: project.teamLabel || '-', notes: 'Current team size' },
+    { field: 'Milestone', value: project.milestone || '-', notes: 'Current delivery checkpoint' },
+    { field: 'Start Date', value: project.startDate || '-', notes: 'Planned kick-off date' },
+    { field: 'End Date', value: project.endDate || '-', notes: 'Target completion date' },
+    { field: 'Progress', value: project.progress || '-', notes: 'Tracked delivery progress' },
+    { field: 'Status', value: project.status || '-', notes: 'Project lifecycle state' },
+  ];
+}
+
 function getInitialsFromId(value) {
   return String(value || 'EM')
     .replace(/[^a-z0-9]/gi, ' ')
@@ -1398,53 +1389,6 @@ function isTeamLeaderEmployee(employee) {
   return designation === 'team lead' || accessRole === 'team lead';
 }
 
-function isSelectableEmployee(employee) {
-  const accessRole = normalizeRoleLabel(employee.accessRole || '');
-  if (accessRole) {
-    return accessRole === 'employee' && !isHrLikeEmployee(employee) && !isHigherPrivilegeEmployee(employee);
-  }
-
-  return !isHrLikeEmployee(employee) && !isHigherPrivilegeEmployee(employee);
-}
-
 function normalizeRoleLabel(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-function isHigherPrivilegeEmployee(employee) {
-  const designation = normalizeRoleLabel(employee.designation || employee.jobTitle || employee.role || employee.accessRole || '');
-  return designation.includes('team lead') || designation.includes('project manager') || designation.includes('hr manager');
-}
-
-function isHrLikeEmployee(employee) {
-  const text = normalizeRoleLabel([
-    employee.department,
-    employee.designation,
-    employee.jobTitle,
-    employee.role,
-    employee.accessRole,
-  ].filter(Boolean).join(' '));
-
-  return [
-    'hr',
-    'hr manager',
-    'hr executive',
-    'people ops',
-    'human resources',
-    'recruit',
-    'talent',
-  ].some((needle) => text.includes(needle));
-}
-
-function dedupeEmployeeOptions(rows) {
-  const seen = new Set();
-  return (Array.isArray(rows) ? rows : []).filter((employee) => {
-    const key = String(employee.employeeId || employee.id || employee.userId || employee.email || '').trim().toLowerCase();
-    if (!key || seen.has(key)) {
-      return false;
-    }
-
-    seen.add(key);
-    return true;
-  });
 }
