@@ -3,7 +3,7 @@ import { getUsers, saveUsers } from './user-management.js';
 import { getStoredEmployees } from './employeeStorage.js';
 import { clearSessionValues, getSessionValue, setSessionValue } from './appSession.js';
 
-const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+const API_BASE = '/api';
 
 const legacyUsers = {
   'admin@gmail.com': { password: 'admin123', role: 'Super Admin', employeeId: 'ADMIN-001', employeeName: 'Admin Kavya', avatar: 'AK', department: 'Platform', designation: 'System Admin' },
@@ -59,12 +59,12 @@ export function ensureSeedUsers() {
   return getUsers();
 }
 
-export async function authenticateUser(email, password, twoFactorCode = '') {
+export async function authenticateUser(email, password) {
   const normalizedEmail = String(email).trim().toLowerCase();
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: normalizedEmail, password, twoFactorCode }),
+    body: JSON.stringify({ email: normalizedEmail, password }),
   }).catch(() => null);
 
   if (response) {
@@ -91,14 +91,8 @@ export async function authenticateUser(email, password, twoFactorCode = '') {
         password,
         avatar: (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
         profilePicture: '',
-        twoFactorEnabled: Boolean(result.twoFactorEnabled),
-        twoFactorSecret: result.twoFactorSecret || '',
       };
       return { ok: true, user };
-    }
-
-    if (result?.twoFactorRequired) {
-      return { ok: false, twoFactorRequired: true, message: result.message || 'Two-factor verification code required.' };
     }
 
     if (isServerError) {
@@ -155,8 +149,6 @@ function findLocalUser(email, password) {
     token: user.token || `local-${Date.now()}`,
     avatar: user.avatar || (user.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
     profilePicture: user.profilePicture || '',
-    twoFactorEnabled: Boolean(user.twoFactorEnabled),
-    twoFactorSecret: user.twoFactorSecret || '',
   };
 }
 

@@ -56,23 +56,19 @@ export function saveStoredEmployees(employees) {
 }
 
 export function upsertEmployeeLogin(employee, options = {}) {
-  const email = String(employee.generatedUsername || employee.email || '').trim().toLowerCase();
+  const email = String(employee.email || '').trim().toLowerCase();
   if (!email) {
     return;
   }
   const accessUsers = getUsers();
   const employeeId = employee.employeeCode || employee.id;
-  const existing = accessUsers.find((user) => (
-    user.employeeId === employeeId
-    || String(user.email || '').trim().toLowerCase() === email
-    || String(user.email || '').trim().toLowerCase() === String(employee.email || '').trim().toLowerCase()
-  ));
+  const existing = accessUsers.find((user) => user.employeeId === employeeId || user.email === email);
   const accessRole = normalizeAccessRole(employee.accessRole || existing?.role || 'Employee');
   const nextUser = {
     id: existing?.id,
     userId: existing?.userId || `USR-${employeeId}`,
     email,
-    password: employee.generatedPassword || existing?.password || 'employee123',
+    password: existing?.password || 'employee123',
     role: accessRole,
     employeeId,
     employeeName: employee.displayName || employee.name,

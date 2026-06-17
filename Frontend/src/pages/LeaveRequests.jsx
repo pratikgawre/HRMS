@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
-import LeaveBalanceStrip from '../components/LeaveBalanceStrip.jsx';
-import { people } from '../data/dummyData.js';
+import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
-import { getCurrentEmployeeIdentity, getStoredEmployees } from '../utils/employeeStorage.js';
+import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
-import { loadTasksWithSeed } from '../utils/taskStorage.js';
 import {
   DEFAULT_LEAVE_TYPES,
   getEmployeeLeaveSummary,
@@ -15,12 +13,13 @@ import {
   normalizeLeaveTypes,
 } from '../utils/leaveBalance.js';
 
+const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
+
 function LeaveRequests() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const currentEmployee = getCurrentEmployeeIdentity();
-  const canCreateRequest = true;
-  const isReviewerRole = role === 'teamLead' || role === 'projectManager';
-  const canReviewRequests = role === 'admin' || role === 'hr' || isReviewerRole;
+  const canCreateRequest = role !== 'admin';
+  const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
   const [requests, setRequests] = useState(getInitialLeaveRequests);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
@@ -29,15 +28,10 @@ function LeaveRequests() {
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
-  const [teamMemberIds, setTeamMemberIds] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const leaveBalanceSummary = useMemo(
-    () => getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee),
-    [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
-  );
   const leaveSummary = useMemo(
-    () => buildLeaveSummary(leaveBalanceSummary, requests),
-    [leaveBalanceSummary, requests],
+    () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee), requests),
+    [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
   );
   const leaveTypeOptions = useMemo(() => getLeaveTypeOptions(leaveTypes), [leaveTypes]);
 
@@ -53,53 +47,17 @@ function LeaveRequests() {
     ));
   }, [leaveTypeOptions]);
 
-  useEffect(() => {
-    if (!isReviewerRole) {
-      setTeamMemberIds([]);
-      return undefined;
+  const visibleRequests = useMemo(() => requests.filter((request) => {
+    if (role === 'teamLead' || role === 'projectManager') {
+      return teamLeadMemberIds.includes(request.employeeId);
     }
 
-    let active = true;
-
-    const refreshTeamMembers = async () => {
-      try {
-        const taskRows = await loadTasksWithSeed();
-        if (!active) {
-          return;
-        }
-
-        setTeamMemberIds(getTeamMemberIdsFromTasks(taskRows, currentEmployee, role));
-      } catch {
-        if (active) {
-          setTeamMemberIds([]);
-        }
-      }
-    };
-
-    refreshTeamMembers();
-    window.addEventListener('kavyaTasksChanged', refreshTeamMembers);
-
-    return () => {
-      active = false;
-      window.removeEventListener('kavyaTasksChanged', refreshTeamMembers);
-    };
-  }, [currentEmployee.employee, currentEmployee.employeeId, isReviewerRole, role]);
-
-  const visibleRequests = useMemo(() => requests.filter((request) => {
     if (role === 'admin' || role === 'hr') {
       return true;
     }
 
-    if (isReviewerRole) {
-      const requestEmployeeId = normalizeComparable(request.employeeId);
-      const currentEmployeeId = normalizeComparable(currentEmployee.employeeId);
-      const teamIds = new Set(teamMemberIds.map(normalizeComparable));
-
-      return requestEmployeeId === currentEmployeeId || teamIds.has(requestEmployeeId);
-    }
-
     return request.employeeId === currentEmployee.employeeId;
-  }), [currentEmployee.employeeId, isReviewerRole, requests, role, teamMemberIds]);
+  }), [requests, role, currentEmployee.employeeId]);
 
   const rows = useMemo(() => visibleRequests
     .filter((request) => status === 'All' || request.status === status)
@@ -168,55 +126,14 @@ function LeaveRequests() {
       label: 'Actions',
       render: (row) => (
         <div className="table-actions">
-          {role === 'teamLead' && isSelfLeaveRequest(row, currentEmployee) ? null : (
-            <>
-              {role === 'admin' || role === 'hr' ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => updateLeaveStatus(row.id, 'Approved')}
-                  >
-                    <i className="ri-checkbox-circle-line" aria-hidden="true" />
-                    Approve
-                  </button>
-                  {row.status === 'Pending' && (
-                    <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}>
-                      <i className="ri-close-circle-line" aria-hidden="true" />
-                      Reject
-                    </button>
-                  )}
-                </>
-              ) : null}
-
-              {role === 'teamLead' && isTeamMemberRequest(row, teamMemberIds) && row.status === 'Pending' ? (
-                <button
-                  type="button"
-                  onClick={() => updateLeaveStatus(row.id, 'Recommended')}
-                >
-                  <i className="ri-checkbox-circle-line" aria-hidden="true" />
-                  Recommend
-                </button>
-              ) : null}
-
-              {role === 'projectManager' ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => updateLeaveStatus(row.id, 'Approved')}
-                  >
-                    <i className="ri-checkbox-circle-line" aria-hidden="true" />
-                    Approve
-                  </button>
-                  {row.status === 'Pending' && (
-                    <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}>
-                      <i className="ri-close-circle-line" aria-hidden="true" />
-                      Reject
-                    </button>
-                  )}
-                </>
-              ) : null}
-            </>
-          )}
+          <button
+            type="button"
+            onClick={() => updateLeaveStatus(row.id, role === 'admin' || role === 'hr' ? 'Approved' : 'Recommended')}
+          >
+            <i className="ri-checkbox-circle-line" aria-hidden="true" />
+            {role === 'admin' || role === 'hr' ? 'Approve' : 'Recommend'}
+          </button>
+          {row.status === 'Pending' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
         </div>
       ),
     }] : []),
@@ -356,8 +273,7 @@ function LeaveRequests() {
     if (created && created.id) {
       await refreshRequests();
     } else {
-      setMessage('Leave request could not be saved right now.');
-      return;
+      setRequests((current) => [newRequest, ...current]);
     }
 
     setForm(getEmptyLeaveForm(currentEmployee, leaveTypes));
@@ -367,28 +283,20 @@ function LeaveRequests() {
   };
 
   const updateLeaveStatus = async (requestId, nextStatus) => {
-    const requestToUpdate = requests.find((request) => request.id === requestId);
-    if (!requestToUpdate) {
-      return;
-    }
-
     const next = requests.map((request) => (
-      request.id === requestId ? buildUpdatedLeaveRequest(request, nextStatus, currentEmployee, role) : request
+      request.id === requestId ? { ...request, status: nextStatus } : request
     ));
     setRequests(next);
 
-    const requestForSave = next.find((request) => request.id === requestId);
-    if (requestForSave) {
+    const requestToUpdate = next.find((request) => request.id === requestId);
+    if (requestToUpdate) {
       const saved = await updateLeaveRequestStatus({
-        ...requestForSave,
-        from: requestForSave.from,
-        to: requestForSave.to,
+        ...requestToUpdate,
+        from: requestToUpdate.from,
+        to: requestToUpdate.to,
       });
       if (saved && saved.id) {
         await refreshRequests();
-      } else {
-        setMessage('Leave request update could not be saved right now.');
-        return;
       }
     }
 
@@ -406,11 +314,26 @@ function LeaveRequests() {
         </div>
       )}
 
-      <Section title="My Leaves">
-        <LeaveBalanceStrip summary={leaveBalanceSummary} />
-      </Section>
-
-    <Section title="Leave Request Queue">
+      <Section title="Leave Request Queue">
+        {(role === 'employee' || role === 'hr' || role === 'teamLead' || role === 'projectManager') && (
+          <section
+            className="leave-summary-grid"
+            aria-label="Leave request summary"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.85rem', width: '100%', marginBottom: '1.5rem' }}
+          >
+            {leaveSummary.map((item) => (
+              <DashboardCard
+                key={item.label}
+                label={item.label}
+                value={item.value}
+                delta={item.delta}
+                tone={item.tone}
+                className="leave-summary-card"
+                style={{ minHeight: '108px', padding: '0.8rem 0.9rem' }}
+              />
+            ))}
+          </section>
+        )}
         <div className="page-toolbar" style={{ gap: '1.2rem', marginTop: '1.5rem' }}>
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>
@@ -563,7 +486,7 @@ function LeaveRequestDetailsModal({ request, onClose, onDownload }) {
           <div>
             <h3>Leave Details</h3>
             <p style={{ margin: 0, color: 'var(--muted-text, #64748b)', fontSize: '0.92rem' }}>
-              Clicked request ke full details yahan dikh rahe hain.
+              Leave type, dates aur attachment detail yahan dikh rahi hai.
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close leave details">
@@ -859,79 +782,6 @@ function formatRequesterRole(role) {
     .join(' ');
 }
 
-function normalizeComparable(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function isSelfLeaveRequest(request, currentEmployee) {
-  const requestEmployeeId = normalizeComparable(request?.employeeId);
-  const currentEmployeeId = normalizeComparable(currentEmployee?.employeeId);
-  return requestEmployeeId !== '' && requestEmployeeId === currentEmployeeId;
-}
-
-function isTeamMemberRequest(request, teamMemberIds = []) {
-  const requestEmployeeId = normalizeComparable(request?.employeeId);
-  return requestEmployeeId !== '' && teamMemberIds.some((id) => normalizeComparable(id) === requestEmployeeId);
-}
-
-function getTeamMemberIdsFromTasks(taskRows, currentEmployee, role) {
-  const currentEmployeeId = normalizeComparable(currentEmployee?.employeeId);
-  const currentEmployeeName = normalizeComparable(currentEmployee?.employee);
-  const currentRole = normalizeComparable(role);
-  const members = new Set();
-  const employeeDirectory = getStoredEmployees(people).map((employee) => ({
-    id: employee.employeeId || employee.employeeCode || employee.id || '',
-    name: employee.displayName || employee.name || employee.employeeName || '',
-  }));
-
-  (Array.isArray(taskRows) ? taskRows : []).forEach((task) => {
-    const assignedById = normalizeComparable(task?.assignedById);
-    const assignedByName = normalizeComparable(task?.assignedByName);
-    const assignedByRole = normalizeComparable(task?.assignedByRole);
-    const assignedByCurrentEmployee = (
-      assignedById === currentEmployeeId
-      || assignedByName === currentEmployeeName
-      || (assignedByRole && assignedByRole === currentRole)
-    );
-
-    if (!assignedByCurrentEmployee) {
-      return;
-    }
-
-    const assignedToId = String(task?.assignedToId || '').trim();
-    if (normalizeComparable(assignedToId) && normalizeComparable(assignedToId) !== currentEmployeeId) {
-      members.add(assignedToId);
-    }
-
-    const assignedToName = normalizeComparable(task?.assignedToName || task?.owner);
-    if (!assignedToName || assignedToName === currentEmployeeName) {
-      return;
-    }
-
-    const matchedEmployee = employeeDirectory.find((employee) => normalizeComparable(employee.name) === assignedToName);
-    if (matchedEmployee?.id && normalizeComparable(matchedEmployee.id) !== currentEmployeeId) {
-      members.add(matchedEmployee.id);
-    }
-  });
-
-  return Array.from(members);
-}
-
-function buildUpdatedLeaveRequest(request, nextStatus, currentEmployee, role) {
-  const updated = {
-    ...request,
-    status: nextStatus,
-  };
-
-  if ((role === 'teamLead' || role === 'projectManager') && nextStatus === 'Recommended') {
-    updated.recommendationStatus = 'Recommended';
-    updated.recommendedBy = currentEmployee.employee;
-    updated.recommendedRole = role;
-  }
-
-  return updated;
-}
-
 function buildLeaveSummary(summary, requests) {
   const balances = Array.isArray(summary?.balances) ? summary.balances : [];
   const cards = [
@@ -973,5 +823,6 @@ function getLeaveBalanceTone(name) {
   if (normalized.includes('earned')) return 'green';
   return 'blue';
 }
+
 export default LeaveRequests;
 
