@@ -54,6 +54,7 @@ function normalizeLeaveRequestFromApi(request, index = 0) {
     finalActionRole: request.finalActionRole || '',
     finalActionNote: request.finalActionNote || '',
     approvedBy: request.approvedBy || '',
+    medicalReport: request.medicalReport || null,
   };
 }
 
@@ -76,5 +77,6 @@ function normalizeLeaveRequestForSave(request) {
     finalActionBy: request.finalActionBy || '',
     finalActionRole: request.finalActionRole || '',
     finalActionNote: request.finalActionNote || '',
+    medicalReport: request.medicalReport || null,
   };
 }
