@@ -192,6 +192,7 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   const [message, setMessage] = useState('');
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [activeSummary, setActiveSummary] = useState('total');
+  const [searchTerm, setSearchTerm] = useState('');
   const tableSectionRef = useRef(null);
 
   const summary = useMemo(() => {
@@ -208,7 +209,26 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   }, [records]);
 
   const summaryDetail = useMemo(() => getPayrollSummaryDetail(activeSummary, records), [activeSummary, records]);
-  const filteredRecords = useMemo(() => getFilteredPayrollRecords(activeSummary, records), [activeSummary, records]);
+  const filteredRecords = useMemo(() => {
+    const summaryFilteredRecords = getFilteredPayrollRecords(activeSummary, records);
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) {
+      return summaryFilteredRecords;
+    }
+
+    return summaryFilteredRecords.filter((record) => [
+      record.employeeName,
+      record.employeeId,
+      record.department,
+      record.month,
+      record.year,
+      record.status,
+      formatCurrency(getNetSalary(record)),
+      formatCurrency(getEarnings(record)),
+      formatCurrency(getDeductions(record)),
+    ].some((value) => String(value || '').toLowerCase().includes(query)));
+  }, [activeSummary, records, searchTerm]);
 
   const toggleStatus = (recordId) => {
     setStatusOverrides((current) => {
@@ -291,6 +311,15 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
       <div ref={tableSectionRef}>
         <Section title="Employee Salary Table">
         <div className="payroll-toolbar">
+          <label className="toolbar-search payroll-search-field">
+            <i className="ri-search-line" aria-hidden="true" />
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search employee, department, or status"
+            />
+          </label>
           <label className="field payroll-filter-field">
             <span>Month</span>
             <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>

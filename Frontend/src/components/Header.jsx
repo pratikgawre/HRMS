@@ -124,6 +124,10 @@ function Header({ role, onMenuClick }) {
     navigate('/login', { replace: true });
   };
 
+  const openProfile = () => {
+    navigate(`${roleBasePath}/profile`);
+  };
+
   return (
     <header className="topbar">
       <div className="topbar-main">
@@ -204,7 +208,7 @@ function Header({ role, onMenuClick }) {
         <button
           type="button"
           className="user-chip user-chip--clickable"
-          onClick={() => navigate(`${roleBasePath}/profile`)}
+          onClick={openProfile}
           aria-label={`Open ${displayRole} profile`}
           title={`Open ${displayRole} profile`}
         >

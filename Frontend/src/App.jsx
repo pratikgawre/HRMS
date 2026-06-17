@@ -75,6 +75,8 @@ function App() {
             <Route path="/hr/announcements" element={<Announcements />} />
             <Route path="/hr/support" element={<SupportTickets />} />
             <Route path="/hr/settings" element={<Settings />} />
+            <Route path="/hr/profile/edit" element={<Profile />} />
+            <Route path="/hr/profile/view" element={<Profile />} />
             <Route path="/hr/profile" element={<Profile />} />
           </Route>
         </Route>

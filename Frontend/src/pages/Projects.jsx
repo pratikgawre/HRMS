@@ -34,6 +34,12 @@ export const projectColumns = [
   { key: 'status', label: 'Status' },
 ];
 
+const projectDetailColumns = [
+  { key: 'field', label: 'Field' },
+  { key: 'value', label: 'Value' },
+  { key: 'notes', label: 'Notes' },
+];
+
 const PROJECT_TABS = [
   { id: 'list', label: 'Project List', icon: 'ri-list-check-3' },
   { id: 'create', label: 'Create Project', icon: 'ri-add-circle-line' },
@@ -46,6 +52,7 @@ const PROJECT_TABS = [
 const PROJECT_REFRESH_MS = 10000;
 const PROJECT_SECTION_ID = 'project-create';
 const PROJECT_DETAILS_ID = 'project-selected-details';
+const PROJECT_INLINE_DETAILS_ID = 'project-inline-details';
 
 function Projects() {
   const navigate = useNavigate();
@@ -230,6 +237,7 @@ function Projects() {
       || visibleProjects[0]
       || null
   ), [selectedProjectId, visibleProjects]);
+  const showInlineProjectDetails = role === 'hr' && activeTab === 'list' && Boolean(selectedProject);
   const selectedProjectTeamMembers = useMemo(
     () => getProjectTeamMemberDetails(selectedProject, employeeDirectory),
     [employeeDirectory, selectedProject],
@@ -349,7 +357,8 @@ function Projects() {
 
     if (options.scrollToDetails) {
       window.setTimeout(() => {
-        document.getElementById(PROJECT_DETAILS_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const target = document.getElementById(showInlineProjectDetails ? PROJECT_INLINE_DETAILS_ID : PROJECT_DETAILS_ID);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 0);
     }
   }
@@ -606,7 +615,14 @@ function Projects() {
                 key={tab.id}
                 type="button"
                 className={`project-tab ${activeTab === tab.id ? 'is-active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  if (role === 'hr' && tab.id === 'list') {
+                    navigateProjectList(teamFilter === 'All' ? '' : teamFilter);
+                    return;
+                  }
+
+                  setActiveTab(tab.id);
+                }}
                 role="tab"
                 aria-selected={activeTab === tab.id}
               >
@@ -648,6 +664,26 @@ function Projects() {
                   onRowClick={(row) => openProject(row, { scrollToDetails: true })}
                   getRowClassName={(row) => (row.id === selectedProjectId ? 'is-selected-row' : '')}
                 />
+                {showInlineProjectDetails && selectedProject && (
+                  <div className="project-inline-details" id={PROJECT_INLINE_DETAILS_ID}>
+                    <div className="project-inline-details-head">
+                      <div>
+                        <p className="eyebrow">Project Details</p>
+                        <h4>{selectedProject.name}</h4>
+                      </div>
+                      <button type="button" className="project-team-summary" onClick={() => openProject(selectedProject, { scrollToDetails: true })}>
+                        <span>{selectedProject.projectCode}</span>
+                        <small>Selected project</small>
+                      </button>
+                    </div>
+                    <DataTable
+                      columns={projectDetailColumns}
+                      rows={buildProjectDetailRows(selectedProject)}
+                      emptyMessage="No project details available."
+                      getRowClassName={(row) => (row.field === 'Status' ? `is-${String(row.value).toLowerCase().replaceAll(' ', '-')}` : '')}
+                    />
+                  </div>
+                )}
               </>
             )}
 
@@ -1307,6 +1343,26 @@ function getProjectInitials(name) {
     .join('')
     .slice(0, 2)
     .toUpperCase() || 'PR';
+}
+
+function buildProjectDetailRows(project) {
+  if (!project) {
+    return [];
+  }
+
+  return [
+    { field: 'Project Code', value: project.projectCode || '-', notes: 'Unique identifier' },
+    { field: 'Project Name', value: project.name || '-', notes: 'Selected project title' },
+    { field: 'Description', value: project.description || 'No description saved.', notes: 'Short project summary' },
+    { field: 'Manager', value: project.manager || '-', notes: project.managerId ? `Employee ID: ${project.managerId}` : 'Project owner' },
+    { field: 'Team Leader', value: project.teamLeadName || '-', notes: project.teamLeadId ? `TL ID: ${project.teamLeadId}` : 'Assigned lead' },
+    { field: 'Team', value: project.teamLabel || '-', notes: 'Current team size' },
+    { field: 'Milestone', value: project.milestone || '-', notes: 'Current delivery checkpoint' },
+    { field: 'Start Date', value: project.startDate || '-', notes: 'Planned kick-off date' },
+    { field: 'End Date', value: project.endDate || '-', notes: 'Target completion date' },
+    { field: 'Progress', value: project.progress || '-', notes: 'Tracked delivery progress' },
+    { field: 'Status', value: project.status || '-', notes: 'Project lifecycle state' },
+  ];
 }
 
 function getInitialsFromId(value) {

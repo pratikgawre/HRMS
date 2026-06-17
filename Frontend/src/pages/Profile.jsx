@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import * as QRCode from 'qrcode';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
@@ -55,6 +55,7 @@ const PRESENT_TO_PERMANENT_ADDRESS_MAP = {
 
 function Profile() {
   const navigate = useNavigate();
+  const location = useLocation();
   const identity = getCurrentEmployeeIdentity();
   const accessRole = getSessionValue('kavyaAccessRole') || 'Employee';
   const normalizedAccessRole = normalizeAccessRole(accessRole);
@@ -99,6 +100,7 @@ function Profile() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const toastTimerRef = useRef(null);
+  const isHrProfileRoute = location.pathname.startsWith('/hr/profile');
   const twoFactorIssuer = 'Kavya HRMS';
   const twoFactorAccount = employee.email || identity.email || '';
   const twoFactorOtpUri = useMemo(() => {
@@ -115,6 +117,38 @@ function Profile() {
   useEffect(() => {
     setForm(createProfileForm(employee));
   }, [employee]);
+
+  useEffect(() => {
+    if (location.pathname !== '/hr/profile/view') {
+      return undefined;
+    }
+
+    window.setTimeout(() => {
+      document.getElementById('profile-storage-data')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+
+    return undefined;
+  }, [location.pathname]);
+
+  const handleViewProfile = () => {
+    const target = document.getElementById('profile-storage-data');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
+    navigate('/hr/profile/view');
+  };
+
+  const handleEditProfile = () => {
+    const target = document.getElementById('profile-personal-data');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
+    navigate('/hr/profile/edit');
+  };
 
   useEffect(() => {
     let active = true;
@@ -537,11 +571,21 @@ function Profile() {
             <strong>{employee.accessRole || 'Employee'}</strong>
           </div>
           <div className="profile-actions">
-            <button type="button" className="profile-action-btn profile-edit-btn" title="Edit Profile">
+            <button
+              type="button"
+              className="profile-action-btn profile-edit-btn"
+              title="Edit Profile"
+              onClick={isHrProfileRoute ? handleEditProfile : undefined}
+            >
               <i className="ri-edit-line" aria-hidden="true" />
               <span>Edit</span>
             </button>
-            <button type="button" className="profile-action-btn profile-view-btn" title="View Profile">
+            <button
+              type="button"
+              className="profile-action-btn profile-view-btn"
+              title="View Profile"
+              onClick={isHrProfileRoute ? handleViewProfile : undefined}
+            >
               <i className="ri-eye-line" aria-hidden="true" />
               <span>View</span>
             </button>
@@ -570,7 +614,7 @@ function Profile() {
 
       <div className="profile-detail-layout">
         <div className="profile-detail-column">
-          <Section title="Personal Details">
+          <Section id="profile-personal-data" title="Personal Details">
             <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
               <label>
                 <span>Display Name</span>
@@ -972,7 +1016,7 @@ function Profile() {
           </Section>
         </div>
 
-        <Section title="Stored Profile Data" className="section-card--full profile-storage-section">
+        <Section id="profile-storage-data" title="Stored Profile Data" className="section-card--full profile-storage-section">
           <div className="profile-group">
             <i className="ri-briefcase-4-line" aria-hidden="true" />
             <dl>
