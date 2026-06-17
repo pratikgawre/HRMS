@@ -80,16 +80,21 @@ function Header({ role, onMenuClick }) {
   };
 
   const handleNotificationClick = async (id) => {
+    const item = notificationItems.find((notification) => notification.id === id);
+    const targetPath = getNotificationTargetPath(item, role, roleBasePath);
+
     setNotificationItems((current) =>
-      current.map((item) => (item.id === id ? { ...item, readStatus: true } : item)),
+      current.map((notification) => (notification.id === id ? { ...notification, readStatus: true } : notification)),
     );
+    setShowNotifications(false);
+    navigate(targetPath);
 
     try {
       await apiRequest(`/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT' });
       window.dispatchEvent(new Event('kavyaNotificationsChanged'));
     } catch {
       setNotificationItems((current) =>
-        current.map((item) => (item.id === id ? { ...item, readStatus: false } : item)),
+        current.map((notification) => (notification.id === id ? { ...notification, readStatus: false } : notification)),
       );
     }
   };
@@ -309,6 +314,8 @@ function normalizeNotifications(rows) {
     createdAt: item.createdAt || '',
     createdByRole: item.createdByRole || '',
     createdByName: item.createdByName || '',
+    sourceType: item.sourceType || '',
+    sourceId: item.sourceId || '',
   }));
 }
 
@@ -333,6 +340,93 @@ function formatNotificationDate(value) {
     month: 'short',
     year: 'numeric',
   }).format(parsed);
+}
+
+function getNotificationTargetPath(notification, role, roleBasePath) {
+  const normalizedSourceType = String(notification?.sourceType || '').trim().toLowerCase();
+  const normalizedText = `${notification?.title || ''} ${notification?.message || ''} ${normalizedSourceType}`.trim().toLowerCase();
+  const payrollPath = getPayrollNotificationPath(notification, roleBasePath);
+
+  if (normalizedSourceType === 'payroll' || normalizedText.includes('salary') || normalizedText.includes('payroll') || normalizedText.includes('payslip')) {
+    return payrollPath;
+  }
+
+  if (normalizedSourceType === 'leave' || normalizedText.includes('leave')) {
+    return getRolePath(role, {
+      admin: '/admin/leave-management',
+      hr: '/hr/leave-approval',
+      teamLead: '/team-lead/leave-review',
+      projectManager: '/project-manager/leave-review',
+      employee: '/employee/leave-requests',
+    }, `${roleBasePath}/dashboard`);
+  }
+
+  if (normalizedSourceType === 'attendance' || normalizedText.includes('attendance') || normalizedText.includes('check in') || normalizedText.includes('check-in')) {
+    return getRolePath(role, {
+      admin: '/admin/team-attendance',
+      hr: '/hr/attendance',
+      teamLead: '/team-lead/team-attendance',
+      projectManager: '/project-manager/team-attendance',
+      employee: '/employee/attendance',
+    }, `${roleBasePath}/dashboard`);
+  }
+
+  if (normalizedSourceType === 'announcement' || normalizedText.includes('announcement') || normalizedText.includes('notice')) {
+    return `${roleBasePath}/announcements`;
+  }
+
+  if (normalizedSourceType === 'task' || normalizedText.includes('task')) {
+    return getRolePath(role, {
+      admin: '/admin/dashboard',
+      hr: '/hr/tasks',
+      teamLead: '/team-lead/tasks',
+      projectManager: '/project-manager/tasks',
+      employee: '/employee/tasks',
+    }, `${roleBasePath}/dashboard`);
+  }
+
+  if (normalizedSourceType === 'asset' || normalizedText.includes('asset')) {
+    return getRolePath(role, {
+      admin: '/admin/assets',
+      hr: '/hr/assets',
+      teamLead: '/team-lead/dashboard',
+      projectManager: '/project-manager/assets',
+      employee: '/employee/assets',
+    }, `${roleBasePath}/dashboard`);
+  }
+
+  if (normalizedSourceType === 'project' || normalizedText.includes('project')) {
+    return getRolePath(role, {
+      admin: '/admin/projects',
+      hr: '/hr/projects',
+      teamLead: '/team-lead/dashboard',
+      projectManager: '/project-manager/projects',
+      employee: '/employee/dashboard',
+    }, `${roleBasePath}/dashboard`);
+  }
+
+  if (normalizedSourceType === 'profile') {
+    return `${roleBasePath}/profile`;
+  }
+
+  if (normalizedSourceType === 'settings') {
+    return `${roleBasePath}/settings`;
+  }
+
+  return `${roleBasePath}/dashboard`;
+}
+
+function getPayrollNotificationPath(notification, roleBasePath) {
+  const sourceId = String(notification?.sourceId || '').trim();
+  if (!sourceId || sourceId.toLowerCase() === 'bulk') {
+    return `${roleBasePath}/payroll`;
+  }
+
+  return `${roleBasePath}/payroll?recordId=${encodeURIComponent(sourceId)}`;
+}
+
+function getRolePath(role, rolePaths, fallbackPath) {
+  return rolePaths[role] || fallbackPath;
 }
 
 export default Header;
