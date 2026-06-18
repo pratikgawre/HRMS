@@ -37,6 +37,11 @@ public class TaskController {
     return taskRepository.findByAssignedToId(assignedToId);
   }
 
+  @GetMapping("/assigned-by/{assignedById}")
+  public List<TaskItem> listByAssignedBy(@PathVariable String assignedById) {
+    return taskRepository.findByAssignedById(assignedById);
+  }
+
   @GetMapping("/owner/{owner}")
   public List<TaskItem> listByOwner(@PathVariable String owner) {
     return taskRepository.findByOwnerIgnoreCase(owner);
@@ -52,6 +57,7 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    hydrateTeamLeadFields(task);
     if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
       task.setCreatedDateTime(OffsetDateTime.now().toString());
     }
@@ -97,6 +103,7 @@ public class TaskController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     task.setId(id);
+    hydrateTeamLeadFields(task);
     TaskItem saved = taskRepository.save(task);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
@@ -132,5 +139,19 @@ public class TaskController {
     String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
     String owner = task != null && task.getOwner() != null ? task.getOwner() : "team";
     return title + " was " + action + " for " + owner + ".";
+  }
+
+  private void hydrateTeamLeadFields(TaskItem task) {
+    if (task == null) {
+      return;
+    }
+
+    if (task.getTeamLeadId() == null || task.getTeamLeadId().isBlank()) {
+      task.setTeamLeadId(task.getAssignedById());
+    }
+
+    if ((task.getAssignedById() == null || task.getAssignedById().isBlank()) && task.getTeamLeadId() != null && !task.getTeamLeadId().isBlank()) {
+      task.setAssignedById(task.getTeamLeadId());
+    }
   }
 }
