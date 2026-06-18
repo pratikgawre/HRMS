@@ -19,44 +19,50 @@ function MyTeam() {
 function TeamLeadMyTeamView() {
   const navigate = useNavigate();
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
-  const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [teamAssignments, setTeamAssignments] = useState([]);
 
   useEffect(() => {
     let active = true;
 
     const refreshTeamData = () => {
+      if (!currentEmployeeId) {
+        setProjects([]);
+        setTeamAssignments([]);
+        return;
+      }
+
       Promise.all([
-        safeApiRequest('/employees', []),
-        safeApiRequest('/projects', []),
-      ]).then(([employeeRows, projectRows]) => {
+        safeApiRequest(`/team-lead/${currentEmployeeId}/projects`, []),
+        safeApiRequest(`/tasks/assigned-by/${currentEmployeeId}`, []),
+      ]).then(([projectRows, assignmentRows]) => {
         if (!active) {
           return;
         }
 
-        setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
         setProjects(Array.isArray(projectRows) ? projectRows : []);
+        setTeamAssignments(Array.isArray(assignmentRows) ? assignmentRows : []);
       });
     };
 
     refreshTeamData();
     const intervalId = window.setInterval(refreshTeamData, 15000);
     window.addEventListener('focus', refreshTeamData);
-    window.addEventListener('kavyaEmployeesChanged', refreshTeamData);
     window.addEventListener('kavyaProjectsChanged', refreshTeamData);
+    window.addEventListener('kavyaTasksChanged', refreshTeamData);
 
     return () => {
       active = false;
       window.clearInterval(intervalId);
       window.removeEventListener('focus', refreshTeamData);
-      window.removeEventListener('kavyaEmployeesChanged', refreshTeamData);
       window.removeEventListener('kavyaProjectsChanged', refreshTeamData);
+      window.removeEventListener('kavyaTasksChanged', refreshTeamData);
     };
   }, []);
 
   const assignmentData = useMemo(
-    () => buildTeamLeadAssignmentGroups(projects, employees, currentEmployeeId),
-    [currentEmployeeId, employees, projects],
+    () => buildTeamLeadAssignmentGroups(projects, [], currentEmployeeId),
+    [currentEmployeeId, projects],
   );
 
   const memberProjectMap = useMemo(() => {
@@ -89,18 +95,18 @@ function TeamLeadMyTeamView() {
         role: member.role || source?.role || '-',
         department: member.department || source?.department || '-',
         projects: member.projects.join(', '),
-        status: source?.status || '-',
+        status: member.status || source?.status || '-',
       };
     })
   ), [assignmentData.employeeDirectory, memberProjectMap]);
 
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
-  const totalAssignments = assignmentData.groups.reduce((sum, group) => sum + group.teamMemberCount, 0);
+  const totalAssignments = teamAssignments.length;
   const cards = [
     { label: 'Team Members', value: String(assignmentData.totalTeamMembers).padStart(2, '0'), delta: 'From Team Assignment', tone: 'blue', icon: 'ri-team-line' },
     { label: 'Projects', value: String(assignmentData.totalProjects).padStart(2, '0'), delta: 'Assigned to you', tone: 'green', icon: 'ri-folder-chart-line' },
     { label: 'Active Members', value: String(activeTeamMembers).padStart(2, '0'), delta: 'Active team members', tone: 'orange', icon: 'ri-user-heart-line' },
-    { label: 'Assignments', value: String(totalAssignments).padStart(2, '0'), delta: 'Project-wise mapping', tone: 'pink', icon: 'ri-links-line' },
+    { label: 'Assignments', value: String(totalAssignments).padStart(2, '0'), delta: 'Task records assigned by you', tone: 'pink', icon: 'ri-links-line' },
   ];
 
   const memberColumns = [

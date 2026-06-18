@@ -109,7 +109,6 @@ export async function bootstrapSessionFromBackend() {
     kavyaEmployeeName: payload?.employeeName || '',
     kavyaEmployeeAvatar: buildInitials(payload?.employeeName || ''),
     kavyaEmployeePhoto: '',
-    kavyaLoginSuccess: 'true',
     kavyaUserId: payload?.userId || '',
     kavyaLastLogin: payload?.lastLogin || '',
   };

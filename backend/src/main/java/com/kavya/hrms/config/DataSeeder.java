@@ -144,6 +144,8 @@ public class DataSeeder {
     user.setEmployeeId(employeeId);
     user.setEmployeeName(employeeName);
     user.setStatus("Active");
+    user.setTwoFactorEnabled(false);
+    user.setTwoFactorSecret("");
     if (user.getUserId() == null || user.getUserId().isEmpty()) {
       user.setUserId("USR-" + employeeId);
     }

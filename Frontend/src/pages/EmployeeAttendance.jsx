@@ -9,7 +9,6 @@ import {
   getAttendanceEmployee,
   getDurationLabel,
   getLateCheckInCountForMonth,
-  getInitialAttendanceRows,
   getTodayLabel,
   refreshStoredAttendanceRows,
   saveAttendanceRows,
@@ -24,7 +23,7 @@ function EmployeeAttendance() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const isEmployeeView = role === 'employee';
   const isTeamLeadView = role === 'teamLead';
-  const [attendance, setAttendance] = useState(getInitialAttendanceRows);
+  const [attendance, setAttendance] = useState([]);
   const [status, setStatus] = useState('All');
   const [dateRange, setDateRange] = useState('day');
   const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(new Date()));
@@ -35,6 +34,7 @@ function EmployeeAttendance() {
   const [message, setMessage] = useState('');
   const [editingRecord, setEditingRecord] = useState(null);
   const [correctionForm, setCorrectionForm] = useState(() => getEmptyCorrectionForm());
+  const [dataState, setDataState] = useState({ loading: true, error: '' });
   const customSelectionSnapshot = useRef({ dateRange: 'day', selectedMonth: getMonthInputValue(new Date()) });
   const attendanceEmployee = getAttendanceEmployee();
   const todayLabel = getTodayLabel();
@@ -73,10 +73,12 @@ function EmployeeAttendance() {
         const rows = await refreshStoredAttendanceRows();
         if (mounted && Array.isArray(rows)) {
           setAttendance(rows);
+          setDataState((current) => ({ ...current, loading: false, error: '' }));
         }
       } catch {
         if (mounted) {
-          setAttendance(getInitialAttendanceRows());
+          setAttendance([]);
+          setDataState({ loading: false, error: 'Unable to load attendance data right now.' });
         }
       }
     };
@@ -291,6 +293,18 @@ function EmployeeAttendance() {
         <div className="user-alert" role="status">
           <i className="ri-checkbox-circle-line" aria-hidden="true" />
           <span>{message}</span>
+        </div>
+      )}
+      {dataState.loading && (
+        <div className="user-alert" role="status">
+          <i className="ri-loader-4-line" aria-hidden="true" />
+          <span>Loading attendance data...</span>
+        </div>
+      )}
+      {dataState.error && (
+        <div className="user-alert" role="status">
+          <i className="ri-alert-line" aria-hidden="true" />
+          <span>{dataState.error}</span>
         </div>
       )}
 

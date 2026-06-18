@@ -86,15 +86,17 @@ function Tasks() {
     const refreshData = () => {
       Promise.all([
         loadTasksWithSeed(),
-        safeApiRequest('/employees', people),
-        safeApiRequest('/projects', []),
-      ]).then(([rows, employeeRows, projectRows]) => {
+        isTeamLead && currentEmployeeId
+          ? safeApiRequest(`/team-lead/${currentEmployeeId}/projects`, [])
+          : safeApiRequest('/projects', []),
+        isTeamLead ? Promise.resolve([]) : safeApiRequest('/employees', people),
+      ]).then(([rows, projectRows, employeeRows]) => {
         if (!active) {
           return;
         }
 
         setTaskRows(Array.isArray(rows) ? rows.map(normalizeTaskRow) : []);
-        setEmployees(normalizeEmployees(employeeRows));
+        setEmployees(isTeamLead ? [] : normalizeEmployees(employeeRows));
         setProjects(normalizeProjectRows(projectRows));
       });
     };
@@ -115,7 +117,7 @@ function Tasks() {
   }, []);
 
   const teamLeadProjects = useMemo(() => (
-    isTeamLead ? getSelectableTeamLeadProjects(projects, currentEmployeeId) : []
+    isTeamLead ? getSelectableTeamLeadProjects(projects, currentEmployeeId).filter((project) => isActiveProject(project)) : []
   ), [currentEmployeeId, isTeamLead, projects]);
   const selectedProject = useMemo(() => (
     isTeamLead
@@ -124,9 +126,9 @@ function Tasks() {
   ), [form.projectId, isTeamLead, teamLeadProjects]);
   const teamLeadAssigneeOptions = useMemo(() => (
     isTeamLead
-      ? getProjectAssigneeOptions(selectedProject, employees, currentEmployeeId)
+      ? getProjectAssigneeOptions(selectedProject, [], currentEmployeeId)
       : []
-  ), [currentEmployeeId, employees, isTeamLead, selectedProject]);
+  ), [currentEmployeeId, isTeamLead, selectedProject]);
   const assigneeOptions = useMemo(() => (
     isTeamLead
       ? teamLeadAssigneeOptions
@@ -164,7 +166,7 @@ function Tasks() {
   const openTaskModal = () => {
     setForm(getEmptyTaskForm({
       teamLeadMode: isTeamLead,
-      projectId: selectedProject?.id || teamLeadProjects[0]?.id || '',
+      projectId: '',
     }));
     setMessage('');
     setIsTaskModalOpen(true);
@@ -221,7 +223,7 @@ function Tasks() {
           return;
         }
 
-        const allowedEmployees = getProjectAssigneeOptions(project, employees, currentEmployeeId);
+        const allowedEmployees = getProjectAssigneeOptions(project, [], currentEmployeeId);
         const assignee = allowedEmployees.find((employee) => getEmployeeId(employee) === form.assignedToId) || null;
         if (!assignee) {
           setMessage('Please select a valid employee for the selected project.');
@@ -241,6 +243,7 @@ function Tasks() {
           assignedById: currentEmployeeId,
           assignedByRole: role,
           assignedByName: employeeIdentity.employee || getSessionValue('kavyaEmployeeName') || 'Team Lead',
+          teamLeadId: currentEmployeeId,
           priority: form.priority,
           dueDate: form.dueDate,
           status: form.status,
@@ -286,6 +289,7 @@ function Tasks() {
         assignedById: currentEmployeeId,
         assignedByRole: role,
         assignedByName: employeeIdentity.employee || getSessionValue('kavyaEmployeeName') || 'Team Lead',
+        teamLeadId: currentEmployeeId,
         priority: form.priority,
         dueDate: form.dueDate,
         status: form.status,
@@ -826,25 +830,23 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
                     </p>
                   )}
 
-                  <label className="field">
-                    <span>Assignee</span>
-                    <select
-                      value={form.assignedToId || ''}
-                      disabled={!form.projectId}
-                      onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}
-                    >
-                      {!form.projectId && <option value="">Select project first</option>}
-                      {form.projectId && <option value="">Select employee</option>}
-                      {form.projectId && assigneeOptions.length === 0 && <option value="">No employees available</option>}
-                      {assigneeOptions.map((employee) => {
-                        const employeeId = getEmployeeId(employee);
-                        const employeeName = getEmployeeName(employee);
-                        return <option key={employeeId} value={employeeId}>{employeeName} - {employee.department || '-'}</option>;
-                      })}
-                    </select>
-                  </label>
-                </div>
-              </div>
+              <label className="field">
+                <span>Assignee</span>
+                <select
+                  value={form.assignedToId || ''}
+                  disabled={!form.projectId}
+                  onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}
+                >
+                  {!form.projectId && <option value="">Select project first</option>}
+                  {form.projectId && <option value="">Select employee</option>}
+                  {form.projectId && assigneeOptions.length === 0 && <option value="">No employees available</option>}
+                  {assigneeOptions.map((employee) => {
+                    const employeeId = getEmployeeId(employee);
+                    const employeeName = getEmployeeName(employee);
+                    return <option key={employeeId} value={employeeId}>{employeeName} - {employee.department || '-'}</option>;
+                  })}
+                </select>
+              </label>
             </>
           ) : (
             <>
@@ -863,6 +865,13 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
                 </select>
               </label>
             </>
+          )}
+          {teamLeadMode && selectedProject && form.projectId && (
+            <div className="task-summary-card task-summary-card-compact">
+              <small>{selectedProject.projectCode || selectedProject.id}</small>
+              <strong>{selectedProject.name}</strong>
+              <small>Team members: {Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers.length : 0}</small>
+            </div>
           )}
           <label className="field">
             <span>Priority</span>
@@ -965,11 +974,18 @@ function normalizeProjectRows(rows) {
     id: project.id || project.projectId || `PRJ-${index + 1}`,
     projectCode: project.projectCode || project.id || project.projectId || `PRJ-${index + 1}`,
     teamLeadId: project.teamLeadId || '',
+    teamLeadName: project.teamLeadName || '',
+    teamLeadDesignation: project.teamLeadDesignation || '',
     teamMembers: Array.isArray(project.teamMembers) ? project.teamMembers.filter(Boolean).map((value) => String(value)) : [],
     teamMemberDetails: Array.isArray(project.teamMemberDetails) ? project.teamMemberDetails : [],
     name: project.name || `Project ${index + 1}`,
     status: project.status || 'Planning',
   }));
+}
+
+function isActiveProject(project) {
+  const status = String(project?.status || '').trim().toLowerCase();
+  return !status || status === 'active';
 }
 
 function normalizeTaskRow(task) {
@@ -984,6 +1000,7 @@ function normalizeTaskRow(task) {
     due: task.due || task.dueDate || '-',
     dueDate: task.dueDate || task.due || '',
     status: task.status || 'Pending',
+    teamLeadId: task.teamLeadId || task.assignedById || '',
     projectId: task.projectId || '',
     projectName: task.projectName || '',
     projectCode: task.projectCode || '',

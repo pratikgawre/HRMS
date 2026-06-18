@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { salaryRecords } from '../data/dummyData.js';
@@ -60,6 +61,7 @@ function getPayrollAvailabilityText(month, year) {
 }
 
 function Payroll() {
+  const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
   const canManagePayroll = role === 'admin';
   const defaultPeriod = getDefaultPayrollPeriod();
@@ -71,6 +73,7 @@ function Payroll() {
   const [statusOverrides, setStatusOverrides] = useState(() => getInitialPayrollStatuses(getStoredPayrollRecords()));
   const [isPayrollStorageReady, setIsPayrollStorageReady] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const notificationTarget = useMemo(() => parsePayrollNotificationTarget(location.search), [location.search]);
   const payrollPeriod = useMemo(() => ({
     monthIndex: months.indexOf(selectedMonth),
     year: Number(selectedYear),
@@ -78,6 +81,16 @@ function Payroll() {
   const records = useMemo(() => {
     return buildPayrollRecords(employees, getInitialAttendanceRows(), leaveRequests, statusOverrides, payrollPeriod, savedPayrollRecords);
   }, [employees, leaveRequests, payrollPeriod, refreshKey, savedPayrollRecords, statusOverrides]);
+
+  useEffect(() => {
+    if (notificationTarget?.month && selectedMonth !== notificationTarget.month) {
+      setSelectedMonth(notificationTarget.month);
+    }
+
+    if (notificationTarget?.year && selectedYear !== notificationTarget.year) {
+      setSelectedYear(notificationTarget.year);
+    }
+  }, [notificationTarget?.month, notificationTarget?.year, selectedMonth, selectedYear]);
 
   useEffect(() => {
     let active = true;
@@ -171,6 +184,7 @@ function Payroll() {
         setSelectedMonth={setSelectedMonth}
         setSelectedYear={setSelectedYear}
         setStatusOverrides={setStatusOverrides}
+        focusRecordId={notificationTarget?.recordId || ''}
       />
     );
   }
@@ -184,14 +198,16 @@ function Payroll() {
       year={selectedYear}
       setMonth={setSelectedMonth}
       setYear={setSelectedYear}
+      focusRecordId={notificationTarget?.recordId || ''}
     />
   );
 }
 
-function PayrollManagement({ records, savedPayrollRecords, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear, setStatusOverrides }) {
+function PayrollManagement({ records, savedPayrollRecords, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear, setStatusOverrides, focusRecordId = '' }) {
   const [message, setMessage] = useState('');
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [activeSummary, setActiveSummary] = useState('total');
+  const [searchTerm, setSearchTerm] = useState('');
   const tableSectionRef = useRef(null);
 
   const summary = useMemo(() => {
@@ -208,7 +224,37 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   }, [records]);
 
   const summaryDetail = useMemo(() => getPayrollSummaryDetail(activeSummary, records), [activeSummary, records]);
-  const filteredRecords = useMemo(() => getFilteredPayrollRecords(activeSummary, records), [activeSummary, records]);
+  const filteredRecords = useMemo(() => {
+    const summaryFilteredRecords = getFilteredPayrollRecords(activeSummary, records);
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) {
+      return summaryFilteredRecords;
+    }
+
+    return summaryFilteredRecords.filter((record) => [
+      record.employeeName,
+      record.employeeId,
+      record.department,
+      record.month,
+      record.year,
+      record.status,
+      formatCurrency(getNetSalary(record)),
+      formatCurrency(getEarnings(record)),
+      formatCurrency(getDeductions(record)),
+    ].some((value) => String(value || '').toLowerCase().includes(query)));
+  }, [activeSummary, records, searchTerm]);
+
+  useEffect(() => {
+    if (!focusRecordId) {
+      return;
+    }
+
+    const focusedRecord = records.find((record) => record.id === focusRecordId);
+    if (focusedRecord) {
+      setSelectedPayslip(focusedRecord);
+    }
+  }, [focusRecordId, records]);
 
   const toggleStatus = (recordId) => {
     setStatusOverrides((current) => {
@@ -291,6 +337,15 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
       <div ref={tableSectionRef}>
         <Section title="Employee Salary Table">
         <div className="payroll-toolbar">
+          <label className="toolbar-search payroll-search-field">
+            <i className="ri-search-line" aria-hidden="true" />
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search employee, department, or status"
+            />
+          </label>
           <label className="field payroll-filter-field">
             <span>Month</span>
             <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
@@ -374,7 +429,7 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   );
 }
 
-function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMonth, setYear }) {
+function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMonth, setYear, focusRecordId = '' }) {
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [periodRecords, setPeriodRecords] = useState([]);
   const [periodLoading, setPeriodLoading] = useState(false);
@@ -432,6 +487,17 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
 
     return normalizePayrollRecords(combined);
   }, [periodRecords, safeRecords, safeSavedPayrollRecords]);
+
+  useEffect(() => {
+    if (!focusRecordId) {
+      return;
+    }
+
+    const focusedRecord = payrollRecordsForSelection.find((record) => record.id === focusRecordId);
+    if (focusedRecord) {
+      setSelectedPayslip(focusedRecord);
+    }
+  }, [focusRecordId, payrollRecordsForSelection]);
 
   const payslip = payrollRecordsForSelection.find((record) => employeeId && record.employeeId === employeeId && record.month === month && record.year === year)
     || payrollRecordsForSelection.find((record) => record.ownerRole === role && record.month === month && record.year === year)
@@ -977,6 +1043,33 @@ function getDefaultPayrollPeriod() {
 
 function getPayrollRecordId(employeeId, month, year) {
   return `PAY-${employeeId}-${month}-${year}`;
+}
+
+function parsePayrollNotificationTarget(search = '') {
+  const params = new URLSearchParams(search);
+  const recordId = String(params.get('recordId') || '').trim();
+  const month = String(params.get('month') || '').trim();
+  const year = String(params.get('year') || '').trim();
+  const inferredFromRecordId = parsePayrollRecordId(recordId);
+
+  return {
+    recordId,
+    month: month || inferredFromRecordId?.month || '',
+    year: year || inferredFromRecordId?.year || '',
+  };
+}
+
+function parsePayrollRecordId(recordId) {
+  const match = String(recordId || '').trim().match(/^PAY-(.+)-([A-Za-z]+)-(\d{4})$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    employeeId: match[1],
+    month: match[2],
+    year: match[3],
+  };
 }
 
 function normalizePayrollRecords(rows = []) {

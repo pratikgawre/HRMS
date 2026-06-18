@@ -3,7 +3,7 @@ import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
-import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
+import { refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import {
@@ -20,13 +20,16 @@ function LeaveRequests() {
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
   const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
-  const [requests, setRequests] = useState(getInitialLeaveRequests);
+  const [requests, setRequests] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
+  const [searchText, setSearchText] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
+  const [dataState, setDataState] = useState({ loading: true, error: '' });
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
+  const [selectedRequest, setSelectedRequest] = useState(null);
   const leaveSummary = useMemo(
     () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee), requests),
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
@@ -57,13 +60,56 @@ function LeaveRequests() {
     return request.employeeId === currentEmployee.employeeId;
   }), [requests, role, currentEmployee.employeeId]);
 
-  const rows = useMemo(() => visibleRequests.filter((request) => status === 'All' || request.status === status), [visibleRequests, status]);
+  const rows = useMemo(() => visibleRequests
+    .filter((request) => status === 'All' || request.status === status)
+    .filter((request) => {
+      const query = searchText.trim().toLowerCase();
+      if (!query) {
+        return true;
+      }
+
+      return [
+        request.employee,
+        request.employeeId,
+        request.type,
+        request.reason,
+        request.status,
+      ].some((value) => String(value || '').toLowerCase().includes(query));
+    }), [visibleRequests, status, searchText]);
+  const visibleLeaveSummary = useMemo(() => {
+    const approvedRows = rows.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved');
+    const pendingRows = rows.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending');
+    const usedDays = approvedRows.reduce((total, request) => total + normalizeLeaveDays(request.days), 0);
+
+    return {
+      totalCount: rows.length,
+      approvedCount: approvedRows.length,
+      pendingCount: pendingRows.length,
+      usedDays,
+    };
+  }, [rows]);
+
+  const selectedRequestDetails = useMemo(() => {
+    if (!selectedRequest) {
+      return null;
+    }
+
+    return rows.find((request) => request.id === selectedRequest.id)
+      || visibleRequests.find((request) => request.id === selectedRequest.id)
+      || null;
+  }, [rows, selectedRequest, visibleRequests]);
 
   useEffect(() => {
     const refreshRequests = () => {
       refreshStoredLeaveRequests()
-        .then(setRequests)
-        .catch(() => setRequests(getInitialLeaveRequests()));
+        .then((rows) => {
+          setRequests(Array.isArray(rows) ? rows : []);
+          setDataState((current) => ({ ...current, loading: false, error: '' }));
+        })
+        .catch(() => {
+          setRequests([]);
+          setDataState({ loading: false, error: 'Unable to load leave requests right now.' });
+        });
     };
     const refreshLeaveTypes = () => {
       safeApiRequest('/settings', { leaveTypes: DEFAULT_LEAVE_TYPES })
@@ -168,9 +214,11 @@ function LeaveRequests() {
   const refreshRequests = async () => {
     try {
       const stored = await refreshStoredLeaveRequests();
-      setRequests(stored);
+      setRequests(Array.isArray(stored) ? stored : []);
+      setDataState((current) => ({ ...current, loading: false, error: '' }));
     } catch {
-      setRequests(getInitialLeaveRequests());
+      setRequests([]);
+      setDataState({ loading: false, error: 'Unable to load leave requests right now.' });
     }
   };
 
@@ -182,6 +230,7 @@ function LeaveRequests() {
           ...request,
           fromDate: request.from,
           toDate: request.to,
+          medicalReport: request.medicalReport || null,
         }),
       });
     } catch {
@@ -197,6 +246,7 @@ function LeaveRequests() {
           ...request,
           fromDate: request.from,
           toDate: request.to,
+          medicalReport: request.medicalReport || null,
         }),
       });
     } catch {
@@ -286,6 +336,18 @@ function LeaveRequests() {
       )}
 
       <Section title="Leave Request Queue">
+        {dataState.loading && (
+          <div className="user-alert" role="status">
+            <i className="ri-loader-4-line" aria-hidden="true" />
+            <span>Loading leave requests...</span>
+          </div>
+        )}
+        {dataState.error && (
+          <div className="user-alert" role="status">
+            <i className="ri-alert-line" aria-hidden="true" />
+            <span>{dataState.error}</span>
+          </div>
+        )}
         {(role === 'employee' || role === 'hr' || role === 'teamLead' || role === 'projectManager') && (
           <section
             className="leave-summary-grid"
@@ -300,11 +362,47 @@ function LeaveRequests() {
                 delta={item.delta}
                 tone={item.tone}
                 className="leave-summary-card"
-                style={{ minHeight: '108px', padding: '0.8rem 0.9rem' }}
+              style={{ minHeight: '108px', padding: '0.8rem 0.9rem' }}
               />
             ))}
           </section>
         )}
+        <div
+          className="leave-queue-summary"
+          aria-label="Visible leave request count"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: '0.75rem',
+            margin: '0.25rem 0 1.25rem',
+            padding: '0.95rem 1rem',
+            border: '1px solid rgba(201, 221, 221, 0.82)',
+            borderRadius: '18px',
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 251, 250, 0.92))',
+            boxShadow: '0 14px 28px rgba(24, 35, 47, 0.08)',
+          }}
+        >
+          <div>
+            <span style={{ display: 'block', color: 'var(--muted-text)', fontSize: '0.74rem', fontWeight: 900, textTransform: 'uppercase' }}>Showing</span>
+            <strong style={{ display: 'block', color: 'var(--dark-text)', fontSize: '1.5rem', fontWeight: 950, lineHeight: 1 }}>{visibleLeaveSummary.totalCount}</strong>
+            <small style={{ color: 'var(--muted-text)', fontWeight: 700 }}>Leave requests on screen</small>
+          </div>
+          <div>
+            <span style={{ display: 'block', color: 'var(--muted-text)', fontSize: '0.74rem', fontWeight: 900, textTransform: 'uppercase' }}>Used Days</span>
+            <strong style={{ display: 'block', color: 'var(--dark-text)', fontSize: '1.5rem', fontWeight: 950, lineHeight: 1 }}>{visibleLeaveSummary.usedDays}</strong>
+            <small style={{ color: 'var(--muted-text)', fontWeight: 700 }}>Approved leave deducted</small>
+          </div>
+          <div>
+            <span style={{ display: 'block', color: 'var(--muted-text)', fontSize: '0.74rem', fontWeight: 900, textTransform: 'uppercase' }}>Approved</span>
+            <strong style={{ display: 'block', color: 'var(--dark-text)', fontSize: '1.5rem', fontWeight: 950, lineHeight: 1 }}>{visibleLeaveSummary.approvedCount}</strong>
+            <small style={{ color: 'var(--muted-text)', fontWeight: 700 }}>Already deducted</small>
+          </div>
+          <div>
+            <span style={{ display: 'block', color: 'var(--muted-text)', fontSize: '0.74rem', fontWeight: 900, textTransform: 'uppercase' }}>Pending</span>
+            <strong style={{ display: 'block', color: 'var(--dark-text)', fontSize: '1.5rem', fontWeight: 950, lineHeight: 1 }}>{visibleLeaveSummary.pendingCount}</strong>
+            <small style={{ color: 'var(--muted-text)', fontWeight: 700 }}>Waiting for review</small>
+          </div>
+        </div>
         <div className="page-toolbar" style={{ gap: '1.2rem', marginTop: '1.5rem' }}>
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>
@@ -313,6 +411,18 @@ function LeaveRequests() {
             <option>Approved</option>
             <option>Rejected</option>
           </select>
+          {role !== 'employee' && (
+            <label className="toolbar-search">
+              <i className="ri-search-line" aria-hidden="true" />
+              <input
+                type="search"
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Search employee, type, reason..."
+                aria-label="Search leave requests"
+              />
+            </label>
+          )}
           {canCreateRequest && (
             <button className="toolbar-primary" type="button" onClick={() => {
               setFileErrors({});
@@ -324,7 +434,12 @@ function LeaveRequests() {
           )}
         </div>
         <div style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-          <DataTable columns={columns} rows={rows} emptyMessage="No leave requests match your filter." />
+          <DataTable
+            columns={columns}
+            rows={rows}
+            emptyMessage="No leave requests match your filter."
+            onRowClick={setSelectedRequest}
+          />
         </div>
       </Section>
 
@@ -341,6 +456,14 @@ function LeaveRequests() {
             setShowForm(false);
             setFileErrors({});
           }}
+        />
+      )}
+
+      {selectedRequestDetails && (
+        <LeaveRequestDetailsModal
+          request={selectedRequestDetails}
+          onClose={() => setSelectedRequest(null)}
+          onDownload={() => downloadMedicalReportAsPdf(selectedRequestDetails)}
         />
       )}
     </>
@@ -414,6 +537,102 @@ function LeaveRequestModal({ currentEmployee, leaveTypeOptions, form, fileErrors
   );
 }
 
+function LeaveRequestDetailsModal({ request, onClose, onDownload }) {
+  const medicalReport = request?.medicalReport;
+  const hasMedicalReport = Boolean(medicalReport?.dataUrl);
+  const isPdf = String(medicalReport?.type || '').toLowerCase() === 'application/pdf';
+
+  return (
+    <div className="payroll-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="payroll-modal leave-request-details-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Leave request details"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="payroll-modal-head">
+          <div>
+            <h3>Leave Details</h3>
+            <p style={{ margin: 0, color: 'var(--muted-text, #64748b)', fontSize: '0.92rem' }}>
+              Leave type, dates aur attachment detail yahan dikh rahi hai.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close leave details">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="leave-details-grid">
+          <div className="leave-details-card">
+            <span>Employee</span>
+            <strong>{request.employee}</strong>
+            <small>{request.employeeId || '-'}</small>
+          </div>
+          <div className="leave-details-card">
+            <span>Leave Type</span>
+            <strong>{request.type}</strong>
+            <small>{request.status}</small>
+          </div>
+          <div className="leave-details-card">
+            <span>From Date</span>
+            <strong>{request.from || '-'}</strong>
+          </div>
+          <div className="leave-details-card">
+            <span>To Date</span>
+            <strong>{request.to || '-'}</strong>
+          </div>
+          <div className="leave-details-card">
+            <span>Days</span>
+            <strong>{request.days}</strong>
+          </div>
+          <div className="leave-details-card">
+            <span>Requested By</span>
+            <strong>{formatRequesterRole(request.ownerRole)}</strong>
+          </div>
+        </div>
+
+        <div className="leave-details-section">
+          <h4>Reason</h4>
+          <p>{request.reason || '-'}</p>
+        </div>
+
+        <div className="leave-details-section">
+          <h4>Medical Report</h4>
+          {request.type === 'Sick Leave' ? (
+            hasMedicalReport ? (
+              <div className="leave-medical-report">
+                <div>
+                  <strong>{medicalReport.name || 'Doctor prescription'}</strong>
+                  <small>{medicalReport.type || 'application/octet-stream'}</small>
+                </div>
+                <div className="leave-medical-actions">
+                  <span>{isPdf ? 'PDF attached' : 'Prescription attached'}</span>
+                  <button type="button" className="payroll-primary" onClick={onDownload}>
+                    <i className="ri-download-2-line" aria-hidden="true" />
+                    Download PDF
+                  </button>
+                </div>
+                <div className="leave-medical-preview">
+                  {isPdf ? (
+                    <embed src={medicalReport.dataUrl} type="application/pdf" title="Doctor prescription preview" />
+                  ) : (
+                    <img src={medicalReport.dataUrl} alt="Doctor prescription preview" />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p>Medical report not attached.</p>
+            )
+          ) : (
+            <p>This leave type does not require a doctor prescription.</p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function getEmptyLeaveForm(currentEmployee = getCurrentEmployeeIdentity(), leaveTypes = DEFAULT_LEAVE_TYPES) {
   const today = new Date().toISOString().slice(0, 10);
   const employee = currentEmployee.employee;
@@ -427,6 +646,173 @@ function getEmptyLeaveForm(currentEmployee = getCurrentEmployeeIdentity(), leave
     reason: '',
     medicalReport: null,
   };
+}
+
+function normalizeLeaveDays(value) {
+  const numeric = Number.parseInt(value, 10);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+async function downloadMedicalReportAsPdf(request) {
+  const medicalReport = request?.medicalReport;
+  if (!medicalReport?.dataUrl) {
+    return;
+  }
+
+  const safeBaseName = sanitizeFileName(`${request.employee || 'leave'}-${request.type || 'report'}`);
+  const stamp = new Date().toISOString().slice(0, 10);
+
+  if (String(medicalReport.type || '').toLowerCase() === 'application/pdf') {
+    triggerDownload(medicalReport.dataUrl, `${safeBaseName}-medical-report-${stamp}.pdf`);
+    return;
+  }
+
+  const imageData = await createJpegDataUrl(medicalReport.dataUrl);
+  const pdfBytes = buildSinglePagePdf({
+    title: `${request.employee || 'Employee'} - Medical Report`,
+    subtitle: `${request.type || 'Leave'} | ${request.from || '-'} to ${request.to || '-'}`,
+    details: [
+      `Employee: ${request.employee || '-'}`,
+      `Employee ID: ${request.employeeId || '-'}`,
+      `Leave Type: ${request.type || '-'}`,
+      `From: ${request.from || '-'}`,
+      `To: ${request.to || '-'}`,
+      `Days: ${request.days || '-'}`,
+      `Status: ${request.status || '-'}`,
+      `File: ${medicalReport.name || 'Doctor prescription'}`,
+    ],
+    imageDataUrl: imageData.dataUrl,
+    imageWidth: imageData.width,
+    imageHeight: imageData.height,
+  });
+
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  triggerDownload(URL.createObjectURL(blob), `${safeBaseName}-medical-report-${stamp}.pdf`, true);
+}
+
+function triggerDownload(href, fileName, revoke = false) {
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  if (revoke) {
+    window.setTimeout(() => URL.revokeObjectURL(href), 0);
+  }
+}
+
+function sanitizeFileName(value) {
+  return String(value || 'leave-report')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'leave-report';
+}
+
+function createJpegDataUrl(sourceDataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const maxWidth = 1200;
+        const scale = Math.min(1, maxWidth / (image.naturalWidth || image.width || maxWidth));
+        canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width || maxWidth) * scale));
+        canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height || maxWidth) * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Canvas unavailable'));
+          return;
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve({
+          dataUrl: canvas.toDataURL('image/jpeg', 0.92),
+          width: canvas.width,
+          height: canvas.height,
+        });
+      } catch (error) {
+        reject(error);
+      }
+    };
+    image.onerror = () => reject(new Error('Unable to load prescription image.'));
+    image.crossOrigin = 'anonymous';
+    image.src = sourceDataUrl;
+  });
+}
+
+function buildSinglePagePdf({ title, subtitle, details, imageDataUrl, imageWidth, imageHeight }) {
+  const jpegBase64 = String(imageDataUrl || '').split(',')[1] || '';
+  const imageBytes = atob(jpegBase64);
+  const imageBox = fitImageToBox(imageWidth || 1, imageHeight || 1, 515, 500);
+  const escapedTitle = escapePdfText(title);
+  const escapedSubtitle = escapePdfText(subtitle);
+  const textLines = [
+    `BT /F1 18 Tf 40 790 Td (${escapedTitle}) Tj ET`,
+    `BT /F1 10 Tf 40 770 Td (${escapedSubtitle}) Tj ET`,
+    ...details.map((line, index) => `BT /F1 11 Tf 40 ${740 - (index * 16)} Td (${escapePdfText(line)}) Tj ET`),
+    'q',
+    `1 0 0 1 ${imageBox.x} ${imageBox.y} cm`,
+    `${imageBox.width} 0 0 ${imageBox.height} 0 0 cm`,
+    '/Im0 Do',
+    'Q',
+  ];
+
+  const contentStream = textLines.join('\n');
+  const objects = [];
+  objects.push('1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj');
+  objects.push('2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj');
+  objects.push('3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> /XObject << /Im0 5 0 R >> >> /Contents 6 0 R >> endobj');
+  objects.push('4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj');
+  objects.push(`5 0 obj << /Type /XObject /Subtype /Image /Width ${Math.max(1, Math.round(imageWidth || 1))} /Height ${Math.max(1, Math.round(imageHeight || 1))} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBytes.length} >> stream\n${imageBytes}\nendstream endobj`);
+  objects.push(`6 0 obj << /Length ${contentStream.length} >> stream\n${contentStream}\nendstream endobj`);
+
+  const header = '%PDF-1.4\n';
+  let body = '';
+  const offsets = [0];
+  let cursor = header.length;
+  objects.forEach((object) => {
+    offsets.push(cursor);
+    body += `${object}\n`;
+    cursor += `${object}\n`.length;
+  });
+
+  const xrefStart = header.length + body.length;
+  let xref = 'xref\n0 7\n0000000000 65535 f \n';
+  offsets.slice(1).forEach((offset) => {
+    xref += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  const trailer = `trailer << /Size 7 /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  const pdfString = header + body + xref + trailer;
+  const pdfBytes = new Uint8Array(pdfString.length);
+  for (let index = 0; index < pdfString.length; index += 1) {
+    pdfBytes[index] = pdfString.charCodeAt(index) & 0xff;
+  }
+  return pdfBytes;
+}
+
+function fitImageToBox(width, height, maxWidth, maxHeight) {
+  const safeWidth = Math.max(1, Number(width) || 1);
+  const safeHeight = Math.max(1, Number(height) || 1);
+  const scale = Math.min(maxWidth / safeWidth, maxHeight / safeHeight, 1);
+  const drawWidth = Math.max(1, Math.round(safeWidth * scale));
+  const drawHeight = Math.max(1, Math.round(safeHeight * scale));
+  return {
+    width: drawWidth,
+    height: drawHeight,
+    x: Math.round(40 + ((maxWidth - drawWidth) / 2)),
+    y: Math.round(120 + ((maxHeight - drawHeight) / 2)),
+  };
+}
+
+function escapePdfText(value) {
+  return String(value || '')
+    .replaceAll('\\', '\\\\')
+    .replaceAll('(', '\\(')
+    .replaceAll(')', '\\)');
 }
 
 function getLeaveDays(from, to) {

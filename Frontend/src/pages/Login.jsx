@@ -3,11 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { authenticateUser, startSession } from '../utils/auth.js';
 
 function Login() {
-  const [form, setForm] = useState({ email: '', password: '', twoFactorCode: '' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showTwoFactor, setShowTwoFactor] = useState(false);
-  const [awaitingTwoFactor, setAwaitingTwoFactor] = useState(false);
   const navigate = useNavigate();
 
   const updateField = (field, value) => {
@@ -18,19 +16,13 @@ function Login() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     const email = form.email.trim().toLowerCase();
-    const result = await authenticateUser(email, form.password, form.twoFactorCode);
+    const result = await authenticateUser(email, form.password);
 
     if (!result.ok) {
-      if (result.twoFactorRequired) {
-        setAwaitingTwoFactor(true);
-        setError(result.message || 'Two-factor verification code required.');
-        return;
-      }
       setError(result.message);
       return;
     }
 
-    setAwaitingTwoFactor(false);
     navigate(startSession(result.user), { replace: true });
   };
 
@@ -104,24 +96,8 @@ function Login() {
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </label>
-            {awaitingTwoFactor && (
-              <label className="login-field">
-                <i className="ri-shield-keyhole-line" aria-hidden="true" />
-                <input
-                  type={showTwoFactor ? 'text' : 'password'}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="Enter 6-digit verification code"
-                  value={form.twoFactorCode}
-                  onChange={(event) => updateField('twoFactorCode', event.target.value.replace(/\D+/g, '').slice(0, 6))}
-                />
-                <button type="button" onClick={() => setShowTwoFactor((current) => !current)}>
-                  {showTwoFactor ? 'Hide' : 'Show'}
-                </button>
-              </label>
-            )}
             {error && <p className="login-error" role="alert">{error}</p>}
-            <button className="primary-btn" type="submit">{awaitingTwoFactor ? 'Verify Code' : 'Login'}</button>
+            <button className="primary-btn" type="submit">Login</button>
             <a className="login-link" href="#/login">Forgot Password?</a>
           </form>
         </div>

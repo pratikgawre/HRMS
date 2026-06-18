@@ -44,8 +44,7 @@ export function isEligibleTeamMember(employee) {
   }
 
   return !isAdminEmployee(employee)
-    && !isHigherPrivilegeEmployee(employee)
-    && isActiveEmployee(employee);
+    && !isHigherPrivilegeEmployee(employee);
 }
 
 export function normalizeProjectTeamMembers(project, employeeDirectory = null) {
@@ -86,6 +85,7 @@ export function normalizeProjectTeamMembers(project, employeeDirectory = null) {
       department: String(employee?.department || employee?.departmentName || '-').trim() || '-',
       role: resolvedRole || 'Employee',
       avatar: String(employee?.avatar || employee?.initials || displayName.slice(0, 2).toUpperCase() || 'EM').trim(),
+      status: String(employee?.status || '').trim(),
     });
   };
 
@@ -179,6 +179,7 @@ export function buildEmployeeDirectory(employees = []) {
       department: String(employee?.department || employee?.departmentName || '-').trim() || '-',
       role: String(employee?.role || employee?.jobTitle || 'Employee').trim() || 'Employee',
       avatar: String(employee?.avatar || employee?.initials || getEmployeeName(employee).slice(0, 2).toUpperCase() || 'EM').trim(),
+      status: String(employee?.status || '').trim(),
     };
 
     [
