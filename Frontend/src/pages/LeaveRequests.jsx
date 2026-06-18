@@ -367,42 +367,47 @@ function LeaveRequests() {
             ))}
           </section>
         )}
-        <div
-          className="leave-queue-summary"
-          aria-label="Visible leave request count"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-            gap: '0.75rem',
-            margin: '0.25rem 0 1.25rem',
-            padding: '0.95rem 1rem',
-            border: '1px solid rgba(201, 221, 221, 0.82)',
-            borderRadius: '18px',
-            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 251, 250, 0.92))',
-            boxShadow: '0 14px 28px rgba(24, 35, 47, 0.08)',
-          }}
-        >
-          <div>
-            <span style={{ display: 'block', color: 'var(--muted-text)', fontSize: '0.74rem', fontWeight: 900, textTransform: 'uppercase' }}>Showing</span>
-            <strong style={{ display: 'block', color: 'var(--dark-text)', fontSize: '1.5rem', fontWeight: 950, lineHeight: 1 }}>{visibleLeaveSummary.totalCount}</strong>
-            <small style={{ color: 'var(--muted-text)', fontWeight: 700 }}>Leave requests on screen</small>
-          </div>
-          <div>
-            <span style={{ display: 'block', color: 'var(--muted-text)', fontSize: '0.74rem', fontWeight: 900, textTransform: 'uppercase' }}>Used Days</span>
-            <strong style={{ display: 'block', color: 'var(--dark-text)', fontSize: '1.5rem', fontWeight: 950, lineHeight: 1 }}>{visibleLeaveSummary.usedDays}</strong>
-            <small style={{ color: 'var(--muted-text)', fontWeight: 700 }}>Approved leave deducted</small>
-          </div>
-          <div>
-            <span style={{ display: 'block', color: 'var(--muted-text)', fontSize: '0.74rem', fontWeight: 900, textTransform: 'uppercase' }}>Approved</span>
-            <strong style={{ display: 'block', color: 'var(--dark-text)', fontSize: '1.5rem', fontWeight: 950, lineHeight: 1 }}>{visibleLeaveSummary.approvedCount}</strong>
-            <small style={{ color: 'var(--muted-text)', fontWeight: 700 }}>Already deducted</small>
-          </div>
-          <div>
-            <span style={{ display: 'block', color: 'var(--muted-text)', fontSize: '0.74rem', fontWeight: 900, textTransform: 'uppercase' }}>Pending</span>
-            <strong style={{ display: 'block', color: 'var(--dark-text)', fontSize: '1.5rem', fontWeight: 950, lineHeight: 1 }}>{visibleLeaveSummary.pendingCount}</strong>
-            <small style={{ color: 'var(--muted-text)', fontWeight: 700 }}>Waiting for review</small>
-          </div>
-        </div>
+        <section className="leave-queue-summary-grid" aria-label="Visible leave request count">
+          {[
+            {
+              label: 'Showing',
+              value: String(visibleLeaveSummary.totalCount).padStart(2, '0'),
+              delta: 'Leave requests on screen',
+              tone: 'teal',
+              icon: 'ri-eye-line',
+            },
+            {
+              label: 'Used Days',
+              value: String(visibleLeaveSummary.usedDays).padStart(2, '0'),
+              delta: 'Approved leave deducted',
+              tone: 'blue',
+              icon: 'ri-calendar-check-line',
+            },
+            {
+              label: 'Approved',
+              value: String(visibleLeaveSummary.approvedCount).padStart(2, '0'),
+              delta: 'Already deducted',
+              tone: 'orange',
+              icon: 'ri-checkbox-circle-line',
+            },
+            {
+              label: 'Pending',
+              value: String(visibleLeaveSummary.pendingCount).padStart(2, '0'),
+              delta: 'Waiting for review',
+              tone: 'pink',
+              icon: 'ri-time-line',
+            },
+          ].map((card) => (
+            <DashboardCard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              delta={card.delta}
+              tone={card.tone}
+              icon={card.icon}
+            />
+          ))}
+        </section>
         <div className="page-toolbar" style={{ gap: '1.2rem', marginTop: '1.5rem' }}>
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>

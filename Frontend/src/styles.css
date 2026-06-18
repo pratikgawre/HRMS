@@ -717,6 +717,208 @@ button.attendance-summary-card.is-clickable:focus-visible {
   font-size: 1.15rem;
 }
 
+.leave-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.leave-summary-grid .dashboard-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 116px;
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(201, 221, 221, 0.88);
+  border-top-width: 4px;
+  border-top-style: solid;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 250, 0.94));
+  box-shadow: var(--shadow-soft);
+}
+
+.leave-summary-grid .dashboard-card::after {
+  inset: auto -2rem -3rem auto;
+  width: 7.5rem;
+  height: 7.5rem;
+  opacity: 0.07;
+}
+
+.leave-summary-grid .dashboard-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(21, 59, 73, 0.12);
+}
+
+.leave-summary-grid .dashboard-card p,
+.leave-summary-grid .dashboard-card strong,
+.leave-summary-grid .dashboard-card span {
+  grid-column: 1;
+}
+
+.leave-summary-grid .dashboard-card p {
+  font-weight: 900;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.leave-summary-grid .dashboard-card strong {
+  font-size: clamp(1.55rem, 2vw, 2rem);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.leave-summary-grid .dashboard-card span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.leave-summary-grid .card-icon {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  box-shadow: 0 16px 28px rgba(15, 159, 154, 0.2);
+}
+
+.leave-summary-grid .card-icon i {
+  font-size: 1.15rem;
+}
+
+.leave-summary-grid .dashboard-card.tone-blue .card-icon {
+  background: linear-gradient(135deg, #4e7ae6, #6d5bd0);
+}
+
+.leave-summary-grid .dashboard-card.tone-blue {
+  border-top-color: #4e7ae6;
+}
+
+.leave-summary-grid .dashboard-card.tone-green .card-icon {
+  background: linear-gradient(135deg, #0f9f9a, #31b67a);
+}
+
+.leave-summary-grid .dashboard-card.tone-green {
+  border-top-color: #0f9f9a;
+}
+
+.leave-summary-grid .dashboard-card.tone-orange .card-icon {
+  background: linear-gradient(135deg, #f58f28, #ffb347);
+}
+
+.leave-summary-grid .dashboard-card.tone-orange {
+  border-top-color: #f58f28;
+}
+
+.leave-summary-grid .dashboard-card.tone-pink .card-icon {
+  background: linear-gradient(135deg, #de5ca8, #b15fd6);
+}
+
+.leave-summary-grid .dashboard-card.tone-pink {
+  border-top-color: #de5ca8;
+}
+
+.leave-queue-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 0.25rem 0 1.25rem;
+}
+
+.leave-queue-summary-grid .dashboard-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 116px;
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(201, 221, 221, 0.88);
+  border-top-width: 4px;
+  border-top-style: solid;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 250, 0.94));
+  box-shadow: var(--shadow-soft);
+}
+
+.leave-queue-summary-grid .dashboard-card::after {
+  inset: auto -2rem -3rem auto;
+  width: 7.5rem;
+  height: 7.5rem;
+  opacity: 0.07;
+}
+
+.leave-queue-summary-grid .dashboard-card p,
+.leave-queue-summary-grid .dashboard-card strong,
+.leave-queue-summary-grid .dashboard-card span {
+  grid-column: 1;
+}
+
+.leave-queue-summary-grid .dashboard-card p {
+  font-weight: 900;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.leave-queue-summary-grid .dashboard-card strong {
+  font-size: clamp(1.55rem, 2vw, 2rem);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.leave-queue-summary-grid .dashboard-card span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.leave-queue-summary-grid .card-icon {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  box-shadow: 0 16px 28px rgba(15, 159, 154, 0.2);
+}
+
+.leave-queue-summary-grid .card-icon i {
+  font-size: 1.15rem;
+}
+
+.leave-queue-summary-grid .dashboard-card.tone-teal .card-icon {
+  background: linear-gradient(135deg, #0f9f9a, #3483d3);
+}
+
+.leave-queue-summary-grid .dashboard-card.tone-teal {
+  border-top-color: #0f9f9a;
+}
+
+.leave-queue-summary-grid .dashboard-card.tone-blue .card-icon {
+  background: linear-gradient(135deg, #4e7ae6, #6d5bd0);
+}
+
+.leave-queue-summary-grid .dashboard-card.tone-blue {
+  border-top-color: #4e7ae6;
+}
+
+.leave-queue-summary-grid .dashboard-card.tone-orange .card-icon {
+  background: linear-gradient(135deg, #f58f28, #ffb347);
+}
+
+.leave-queue-summary-grid .dashboard-card.tone-orange {
+  border-top-color: #f58f28;
+}
+
+.leave-queue-summary-grid .dashboard-card.tone-pink .card-icon {
+  background: linear-gradient(135deg, #de5ca8, #b15fd6);
+}
+
+.leave-queue-summary-grid .dashboard-card.tone-pink {
+  border-top-color: #de5ca8;
+}
+
 .smart-summary-backdrop {
   position: fixed;
   inset: 0;
@@ -8454,12 +8656,40 @@ img.profile-avatar.large {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .leave-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .attendance-summary-card {
     min-height: 104px;
     padding: 0.9rem;
   }
 
+  .leave-summary-grid .dashboard-card {
+    min-height: 104px;
+    padding: 0.9rem;
+  }
+
   .attendance-summary-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .leave-summary-grid .card-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .leave-queue-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .leave-queue-summary-grid .dashboard-card {
+    min-height: 104px;
+    padding: 0.9rem;
+  }
+
+  .leave-queue-summary-grid .card-icon {
     width: 48px;
     height: 48px;
   }
@@ -8832,6 +9062,14 @@ img.profile-avatar.large {
   }
 
   .attendance-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .leave-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .leave-queue-summary-grid {
     grid-template-columns: 1fr;
   }
 

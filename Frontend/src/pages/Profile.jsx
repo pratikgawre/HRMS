@@ -99,8 +99,8 @@ function Profile() {
   const [twoFactorQr, setTwoFactorQr] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [storedProfileSnapshot, setStoredProfileSnapshot] = useState(() => buildStoredProfileSnapshot(employee, form, canManagePackageAmount));
   const toastTimerRef = useRef(null);
-  const isHrProfileRoute = location.pathname.startsWith('/hr/profile');
   const twoFactorIssuer = 'Kavya HRMS';
   const twoFactorAccount = employee.email || identity.email || '';
   const twoFactorOtpUri = useMemo(() => {
@@ -119,6 +119,10 @@ function Profile() {
   }, [employee]);
 
   useEffect(() => {
+    setStoredProfileSnapshot(buildStoredProfileSnapshot(employee, createProfileForm(employee), canManagePackageAmount));
+  }, [employee, canManagePackageAmount]);
+
+  useEffect(() => {
     if (location.pathname !== '/hr/profile/view') {
       return undefined;
     }
@@ -131,6 +135,7 @@ function Profile() {
   }, [location.pathname]);
 
   const handleViewProfile = () => {
+    setStoredProfileSnapshot(buildStoredProfileSnapshot(employee, form, canManagePackageAmount));
     const target = document.getElementById('profile-storage-data');
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -141,6 +146,7 @@ function Profile() {
   };
 
   const handleEditProfile = () => {
+    setForm(createProfileForm(storedProfileSnapshot));
     const target = document.getElementById('profile-personal-data');
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -225,49 +231,10 @@ function Profile() {
     { label: 'Location', value: employee.workingLocation || '-' },
   ];
 
-  const storedProfileDetails = [
-    ['Display Name', employee.displayName],
-    ['Job Title', employee.jobTitle],
-    ['Department', employee.department],
-    ['Access Role', employee.accessRole],
-    ['Gender', employee.gender],
-    ['Date of Birth', employee.dateOfBirth],
-    ['Nationality', employee.nationality],
-    ['Working Location', employee.workingLocation],
-    ['Employment Type', employee.employmentType],
-    ['Joining Date', employee.joiningDate],
-    ['Employee ID', employee.managerId],
-    ['Grade', employee.grade],
-    ['Email', employee.email],
-    ['Mobile No.', employee.mobileNo],
-    ['Profile Photo URL', employee.profilePicture],
-    ['Avatar Initials', employee.avatar],
-    ['Blood Group', employee.bloodGroup],
-    ['Marital Status', employee.maritalStatus],
-    ['Highest Qualification', employee.highestQualification],
-    ['Bank Name', employee.bankName],
-    ['Account Type', employee.accountType],
-    ['Account No.', employee.accountNo],
-    ['IFSC Code', employee.ifscCode],
-    ['Present Address 1', employee.presentAddressLine1],
-    ['Present Address 2', employee.presentAddressLine2],
-    ['Present City', employee.presentCityDistrict],
-    ['Present State', employee.presentState],
-    ['Present PIN Code', employee.presentPinCode],
-    ['Present Country', employee.presentCountry],
-    ['Permanent Address 1', employee.permanentAddressLine1],
-    ['Permanent Address 2', employee.permanentAddressLine2],
-    ['Permanent City', employee.permanentCityDistrict],
-    ['Permanent State', employee.permanentState],
-    ['Permanent PIN Code', employee.permanentPinCode],
-    ['Permanent Country', employee.permanentCountry],
-    ['Aadhaar No.', employee.aadhaarCardNo],
-    ['PAN No.', employee.panCardNo],
-    ['UAN No.', employee.pfUanNo],
-    ['ESIC No.', employee.esiNo],
-    ['Two-Factor Auth', employee.twoFactorEnabled ? 'Enabled' : 'Disabled'],
-    ...(canManagePackageAmount ? [['Package Amount', employee.packageAmount]] : []),
-  ];
+  const storedProfileDetails = useMemo(
+    () => buildStoredProfileDetails(storedProfileSnapshot, canManagePackageAmount),
+    [storedProfileSnapshot, canManagePackageAmount],
+  );
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -575,7 +542,7 @@ function Profile() {
               type="button"
               className="profile-action-btn profile-edit-btn"
               title="Edit Profile"
-              onClick={isHrProfileRoute ? handleEditProfile : undefined}
+              onClick={handleEditProfile}
             >
               <i className="ri-edit-line" aria-hidden="true" />
               <span>Edit</span>
@@ -584,7 +551,7 @@ function Profile() {
               type="button"
               className="profile-action-btn profile-view-btn"
               title="View Profile"
-              onClick={isHrProfileRoute ? handleViewProfile : undefined}
+              onClick={handleViewProfile}
             >
               <i className="ri-eye-line" aria-hidden="true" />
               <span>View</span>
@@ -1104,6 +1071,109 @@ function createProfileForm(employee) {
     newPassword: '',
     confirmPassword: '',
   };
+}
+
+function buildStoredProfileSnapshot(employee, form, canManagePackageAmount) {
+  const presentAddressLine1 = String(form?.presentAddressLine1 || employee.presentAddressLine1 || '').trim();
+  const presentAddressLine2 = String(form?.presentAddressLine2 || employee.presentAddressLine2 || '').trim();
+  const presentCityDistrict = String(form?.presentCityDistrict || employee.presentCityDistrict || employee.workingLocation || '').trim();
+  const presentState = String(form?.presentState || employee.presentState || '').trim();
+  const presentPinCode = String(form?.presentPinCode || employee.presentPinCode || '').trim();
+  const presentCountry = String(form?.presentCountry || employee.presentCountry || '').trim();
+  const sameAsAbove = Boolean(form?.sameAsAbove);
+
+  return {
+    ...employee,
+    displayName: String(form?.displayName || employee.displayName || employee.name || '').trim(),
+    name: String(form?.displayName || employee.displayName || employee.name || '').trim(),
+    jobTitle: String(form?.jobTitle || employee.jobTitle || employee.role || '').trim(),
+    role: String(form?.jobTitle || employee.jobTitle || employee.role || '').trim(),
+    department: String(form?.department || employee.department || getDepartmentForRole(employee.accessRole || 'Employee')).trim(),
+    gender: String(form?.gender || employee.gender || '').trim(),
+    dateOfBirth: String(form?.dateOfBirth || employee.dateOfBirth || '').trim(),
+    nationality: String(form?.nationality || employee.nationality || '').trim(),
+    workingLocation: String(form?.workingLocation || employee.workingLocation || '').trim(),
+    employmentType: String(form?.employmentType || employee.employmentType || employee.role || '').trim(),
+    joiningDate: String(form?.joiningDate || employee.joiningDate || '').trim(),
+    managerId: String(form?.managerId || employee.managerId || '').trim(),
+    grade: String(form?.grade || employee.grade || '').trim(),
+    email: String(form?.email || employee.email || '').trim(),
+    mobileNo: String(form?.mobileNo || employee.mobileNo || employee.phone || '').trim(),
+    profilePicture: String(form?.profilePicture || employee.profilePicture || '').trim(),
+    avatar: String(form?.avatar || employee.avatar || getInitials(form?.displayName || employee.displayName || employee.name || '')).trim(),
+    bloodGroup: String(form?.bloodGroup || employee.bloodGroup || '').trim(),
+    maritalStatus: String(form?.maritalStatus || employee.maritalStatus || '').trim(),
+    highestQualification: String(form?.highestQualification || employee.highestQualification || '').trim(),
+    bankName: String(form?.bankName || employee.bankName || '').trim(),
+    accountType: String(form?.accountType || employee.accountType || '').trim(),
+    accountNo: String(form?.accountNo || employee.accountNo || '').trim(),
+    ifscCode: String(form?.ifscCode || employee.ifscCode || '').trim(),
+    presentAddressLine1,
+    presentAddressLine2,
+    presentCityDistrict,
+    presentState,
+    presentPinCode,
+    presentCountry,
+    permanentAddressLine1: sameAsAbove ? presentAddressLine1 : String(form?.permanentAddressLine1 || employee.permanentAddressLine1 || '').trim(),
+    permanentAddressLine2: sameAsAbove ? presentAddressLine2 : String(form?.permanentAddressLine2 || employee.permanentAddressLine2 || '').trim(),
+    permanentCityDistrict: sameAsAbove ? presentCityDistrict : String(form?.permanentCityDistrict || employee.permanentCityDistrict || '').trim(),
+    permanentState: sameAsAbove ? presentState : String(form?.permanentState || employee.permanentState || '').trim(),
+    permanentPinCode: sameAsAbove ? presentPinCode : String(form?.permanentPinCode || employee.permanentPinCode || '').trim(),
+    permanentCountry: sameAsAbove ? presentCountry : String(form?.permanentCountry || employee.permanentCountry || '').trim(),
+    aadhaarCardNo: String(form?.aadhaarCardNo || employee.aadhaarCardNo || '').trim(),
+    panCardNo: String(form?.panCardNo || employee.panCardNo || '').trim(),
+    pfUanNo: String(form?.pfUanNo || employee.pfUanNo || '').trim(),
+    esiNo: String(form?.esiNo || employee.esiNo || '').trim(),
+    twoFactorEnabled: Boolean(form?.twoFactorEnabled ?? employee.twoFactorEnabled),
+    twoFactorSecret: String(form?.twoFactorSecret || employee.twoFactorSecret || '').trim(),
+    packageAmount: canManagePackageAmount ? String(form?.packageAmount || employee.packageAmount || '').trim() : String(employee.packageAmount || '').trim(),
+  };
+}
+
+function buildStoredProfileDetails(employee, canManagePackageAmount) {
+  return [
+    ['Display Name', employee.displayName],
+    ['Job Title', employee.jobTitle],
+    ['Department', employee.department],
+    ['Access Role', employee.accessRole],
+    ['Gender', employee.gender],
+    ['Date of Birth', employee.dateOfBirth],
+    ['Nationality', employee.nationality],
+    ['Working Location', employee.workingLocation],
+    ['Employment Type', employee.employmentType],
+    ['Joining Date', employee.joiningDate],
+    ['Employee ID', employee.managerId],
+    ['Grade', employee.grade],
+    ['Email', employee.email],
+    ['Mobile No.', employee.mobileNo],
+    ['Profile Photo URL', employee.profilePicture],
+    ['Avatar Initials', employee.avatar],
+    ['Blood Group', employee.bloodGroup],
+    ['Marital Status', employee.maritalStatus],
+    ['Highest Qualification', employee.highestQualification],
+    ['Bank Name', employee.bankName],
+    ['Account Type', employee.accountType],
+    ['Account No.', employee.accountNo],
+    ['IFSC Code', employee.ifscCode],
+    ['Present Address 1', employee.presentAddressLine1],
+    ['Present Address 2', employee.presentAddressLine2],
+    ['Present City', employee.presentCityDistrict],
+    ['Present State', employee.presentState],
+    ['Present PIN Code', employee.presentPinCode],
+    ['Present Country', employee.presentCountry],
+    ['Permanent Address 1', employee.permanentAddressLine1],
+    ['Permanent Address 2', employee.permanentAddressLine2],
+    ['Permanent City', employee.permanentCityDistrict],
+    ['Permanent State', employee.permanentState],
+    ['Permanent PIN Code', employee.permanentPinCode],
+    ['Permanent Country', employee.permanentCountry],
+    ['Aadhaar No.', employee.aadhaarCardNo],
+    ['PAN No.', employee.panCardNo],
+    ['UAN No.', employee.pfUanNo],
+    ['ESIC No.', employee.esiNo],
+    ['Two-Factor Auth', employee.twoFactorEnabled ? 'Enabled' : 'Disabled'],
+    ...(canManagePackageAmount ? [['Package Amount', employee.packageAmount]] : []),
+  ];
 }
 
 function validateProfileSection(form, section, canManagePackageAmount) {
