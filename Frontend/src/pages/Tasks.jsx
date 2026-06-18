@@ -8,7 +8,7 @@ import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitials } from '../utils/user-management.js';
-import { loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
+import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
 import {
   getEmployeeId,
   getEmployeeName,
@@ -86,17 +86,15 @@ function Tasks() {
     const refreshData = () => {
       Promise.all([
         loadTasksWithSeed(),
-        isTeamLead && currentEmployeeId
-          ? safeApiRequest(`/team-lead/${currentEmployeeId}/projects`, [])
-          : safeApiRequest('/projects', []),
-        isTeamLead ? Promise.resolve([]) : safeApiRequest('/employees', people),
-      ]).then(([rows, projectRows, employeeRows]) => {
+        safeApiRequest('/employees', people),
+        safeApiRequest('/projects', []),
+      ]).then(([rows, employeeRows, projectRows]) => {
         if (!active) {
           return;
         }
 
         setTaskRows(Array.isArray(rows) ? rows.map(normalizeTaskRow) : []);
-        setEmployees(isTeamLead ? [] : normalizeEmployees(employeeRows));
+        setEmployees(normalizeEmployees(employeeRows));
         setProjects(normalizeProjectRows(projectRows));
       });
     };
@@ -126,9 +124,9 @@ function Tasks() {
   ), [form.projectId, isTeamLead, teamLeadProjects]);
   const teamLeadAssigneeOptions = useMemo(() => (
     isTeamLead
-      ? getProjectAssigneeOptions(selectedProject, [], currentEmployeeId)
+      ? getProjectAssigneeOptions(selectedProject, employees, currentEmployeeId)
       : []
-  ), [currentEmployeeId, isTeamLead, selectedProject]);
+  ), [currentEmployeeId, employees, isTeamLead, selectedProject]);
   const assigneeOptions = useMemo(() => (
     isTeamLead
       ? teamLeadAssigneeOptions
@@ -166,7 +164,7 @@ function Tasks() {
   const openTaskModal = () => {
     setForm(getEmptyTaskForm({
       teamLeadMode: isTeamLead,
-      projectId: '',
+      projectId: selectedProject?.id || teamLeadProjects[0]?.id || '',
     }));
     setMessage('');
     setIsTaskModalOpen(true);
@@ -223,7 +221,7 @@ function Tasks() {
           return;
         }
 
-        const allowedEmployees = getProjectAssigneeOptions(project, [], currentEmployeeId);
+        const allowedEmployees = getProjectAssigneeOptions(project, employees, currentEmployeeId);
         const assignee = allowedEmployees.find((employee) => getEmployeeId(employee) === form.assignedToId) || null;
         if (!assignee) {
           setMessage('Please select a valid employee for the selected project.');
@@ -250,7 +248,6 @@ function Tasks() {
           projectId: project.id,
           projectName: project.name || '',
           projectCode: project.projectCode || project.id || '',
-          createdDateTime: new Date().toISOString(),
         };
 
         const saved = await apiRequest('/tasks', {
@@ -294,9 +291,6 @@ function Tasks() {
         dueDate: form.dueDate,
         status: form.status,
         projectId: form.projectId || '',
-        projectName: selectedProject?.name || '',
-        projectCode: selectedProject?.projectCode || selectedProject?.id || '',
-        createdDateTime: new Date().toISOString(),
       };
 
       const saved = await apiRequest('/tasks', {
