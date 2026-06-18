@@ -1,292 +1,163 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import DataTable from '../components/DataTable.jsx';
-import { Section, Hero } from './AdminDashboard.jsx';
-import { attendanceColumns } from './EmployeeDashboard.jsx';
+import { useEffect, useMemo, useState } from 'react';
+import { Hero, Section } from './AdminDashboard.jsx';
 import {
+  ATTENDANCE_POLICY,
   applyCheckOutToRecord,
   createCheckInRecord,
   getAttendanceEmployee,
-  getDurationLabel,
   getLateCheckInCountForMonth,
   getTodayLabel,
   refreshStoredAttendanceRows,
   saveAttendanceRows,
 } from '../utils/attendanceStorage.js';
+import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
+import { refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
 
-const attendanceStatusOptions = ['Present', 'Half Day', 'Late', 'Absent', 'Leave'];
-const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
-
-function EmployeeAttendance() {
-  const location = useLocation();
+function EmployeeAttendance({ viewMode = 'auto' }) {
   const role = getSessionValue('kavyaRole') || 'employee';
-  const isEmployeeView = role === 'employee';
-  const isTeamLeadView = role === 'teamLead';
-  const [attendance, setAttendance] = useState([]);
-  const [status, setStatus] = useState('All');
-  const [dateRange, setDateRange] = useState('day');
-  const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(new Date()));
-  const [selectedMonth, setSelectedMonth] = useState(() => getMonthInputValue(new Date()));
-  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
-  const [customDraftMonth, setCustomDraftMonth] = useState(() => String(new Date().getMonth()));
-  const [customDraftYear, setCustomDraftYear] = useState(() => String(new Date().getFullYear()));
-  const [message, setMessage] = useState('');
-  const [editingRecord, setEditingRecord] = useState(null);
-  const [correctionForm, setCorrectionForm] = useState(() => getEmptyCorrectionForm());
-  const [dataState, setDataState] = useState({ loading: true, error: '' });
-  const customSelectionSnapshot = useRef({ dateRange: 'day', selectedMonth: getMonthInputValue(new Date()) });
+  const employeeIdentity = getCurrentEmployeeIdentity();
   const attendanceEmployee = getAttendanceEmployee();
-  const todayLabel = getTodayLabel();
-  const todayInputValue = getDateInputValue(new Date());
-  const attendanceEmployeeRows = useMemo(() => (
-    attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId)
-  ), [attendance, attendanceEmployee.employeeId]);
-  const teamLeadRows = useMemo(() => (
-    attendance.filter((row) => teamLeadMemberIds.includes(row.employeeId))
-  ), [attendance]);
+  const [attendance, setAttendance] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState(() => getMonthInputValue(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(new Date()));
+  const [selectedStatus, setSelectedStatus] = useState('All');
+  const [message, setMessage] = useState('');
+  const [dataState, setDataState] = useState({ loading: true, error: '' });
 
-  const scopedRows = useMemo(() => (
-    isEmployeeView
-      ? attendanceEmployeeRows
-      : isTeamLeadView
-        ? teamLeadRows
-        : attendance
-  ), [attendance, attendanceEmployeeRows, isEmployeeView, isTeamLeadView, teamLeadRows]);
+  const canUseSelfAttendance = role !== 'admin';
+  const today = new Date();
+  const todayLabel = getTodayLabel(today);
+  const currentMonthValue = getMonthInputValue(today);
 
-  const rows = useMemo(() => scopedRows.filter((row) => {
-    const matchesStatus = status === 'All' || row.status === status;
-    const matchesRange = isRowWithinSelectedRange(row, dateRange, selectedDate, selectedMonth);
-
-    return matchesStatus && matchesRange;
-  }), [dateRange, scopedRows, selectedDate, selectedMonth, status]);
-  const todayRecord = attendance.find((row) => row.employeeId === attendanceEmployee.employeeId && row.date === todayLabel);
-  const canCheckIn = (isEmployeeView || isTeamLeadView) && !todayRecord;
-  const canCheckOut = (isEmployeeView || isTeamLeadView) && Boolean(todayRecord?.checkInAt && !todayRecord?.checkOutAt);
-  const rangeLabel = getRangeLabel(dateRange, selectedDate, selectedMonth);
-  const yearOptions = useMemo(() => buildYearOptions(), []);
+  useEffect(() => {
+    if (!selectedDate.startsWith(selectedMonth)) {
+      setSelectedDate(`${selectedMonth}-01`);
+    }
+  }, [selectedMonth, selectedDate]);
 
   useEffect(() => {
     let mounted = true;
-    const refreshAttendance = async () => {
+
+    const refreshAll = async () => {
       try {
-        const rows = await refreshStoredAttendanceRows();
-        if (mounted && Array.isArray(rows)) {
-          setAttendance(rows);
-          setDataState((current) => ({ ...current, loading: false, error: '' }));
+        const [attendanceRows, leaveRows] = await Promise.all([
+          refreshStoredAttendanceRows(),
+          refreshStoredLeaveRequests(),
+        ]);
+
+        if (!mounted) {
+          return;
         }
+
+        setAttendance(Array.isArray(attendanceRows) ? attendanceRows : []);
+        setLeaveRequests(Array.isArray(leaveRows) ? leaveRows : []);
+        setDataState({ loading: false, error: '' });
       } catch {
-        if (mounted) {
-          setAttendance([]);
-          setDataState({ loading: false, error: 'Unable to load attendance data right now.' });
+        if (!mounted) {
+          return;
         }
+
+        setAttendance([]);
+        setLeaveRequests([]);
+        setDataState({ loading: false, error: 'Unable to load attendance or leave data right now.' });
       }
     };
 
-    refreshAttendance();
-    const intervalId = window.setInterval(refreshAttendance, 60 * 1000);
-    window.addEventListener('storage', refreshAttendance);
-    window.addEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
+    refreshAll();
+
+    const intervalId = window.setInterval(refreshAll, 60 * 1000);
+    window.addEventListener('storage', refreshAll);
+    window.addEventListener('kavyaAttendanceRowsChanged', refreshAll);
+    window.addEventListener('kavyaLeaveRequestsChanged', refreshAll);
 
     return () => {
       mounted = false;
       window.clearInterval(intervalId);
-      window.removeEventListener('storage', refreshAttendance);
-      window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
+      window.removeEventListener('storage', refreshAll);
+      window.removeEventListener('kavyaAttendanceRowsChanged', refreshAll);
+      window.removeEventListener('kavyaLeaveRequestsChanged', refreshAll);
     };
   }, []);
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const nextStatus = params.get('status');
-    if (nextStatus && attendanceStatusOptions.includes(nextStatus)) {
-      setStatus(nextStatus);
-    }
-  }, [location.search]);
+  const monthCalendar = useMemo(() => (
+    buildAttendanceCalendar({
+      monthValue: selectedMonth,
+      attendanceRows: attendance,
+      leaveRequests,
+      employeeId: attendanceEmployee.employeeId || employeeIdentity.employeeId,
+      employeeName: attendanceEmployee.employee || employeeIdentity.employeeName,
+      currentDate: today,
+      selectedDate,
+    })
+  ), [
+    attendance,
+    attendanceEmployee.employee,
+    attendanceEmployee.employeeId,
+    employeeIdentity.employeeId,
+    employeeIdentity.employeeName,
+    leaveRequests,
+    selectedDate,
+    selectedMonth,
+  ]);
 
-  const updateAttendance = (updater) => {
+  useEffect(() => {
+    if (selectedStatus === 'All') {
+      return;
+    }
+
+    const nextMatch = monthCalendar.days.find((day) => !day.blank && day.statusLabel === selectedStatus);
+    if (nextMatch && nextMatch.dateKey !== selectedDate) {
+      setSelectedDate(nextMatch.dateKey);
+    }
+  }, [monthCalendar.days, selectedDate, selectedStatus]);
+
+  const selectedDay = monthCalendar.days.find((day) => day.dateKey === selectedDate) || monthCalendar.todayDay || monthCalendar.days.find((day) => !day.blank) || null;
+  const myRows = useMemo(() => attendance.filter((row) => matchesEmployee(row, attendanceEmployee.employeeId, attendanceEmployee.employee)), [attendance, attendanceEmployee.employee, attendanceEmployee.employeeId]);
+  const todayRecord = myRows.find((row) => getAttendanceDateKey(row) === getDateInputValue(today));
+  const todayLeave = findApprovedLeaveForDate(leaveRequests, employeeIdentity, today);
+  const canCheckIn = canUseSelfAttendance && !todayRecord && !todayLeave;
+  const canCheckOut = canUseSelfAttendance && Boolean(todayRecord?.checkInAt && !todayRecord?.checkOutAt && !todayLeave);
+  const todayStatusLabel = getTodayAttendanceLabel({ todayRecord, todayLeave, currentDate: today });
+  const todayStatusCopy = getTodayAttendanceCopy({ todayRecord, todayLeave, currentDate: today });
+
+  const updateAttendance = (updater, successMessage) => {
     setAttendance((current) => {
       const next = updater(current);
-      saveAttendanceRows(next);
+      saveAttendanceRows(next).catch(() => {
+        setMessage('Attendance could not be saved right now.');
+      });
       return next;
     });
+
+    if (successMessage) {
+      setMessage(successMessage);
+    }
   };
 
   const checkIn = () => {
     const now = new Date();
     updateAttendance((current) => [
       createCheckInRecord(attendanceEmployee, now, getLateCheckInCountForMonth(current, attendanceEmployee.employeeId, now)),
-      ...current.filter((row) => !(row.employeeId === attendanceEmployee.employeeId && row.date === todayLabel)),
-    ]);
-    setMessage('Checked in successfully. Day status will finalize at check-out.');
+      ...current.filter((row) => !matchesDayAndEmployee(row, attendanceEmployee.employeeId, todayLabel)),
+    ], 'Checked in successfully. Calendar updated in real time.');
   };
 
   const checkOut = () => {
     const now = new Date();
     updateAttendance((current) => current.map((row) => (
-      row.employeeId === attendanceEmployee.employeeId && row.date === todayLabel
+      matchesDayAndEmployee(row, attendanceEmployee.employeeId, todayLabel)
         ? applyCheckOutToRecord(row, now)
         : row
-    )));
-    setMessage('Checked out successfully. Attendance status updated by office timing policy.');
+    )), 'Checked out successfully. Calendar updated in real time.');
   };
-
-  const openCustomMonthPicker = () => {
-    customSelectionSnapshot.current = {
-      dateRange,
-      selectedMonth,
-    };
-
-    const currentMonth = getMonthFromInputValue(selectedMonth);
-    setCustomDraftMonth(String(currentMonth.getMonth()));
-    setCustomDraftYear(String(currentMonth.getFullYear()));
-    setDateRange('custom');
-    setIsCustomModalOpen(true);
-  };
-
-  const closeCustomMonthPicker = () => {
-    setDateRange(customSelectionSnapshot.current.dateRange);
-    setSelectedMonth(customSelectionSnapshot.current.selectedMonth);
-    setIsCustomModalOpen(false);
-  };
-
-  const applyCustomMonthPicker = (event) => {
-    event.preventDefault();
-    const monthIndex = Number.parseInt(customDraftMonth, 10);
-    const year = Number.parseInt(customDraftYear, 10);
-
-    if (!Number.isFinite(monthIndex) || !Number.isFinite(year)) {
-      return;
-    }
-
-    setSelectedMonth(getMonthInputValue(new Date(year, monthIndex, 1)));
-    setDateRange('custom');
-    setIsCustomModalOpen(false);
-  };
-
-  const handleRangeChange = (event) => {
-    const nextRange = event.target.value;
-    if (nextRange === 'custom') {
-      openCustomMonthPicker();
-      return;
-    }
-
-    setDateRange(nextRange);
-  };
-
-  const openCorrection = (row) => {
-    setEditingRecord({ employeeId: row.employeeId, date: row.date });
-    setCorrectionForm({
-      checkIn: getTimeInputValue(row.checkInAt, row.checkIn),
-      checkOut: getTimeInputValue(row.checkOutAt, row.checkOut),
-      status: attendanceStatusOptions.includes(row.status) ? row.status : 'Present',
-    });
-    setMessage('');
-  };
-
-  const closeCorrection = () => {
-    setEditingRecord(null);
-    setCorrectionForm(getEmptyCorrectionForm());
-  };
-
-  const saveCorrection = (event) => {
-    event.preventDefault();
-    if (!editingRecord) {
-      return;
-    }
-
-    const checkInAt = buildAttendanceIso(editingRecord.date, correctionForm.checkIn);
-    const checkOutAt = buildAttendanceIso(editingRecord.date, correctionForm.checkOut);
-
-    if (correctionForm.checkIn && !checkInAt) {
-      setMessage('Unable to parse check-in date and time for this record.');
-      return;
-    }
-
-    if (correctionForm.checkOut && !checkOutAt) {
-      setMessage('Unable to parse check-out date and time for this record.');
-      return;
-    }
-
-    if (checkOutAt && !checkInAt) {
-      setMessage('Add check-in time before adding check-out time.');
-      return;
-    }
-
-    if (checkInAt && checkOutAt && new Date(checkOutAt) <= new Date(checkInAt)) {
-      setMessage('Check-out time must be later than check-in time.');
-      return;
-    }
-
-    updateAttendance((current) => current.map((row) => {
-      if (row.employeeId !== editingRecord.employeeId || row.date !== editingRecord.date) {
-        return row;
-      }
-
-      const updated = {
-        ...row,
-        checkIn: checkInAt ? getTimeLabelFromIso(checkInAt) : '-',
-        checkOut: checkOutAt ? getTimeLabelFromIso(checkOutAt) : '-',
-        hours: checkInAt && checkOutAt ? getDurationLabel(checkInAt, checkOutAt) : '-',
-        status: correctionForm.status,
-      };
-
-      if (checkInAt) {
-        updated.checkInAt = checkInAt;
-      } else {
-        delete updated.checkInAt;
-      }
-
-      if (checkOutAt) {
-        updated.checkOutAt = checkOutAt;
-      } else {
-        delete updated.checkOutAt;
-      }
-
-      return updated;
-    }));
-
-    setMessage('Attendance record corrected successfully.');
-    closeCorrection();
-  };
-
-  const editingRow = editingRecord
-    ? attendance.find((row) => row.employeeId === editingRecord.employeeId && row.date === editingRecord.date)
-    : null;
-
-  const columns = [
-    ...(!isEmployeeView && !isTeamLeadView ? [{
-      key: 'employee',
-      label: 'Employee',
-      render: (row) => (
-        <div className="employee-cell">
-          <span>{row.avatar}</span>
-          <div>
-            <strong>{row.employee}</strong>
-            <small>{row.employeeId}</small>
-          </div>
-        </div>
-      ),
-    }] : []),
-    ...attendanceColumns,
-    ...(!isEmployeeView && !isTeamLeadView ? [{
-      key: 'actions',
-      label: 'Actions',
-      render: (row) => (
-        <div className="table-actions">
-          <button type="button" onClick={() => openCorrection(row)}><i className="ri-edit-2-line" aria-hidden="true" />Correct</button>
-        </div>
-      ),
-    }] : []),
-  ];
 
   return (
     <>
       <Hero
         title="Attendance"
-        copy={isTeamLeadView
-          ? 'Review your team attendance while keeping your own check-in and check-out available.'
-          : 'Review daily punches, monthly presence, late marks, and leave-day attendance records.'}
+        copy="Track your live check-in and check-out on a calendar, with approved leave, absent days, and half-day status pulled from the database."
       />
 
       {message && (
@@ -295,12 +166,14 @@ function EmployeeAttendance() {
           <span>{message}</span>
         </div>
       )}
+
       {dataState.loading && (
         <div className="user-alert" role="status">
           <i className="ri-loader-4-line" aria-hidden="true" />
           <span>Loading attendance data...</span>
         </div>
       )}
+
       {dataState.error && (
         <div className="user-alert" role="status">
           <i className="ri-alert-line" aria-hidden="true" />
@@ -308,16 +181,13 @@ function EmployeeAttendance() {
         </div>
       )}
 
-      <Section
-        title={isTeamLeadView ? 'Team Attendance Register' : isEmployeeView ? 'My Attendance Register' : 'Attendance Register'}
-        action={!isEmployeeView && !isTeamLeadView ? 'Download CSV' : ''}
-      >
-        {(isEmployeeView || isTeamLeadView) && (
+      <Section title="My Attendance Calendar" action="Live">
+        {canUseSelfAttendance && (
           <div className="attendance-action-panel">
             <div>
               <span>Today</span>
-              <strong>{todayRecord?.checkIn || 'Not checked in'}</strong>
-              <small>{todayRecord?.checkOut && todayRecord.checkOut !== '-' ? `Checked out at ${todayRecord.checkOut}` : 'Use the buttons to update your day'}</small>
+              <strong>{todayStatusLabel}</strong>
+              <small>{todayStatusCopy}</small>
             </div>
             <div className="attendance-actions">
               <button className="payroll-primary" type="button" disabled={!canCheckIn} onClick={checkIn}>
@@ -331,177 +201,522 @@ function EmployeeAttendance() {
             </div>
           </div>
         )}
-        <div className="page-toolbar compact">
-          <select value={dateRange} onChange={handleRangeChange} aria-label="Filter attendance range">
-            <option value="day">Day</option>
-            <option value="last7">Last 7 Days</option>
-            <option value="last15">Last 15 Days</option>
-            <option value="month">Month</option>
-            <option value="custom">Custom</option>
-            <option value="all">All</option>
-          </select>
-          {(dateRange === 'day' || dateRange === 'last7' || dateRange === 'last15') && (
-            <label className="toolbar-date">
-              <i className="ri-calendar-line" aria-hidden="true" />
-              <input
-                type="date"
-                value={selectedDate}
-                max={todayInputValue}
-                onChange={(event) => setSelectedDate(event.target.value || todayInputValue)}
-                aria-label="Select reference attendance date"
-              />
-            </label>
-          )}
-          {dateRange === 'month' && (
-            <label className="toolbar-date">
-              <i className="ri-calendar-line" aria-hidden="true" />
-              <input
-                type="month"
-                value={selectedMonth}
-                max={getMonthInputValue(new Date())}
-                onChange={(event) => setSelectedMonth(event.target.value || getMonthInputValue(new Date()))}
-                aria-label="Select attendance month"
-              />
-            </label>
-          )}
-          {dateRange === 'custom' && (
-            <button
-              type="button"
-              className="toolbar-chip toolbar-chip-button"
-              onClick={openCustomMonthPicker}
-              aria-label="Edit custom attendance month"
-            >
-              <span>{getMonthLabel(selectedMonth)}</span>
-              <i className="ri-pencil-line" aria-hidden="true" />
-            </button>
-          )}
-          <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter attendance status">
-            <option>All</option>
-            <option>Present</option>
-            <option>Half Day</option>
-            <option>Absent</option>
-            <option>Late</option>
-            <option>Leave</option>
-          </select>
+
+        <div className="attendance-calendar-card">
+          <div className="attendance-calendar-head">
+            <div className="attendance-calendar-copy">
+              <span>My Attendance</span>
+              <h4>{monthCalendar.monthLabel}</h4>
+              <p>
+                Present, half-day, absent, and approved leave are rendered from live database records.
+                Missing attendance on a past day is marked absent automatically.
+              </p>
+            </div>
+
+            <div className="attendance-calendar-head-right">
+              <div className="attendance-calendar-filters">
+                <label className="attendance-calendar-filter">
+                  <span>Month</span>
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    max={currentMonthValue}
+                    onChange={(event) => setSelectedMonth(event.target.value || currentMonthValue)}
+                    aria-label="Select attendance month"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="payroll-secondary"
+                  onClick={() => {
+                    const value = getMonthInputValue(new Date());
+                    setSelectedMonth(value);
+                    setSelectedDate(getDateInputValue(new Date()));
+                  }}
+                >
+                  This Month
+                </button>
+              </div>
+
+              <div className="attendance-calendar-summary">
+                <button
+                  type="button"
+                  className={`attendance-calendar-summary-card attendance-calendar-summary-card--present ${selectedStatus === 'Present' ? 'is-active' : ''}`}
+                  onClick={() => setSelectedStatus('Present')}
+                >
+                  <strong>{String(monthCalendar.summary.presentDays).padStart(2, '0')}</strong>
+                  <span>Present</span>
+                </button>
+                <button
+                  type="button"
+                  className={`attendance-calendar-summary-card attendance-calendar-summary-card--half-day ${selectedStatus === 'Half Day' ? 'is-active' : ''}`}
+                  onClick={() => setSelectedStatus('Half Day')}
+                >
+                  <strong>{String(monthCalendar.summary.halfDayDays).padStart(2, '0')}</strong>
+                  <span>Half Day</span>
+                </button>
+                <button
+                  type="button"
+                  className={`attendance-calendar-summary-card attendance-calendar-summary-card--leave ${selectedStatus === 'Leave' ? 'is-active' : ''}`}
+                  onClick={() => setSelectedStatus('Leave')}
+                >
+                  <strong>{String(monthCalendar.summary.leaveDays).padStart(2, '0')}</strong>
+                  <span>Leave</span>
+                </button>
+                <button
+                  type="button"
+                  className={`attendance-calendar-summary-card attendance-calendar-summary-card--absent ${selectedStatus === 'Absent' ? 'is-active' : ''}`}
+                  onClick={() => setSelectedStatus('Absent')}
+                >
+                  <strong>{String(monthCalendar.summary.absentDays).padStart(2, '0')}</strong>
+                  <span>Absent</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="attendance-calendar-filter-hint">
+            <span>Showing</span>
+            <strong>{selectedStatus}</strong>
+            {selectedStatus !== 'All' && (
+              <button type="button" className="attendance-calendar-reset" onClick={() => setSelectedStatus('All')}>
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div className="attendance-calendar-legend" aria-label="Attendance legend">
+            <div className="attendance-calendar-legend-item">
+              <span className="attendance-calendar-legend-dot attendance-calendar-legend-dot--present" />
+              <div>
+                <strong>Present</strong>
+                <small>Full-day attendance from check-in and check-out.</small>
+              </div>
+            </div>
+            <div className="attendance-calendar-legend-item">
+              <span className="attendance-calendar-legend-dot attendance-calendar-legend-dot--half-day" />
+              <div>
+                <strong>Half Day</strong>
+                <small>Separate amber color for partial-day attendance.</small>
+              </div>
+            </div>
+            <div className="attendance-calendar-legend-item">
+              <span className="attendance-calendar-legend-dot attendance-calendar-legend-dot--leave" />
+              <div>
+                <strong>Leave</strong>
+                <small>Approved leave pulled directly from the leave table.</small>
+              </div>
+            </div>
+            <div className="attendance-calendar-legend-item">
+              <span className="attendance-calendar-legend-dot attendance-calendar-legend-dot--absent" />
+              <div>
+                <strong>Absent</strong>
+                <small>No attendance or leave record for a past date.</small>
+              </div>
+            </div>
+          </div>
+
+          <div className="attendance-calendar-grid attendance-calendar-grid--weekdays" aria-hidden="true">
+            {WEEKDAY_LABELS.map((label) => <span key={label}>{label}</span>)}
+          </div>
+
+          <div className="attendance-calendar-grid" role="grid" aria-label={`${monthCalendar.monthLabel} attendance calendar`}>
+            {monthCalendar.days.map((cell) => {
+              if (cell.blank) {
+                return <div key={cell.key} className="attendance-calendar-day attendance-calendar-day--blank" aria-hidden="true" />;
+              }
+
+              const active = cell.dateKey === selectedDate;
+              const muted = selectedStatus !== 'All' && cell.statusLabel !== selectedStatus;
+
+              return (
+                <button
+                  key={cell.key}
+                  type="button"
+                  className={`attendance-calendar-day attendance-calendar-day--${cell.tone} ${cell.isToday ? 'attendance-calendar-day--today' : ''} ${active ? 'attendance-calendar-day--active' : ''} ${muted ? 'attendance-calendar-day--muted' : ''}`}
+                  onClick={() => setSelectedDate(cell.dateKey)}
+                  aria-label={`${cell.longLabel}, ${cell.statusLabel}`}
+                >
+                  <span className="attendance-calendar-day-number">{cell.dayNumber}</span>
+                  <span className="attendance-calendar-day-status">{cell.statusLabel}</span>
+                  <small>{cell.detail}</small>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="attendance-calendar-day-detail">
+            <div>
+              <span>{selectedDay?.isToday ? 'Today' : 'Selected Day'}</span>
+              <h5>{selectedDay?.longLabel || monthCalendar.monthLabel}</h5>
+              <p>{selectedDay?.detail || 'Pick a date on the calendar to view its attendance details.'}</p>
+            </div>
+            <div className={`attendance-calendar-day-detail-badge attendance-calendar-day-detail-badge--${selectedDay?.tone || 'upcoming'}`}>
+              {selectedDay?.statusLabel || 'Upcoming'}
+            </div>
+          </div>
         </div>
-        <DataTable columns={columns} rows={rows} emptyMessage={`No attendance records found for ${rangeLabel}.`} />
       </Section>
-
-      {isCustomModalOpen && (
-        <CustomMonthPickerModal
-          month={customDraftMonth}
-          year={customDraftYear}
-          yearOptions={yearOptions}
-          onMonthChange={setCustomDraftMonth}
-          onYearChange={setCustomDraftYear}
-          onClose={closeCustomMonthPicker}
-          onSubmit={applyCustomMonthPicker}
-        />
-      )}
-
-      {editingRow && !isTeamLeadView && (
-        <AttendanceCorrectionModal
-          row={editingRow}
-          form={correctionForm}
-          onChange={(field, value) => setCorrectionForm((current) => ({ ...current, [field]: value }))}
-          onClose={closeCorrection}
-          onSubmit={saveCorrection}
-        />
-      )}
     </>
   );
 }
 
-function AttendanceCorrectionModal({ row, form, onChange, onClose, onSubmit }) {
-  return (
-    <div className="payroll-modal-backdrop" role="presentation">
-      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Correct attendance entry">
-        <div className="payroll-modal-head">
-          <h3>Correct Attendance</h3>
-          <button type="button" onClick={onClose} aria-label="Close attendance correction modal"><i className="ri-close-line" aria-hidden="true" /></button>
-        </div>
-
-        <form className="salary-form" onSubmit={onSubmit}>
-          <div className="field readonly-field">
-            <span>Employee</span>
-            <strong>{row.employee}</strong>
-            <small>{row.employeeId} - {row.date}</small>
-          </div>
-          <label className="field">
-            <span>Check In</span>
-            <input type="time" value={form.checkIn} onChange={(event) => onChange('checkIn', event.target.value)} />
-          </label>
-          <label className="field">
-            <span>Check Out</span>
-            <input type="time" value={form.checkOut} onChange={(event) => onChange('checkOut', event.target.value)} />
-          </label>
-          <label className="field">
-            <span>Status</span>
-            <select value={form.status} onChange={(event) => onChange('status', event.target.value)}>
-              {attendanceStatusOptions.map((item) => <option key={item}>{item}</option>)}
-            </select>
-          </label>
-
-          <div className="salary-form-actions">
-            <button className="payroll-primary" type="submit">Save Correction</button>
-            <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
-          </div>
-        </form>
-      </section>
-    </div>
-  );
-}
-
-function CustomMonthPickerModal({ month, year, yearOptions, onMonthChange, onYearChange, onClose, onSubmit }) {
-  return (
-    <div className="payroll-modal-backdrop" role="presentation">
-      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Custom attendance month picker">
-        <div className="payroll-modal-head">
-          <h3>Select Month</h3>
-          <button type="button" onClick={onClose} aria-label="Close custom month picker">
-            <i className="ri-close-line" aria-hidden="true" />
-          </button>
-        </div>
-
-        <form className="salary-form" onSubmit={onSubmit}>
-          <label className="field">
-            <span>Month</span>
-            <select value={month} onChange={(event) => onMonthChange(event.target.value)}>
-              {MONTH_OPTIONS.map((item, index) => (
-                <option key={item.value} value={String(index)}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Year</span>
-            <select value={year} onChange={(event) => onYearChange(event.target.value)}>
-              {yearOptions.map((item) => (
-                <option key={item} value={String(item)}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="salary-form-actions">
-            <button className="payroll-primary" type="submit">Apply</button>
-            <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
-          </div>
-        </form>
-      </section>
-    </div>
-  );
-}
-
-function getEmptyCorrectionForm() {
-  return {
-    checkIn: '',
-    checkOut: '',
-    status: 'Present',
+function buildAttendanceCalendar({ monthValue, attendanceRows, leaveRequests, employeeId, employeeName, currentDate, selectedDate }) {
+  const monthDate = getMonthFromInputValue(monthValue);
+  const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+  const monthLabel = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' }).format(monthStart);
+  const todayStart = startOfDay(currentDate);
+  const leadingBlanks = (monthStart.getDay() + 6) % 7;
+  const days = [];
+  const summary = {
+    presentDays: 0,
+    halfDayDays: 0,
+    leaveDays: 0,
+    absentDays: 0,
+    lateDays: 0,
   };
+
+  for (let index = 0; index < leadingBlanks; index += 1) {
+    days.push({ blank: true, key: `blank-${index}` });
+  }
+
+  for (let day = 1; day <= monthEnd.getDate(); day += 1) {
+    const date = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
+    const dateKey = getDateInputValue(date);
+    const attendanceRecord = getBestAttendanceRecord(attendanceRows, employeeId, date);
+    const leaveRecord = findApprovedLeaveForDate(leaveRequests, { employeeId, employeeName }, date);
+    const isToday = isSameDate(date, currentDate);
+    const isFuture = date > todayStart;
+    const cell = resolveCalendarCell({
+      date,
+      dateKey,
+      attendanceRecord,
+      leaveRecord,
+      isToday,
+      isFuture,
+      currentDate,
+    });
+
+    if (cell.statusLabel === 'Present') {
+      summary.presentDays += 1;
+    } else if (cell.statusLabel === 'Half Day') {
+      summary.halfDayDays += 1;
+    } else if (cell.statusLabel === 'Leave') {
+      summary.leaveDays += 1;
+    } else if (cell.statusLabel === 'Late') {
+      summary.presentDays += 1;
+      summary.lateDays += 1;
+    } else if (cell.statusLabel === 'Absent') {
+      summary.absentDays += 1;
+    }
+
+    days.push({
+      ...cell,
+      key: dateKey,
+      dateKey,
+    });
+  }
+
+  const trailingBlanks = (7 - (days.length % 7)) % 7;
+  for (let index = 0; index < trailingBlanks; index += 1) {
+    days.push({ blank: true, key: `trailing-${index}` });
+  }
+
+  return {
+    monthLabel,
+    days,
+    summary,
+    todayDay: days.find((day) => !day.blank && day.isToday) || null,
+    selectedDayKey: selectedDate,
+  };
+}
+
+function resolveCalendarCell({ date, dateKey, attendanceRecord, leaveRecord, isToday, isFuture, currentDate }) {
+  if (leaveRecord) {
+    const leaveType = leaveRecord.leaveType || leaveRecord.type || 'Leave';
+    const leaveFromDate = parseDateValue(leaveRecord.fromDate || leaveRecord.from);
+    const leaveToDate = parseDateValue(leaveRecord.toDate || leaveRecord.to);
+    return {
+      date,
+      dateKey,
+      dayNumber: String(date.getDate()).padStart(2, '0'),
+      longLabel: formatLongDate(date),
+      statusLabel: 'Leave',
+      tone: 'leave',
+      detail: `${leaveType} approved from ${leaveFromDate ? formatLongDate(leaveFromDate) : 'start date'} to ${leaveToDate ? formatLongDate(leaveToDate) : 'end date'}`.trim(),
+      isToday,
+      isFuture,
+      record: attendanceRecord,
+      leave: leaveRecord,
+    };
+  }
+
+  if (attendanceRecord) {
+    const status = normalizeAttendanceStatus(attendanceRecord.status);
+    const checkIn = attendanceRecord.checkIn && attendanceRecord.checkIn !== '-' ? attendanceRecord.checkIn : '';
+    const checkOut = attendanceRecord.checkOut && attendanceRecord.checkOut !== '-' ? attendanceRecord.checkOut : '';
+    const workedHours = attendanceRecord.hours && attendanceRecord.hours !== '-' ? attendanceRecord.hours : attendanceRecord.workedHours || attendanceRecord.totalHours || '-';
+
+    if (status === 'Half Day') {
+      return {
+        date,
+        dateKey,
+        dayNumber: String(date.getDate()).padStart(2, '0'),
+        longLabel: formatLongDate(date),
+        statusLabel: 'Half Day',
+        tone: 'half-day',
+        detail: checkOut
+          ? `${checkIn || 'Partial punch'} to ${checkOut} | ${workedHours}`
+          : `${checkIn || 'Partial punch'} | Awaiting checkout`,
+        isToday,
+        isFuture,
+        record: attendanceRecord,
+      };
+    }
+
+    if (status === 'Late') {
+      return {
+        date,
+        dateKey,
+        dayNumber: String(date.getDate()).padStart(2, '0'),
+        longLabel: formatLongDate(date),
+        statusLabel: 'Late',
+        tone: 'present',
+        detail: checkOut
+          ? `${checkIn || 'Checked in late'} | ${checkOut} | ${workedHours}`
+          : `${checkIn || 'Checked in late'} | Awaiting checkout`,
+        isToday,
+        isFuture,
+        record: attendanceRecord,
+      };
+    }
+
+    return {
+      date,
+      dateKey,
+      dayNumber: String(date.getDate()).padStart(2, '0'),
+      longLabel: formatLongDate(date),
+      statusLabel: status === 'Present' ? 'Present' : status,
+      tone: 'present',
+      detail: checkOut
+        ? `${checkIn || 'Checked in'} | ${checkOut} | ${workedHours}`
+        : `${checkIn || 'Checked in'} | Awaiting checkout`,
+      isToday,
+      isFuture,
+      record: attendanceRecord,
+    };
+  }
+
+  if (isFuture) {
+    return {
+      date,
+      dateKey,
+      dayNumber: String(date.getDate()).padStart(2, '0'),
+      longLabel: formatLongDate(date),
+      statusLabel: 'Upcoming',
+      tone: 'upcoming',
+      detail: 'Future date',
+      isToday,
+      isFuture,
+    };
+  }
+
+  if (isToday) {
+    return {
+      date,
+      dateKey,
+      dayNumber: String(date.getDate()).padStart(2, '0'),
+      longLabel: formatLongDate(date),
+      statusLabel: isPastCheckInCutoff(currentDate) ? 'Absent' : 'Pending',
+      tone: isPastCheckInCutoff(currentDate) ? 'absent' : 'upcoming',
+      detail: isPastCheckInCutoff(currentDate) ? 'No check-in/out recorded yet' : 'No check-in yet',
+      isToday,
+      isFuture,
+    };
+  }
+
+  return {
+    date,
+    dateKey,
+    dayNumber: String(date.getDate()).padStart(2, '0'),
+    longLabel: formatLongDate(date),
+    statusLabel: 'Absent',
+    tone: 'absent',
+    detail: 'No check-in/out recorded',
+    isToday,
+    isFuture,
+  };
+}
+
+function getTodayAttendanceLabel({ todayRecord, todayLeave, currentDate }) {
+  if (todayLeave) {
+    return 'On Leave';
+  }
+
+  if (!todayRecord) {
+    return 'Not checked in';
+  }
+
+  if (todayRecord.checkOutAt || (todayRecord.checkOut && todayRecord.checkOut !== '-')) {
+    return todayRecord.status === 'Half Day' ? 'Half Day complete' : 'Checked out';
+  }
+
+  return 'Checked in';
+}
+
+function getTodayAttendanceCopy({ todayRecord, todayLeave, currentDate }) {
+  if (todayLeave) {
+    const leaveType = todayLeave.leaveType || todayLeave.type || 'Leave';
+    return `${leaveType} approved for ${formatLongDate(currentDate)}.`;
+  }
+
+  if (!todayRecord) {
+    return 'Use the buttons to update your attendance for today.';
+  }
+
+  const checkIn = todayRecord.checkIn && todayRecord.checkIn !== '-' ? todayRecord.checkIn : 'Checked in';
+
+  if (todayRecord.checkOutAt || (todayRecord.checkOut && todayRecord.checkOut !== '-')) {
+    return `Checked in at ${checkIn} and checked out successfully.`;
+  }
+
+  return `Checked in at ${checkIn}. Complete checkout to finalize the day.`;
+}
+
+function findApprovedLeaveForDate(leaveRequests, employee, date) {
+  const dateKey = getDateInputValue(date);
+
+  return (Array.isArray(leaveRequests) ? leaveRequests : []).find((request) => {
+    if (!request || !isApprovedLeave(request)) {
+      return false;
+    }
+
+    const matchesEmployee = matchesEmployeeLeave(request, employee.employeeId, employee.employeeName);
+    if (!matchesEmployee) {
+      return false;
+    }
+
+    const fromDate = parseDateValue(request.fromDate || request.from);
+    const toDate = parseDateValue(request.toDate || request.to);
+    if (!fromDate || !toDate) {
+      return false;
+    }
+
+    return dateKey >= getDateInputValue(fromDate) && dateKey <= getDateInputValue(toDate);
+  }) || null;
+}
+
+function getBestAttendanceRecord(attendanceRows, employeeId, date) {
+  const dateKey = getDateInputValue(date);
+  const matches = (Array.isArray(attendanceRows) ? attendanceRows : []).filter((row) => (
+    matchesEmployee(row, employeeId)
+      && getAttendanceDateKey(row) === dateKey
+  ));
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  return matches.sort((first, second) => getAttendanceRecordScore(second) - getAttendanceRecordScore(first))[0];
+}
+
+function getAttendanceRecordScore(row) {
+  let score = 0;
+  if (row.checkIn && row.checkIn !== '-') score += 2;
+  if (row.checkOut && row.checkOut !== '-') score += 3;
+  if (row.checkInAt) score += 1;
+  if (row.checkOutAt) score += 1;
+  if (row.status === 'Half Day') score += 0.5;
+  if (row.status === 'Late') score += 0.25;
+  return score;
+}
+
+function getAttendanceDateKey(row) {
+  const rawValue = row?.date || row?.dateLabel || row?.dateValue || '';
+  const parsed = parseDateValue(rawValue);
+  return parsed ? getDateInputValue(parsed) : '';
+}
+
+function matchesDayAndEmployee(row, employeeId, dateLabel) {
+  return matchesEmployee(row, employeeId) && String(row.date || row.dateLabel || '').trim() === String(dateLabel || '').trim();
+}
+
+function matchesEmployee(row, employeeId, employeeName) {
+  return matchesEmployeeLeave(row, employeeId, employeeName);
+}
+
+function matchesEmployeeLeave(item, employeeId, employeeName) {
+  const normalizedEmployeeId = String(employeeId || '').trim().toLowerCase();
+  const normalizedEmployeeName = String(employeeName || '').trim().toLowerCase();
+  const rowEmployeeId = String(item?.employeeId || '').trim().toLowerCase();
+  const rowEmployeeName = String(item?.employee || item?.employeeName || '').trim().toLowerCase();
+
+  return Boolean(
+    (normalizedEmployeeId && rowEmployeeId && normalizedEmployeeId === rowEmployeeId)
+    || (normalizedEmployeeName && rowEmployeeName && normalizedEmployeeName === rowEmployeeName)
+  );
+}
+
+function isApprovedLeave(request) {
+  return String(request?.status || '').trim().toLowerCase() === 'approved';
+}
+
+function normalizeAttendanceStatus(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+
+  if (normalized === 'half day' || normalized === 'halfday') {
+    return 'Half Day';
+  }
+
+  if (normalized === 'late') {
+    return 'Late';
+  }
+
+  if (normalized === 'leave') {
+    return 'Leave';
+  }
+
+  if (normalized === 'absent') {
+    return 'Absent';
+  }
+
+  return 'Present';
+}
+
+function parseDateValue(value) {
+  if (!value) {
+    return null;
+  }
+
+  const text = String(value).trim();
+  const iso = new Date(text);
+  if (!Number.isNaN(iso.getTime())) {
+    return startOfDay(iso);
+  }
+
+  const labelMatch = text.match(/^(\d{1,2})\s([A-Za-z]{3})\s(\d{4})$/);
+  if (labelMatch) {
+    const month = getMonthIndex(labelMatch[2]);
+    if (month >= 0) {
+      return startOfDay(new Date(Number(labelMatch[3]), month, Number(labelMatch[1])));
+    }
+  }
+
+  const slashMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (slashMatch) {
+    return startOfDay(new Date(Number(slashMatch[3]), Number(slashMatch[2]) - 1, Number(slashMatch[1])));
+  }
+
+  return null;
+}
+
+function formatLongDate(date) {
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
 }
 
 function getDateInputValue(date) {
@@ -519,24 +734,6 @@ function getMonthInputValue(date) {
   return `${year}-${month}`;
 }
 
-function getMonthLabel(monthValue) {
-  const monthDate = getMonthFromInputValue(monthValue);
-  return new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' }).format(monthDate);
-}
-
-function getDateFromInputValue(value) {
-  const [yearText, monthText, dayText] = String(value || '').split('-');
-  const year = Number.parseInt(yearText, 10);
-  const month = Number.parseInt(monthText, 10);
-  const day = Number.parseInt(dayText, 10);
-
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    return new Date();
-  }
-
-  return new Date(year, month - 1, day);
-}
-
 function getMonthFromInputValue(value) {
   const [yearText, monthText] = String(value || '').split('-');
   const year = Number.parseInt(yearText, 10);
@@ -549,134 +746,8 @@ function getMonthFromInputValue(value) {
   return new Date(year, month - 1, 1);
 }
 
-function getTimeInputValue(isoValue, labelValue) {
-  if (isoValue) {
-    const parsedFromIso = new Date(isoValue);
-    if (!Number.isNaN(parsedFromIso.getTime())) {
-      return toTimeInputValue(parsedFromIso.getHours(), parsedFromIso.getMinutes());
-    }
-  }
-
-  const parsedFromLabel = parseClockLabel(labelValue);
-  if (!parsedFromLabel) {
-    return '';
-  }
-
-  return toTimeInputValue(parsedFromLabel.hours, parsedFromLabel.minutes);
-}
-
-function toTimeInputValue(hours, minutes) {
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
-
-function parseClockLabel(value) {
-  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) {
-    return null;
-  }
-
-  const rawHours = Number.parseInt(match[1], 10);
-  const minutes = Number.parseInt(match[2], 10);
-  const meridiem = match[3].toUpperCase();
-
-  if (!Number.isFinite(rawHours) || !Number.isFinite(minutes)) {
-    return null;
-  }
-
-  const normalizedHours = rawHours % 12;
-  const hours = meridiem === 'PM' ? normalizedHours + 12 : normalizedHours;
-
-  return { hours, minutes };
-}
-
-function buildAttendanceIso(dateLabel, timeValue) {
-  if (!timeValue) {
-    return '';
-  }
-
-  const dateParts = parseAttendanceDateLabel(dateLabel);
-  if (!dateParts) {
-    return '';
-  }
-
-  const [hoursText, minutesText] = timeValue.split(':');
-  const hours = Number.parseInt(hoursText, 10);
-  const minutes = Number.parseInt(minutesText, 10);
-
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
-    return '';
-  }
-
-  return new Date(dateParts.year, dateParts.month, dateParts.day, hours, minutes, 0, 0).toISOString();
-}
-
-function parseAttendanceDateLabel(value) {
-  const match = String(value || '').trim().match(/^(\d{1,2})\s([A-Za-z]{3})\s(\d{4})$/);
-  if (match) {
-    const month = getMonthIndex(match[2]);
-    if (month >= 0) {
-      return {
-        day: Number.parseInt(match[1], 10),
-        month,
-        year: Number.parseInt(match[3], 10),
-      };
-    }
-  }
-
-  const fallback = new Date(value);
-  if (Number.isNaN(fallback.getTime())) {
-    return null;
-  }
-
-  return {
-    day: fallback.getDate(),
-    month: fallback.getMonth(),
-    year: fallback.getFullYear(),
-  };
-}
-
-function getAttendanceDateValue(row) {
-  const label = row?.date || row?.dateLabel;
-  const parts = parseAttendanceDateLabel(label);
-  if (!parts) {
-    return null;
-  }
-
-  return new Date(parts.year, parts.month, parts.day);
-}
-
-function isRowWithinSelectedRange(row, dateRange, selectedDate, selectedMonth) {
-  if (dateRange === 'all') {
-    return true;
-  }
-
-  const rowDate = getAttendanceDateValue(row);
-  if (!rowDate) {
-    return false;
-  }
-
-  const selectedDay = getDateFromInputValue(selectedDate);
-  const normalizedRowDate = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate());
-
-  if (dateRange === 'day') {
-    return isSameDate(normalizedRowDate, selectedDay);
-  }
-
-  if (dateRange === 'last7' || dateRange === 'last15') {
-    const daysBack = dateRange === 'last7' ? 6 : 14;
-    const startDate = new Date(selectedDay);
-    startDate.setDate(startDate.getDate() - daysBack);
-    return normalizedRowDate >= startDate && normalizedRowDate <= selectedDay;
-  }
-
-  if (dateRange === 'month' || dateRange === 'custom') {
-    const selectedMonthDate = getMonthFromInputValue(selectedMonth);
-    const monthStart = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), 1);
-    const monthEnd = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth() + 1, 0);
-    return normalizedRowDate >= monthStart && normalizedRowDate <= monthEnd;
-  }
-
-  return true;
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 function isSameDate(firstDate, secondDate) {
@@ -684,62 +755,6 @@ function isSameDate(firstDate, secondDate) {
     && firstDate.getMonth() === secondDate.getMonth()
     && firstDate.getDate() === secondDate.getDate();
 }
-
-function getRangeLabel(dateRange, selectedDate, selectedMonth) {
-  const selectedDayLabel = getTodayLabel(getDateFromInputValue(selectedDate));
-
-  if (dateRange === 'day') {
-    return selectedDayLabel;
-  }
-
-  if (dateRange === 'last7') {
-    const startDate = getDateFromInputValue(selectedDate);
-    startDate.setDate(startDate.getDate() - 6);
-    return `${getTodayLabel(startDate)} to ${selectedDayLabel}`;
-  }
-
-  if (dateRange === 'last15') {
-    const startDate = getDateFromInputValue(selectedDate);
-    startDate.setDate(startDate.getDate() - 14);
-    return `${getTodayLabel(startDate)} to ${selectedDayLabel}`;
-  }
-
-  if (dateRange === 'month') {
-    return getMonthLabel(selectedMonth);
-  }
-
-  if (dateRange === 'custom') {
-    return `${getMonthLabel(selectedMonth)} attendance`;
-  }
-
-  return 'all attendance records';
-}
-
-function buildYearOptions() {
-  const currentYear = new Date().getFullYear();
-  const years = [];
-
-  for (let year = currentYear + 1; year >= currentYear - 5; year -= 1) {
-    years.push(year);
-  }
-
-  return years;
-}
-
-const MONTH_OPTIONS = [
-  { value: '0', label: 'January' },
-  { value: '1', label: 'February' },
-  { value: '2', label: 'March' },
-  { value: '3', label: 'April' },
-  { value: '4', label: 'May' },
-  { value: '5', label: 'June' },
-  { value: '6', label: 'July' },
-  { value: '7', label: 'August' },
-  { value: '8', label: 'September' },
-  { value: '9', label: 'October' },
-  { value: '10', label: 'November' },
-  { value: '11', label: 'December' },
-];
 
 function getMonthIndex(shortMonth) {
   const monthMap = {
@@ -760,11 +775,12 @@ function getMonthIndex(shortMonth) {
   return monthMap[String(shortMonth || '').slice(0, 3).toLowerCase()] ?? -1;
 }
 
-function getTimeLabelFromIso(isoValue) {
-  return new Intl.DateTimeFormat('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(isoValue));
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function isPastCheckInCutoff(date) {
+  const minuteOfDay = (date.getHours() * 60) + date.getMinutes();
+  const cutoffMinute = (ATTENDANCE_POLICY.fullDayCheckInCutoffHour * 60) + ATTENDANCE_POLICY.fullDayCheckInCutoffMinute;
+  return minuteOfDay >= cutoffMinute;
 }
 
 export default EmployeeAttendance;
