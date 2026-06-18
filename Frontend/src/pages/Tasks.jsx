@@ -830,23 +830,25 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
                     </p>
                   )}
 
-              <label className="field">
-                <span>Assignee</span>
-                <select
-                  value={form.assignedToId || ''}
-                  disabled={!form.projectId}
-                  onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}
-                >
-                  {!form.projectId && <option value="">Select project first</option>}
-                  {form.projectId && <option value="">Select employee</option>}
-                  {form.projectId && assigneeOptions.length === 0 && <option value="">No employees available</option>}
-                  {assigneeOptions.map((employee) => {
-                    const employeeId = getEmployeeId(employee);
-                    const employeeName = getEmployeeName(employee);
-                    return <option key={employeeId} value={employeeId}>{employeeName} - {employee.department || '-'}</option>;
-                  })}
-                </select>
-              </label>
+                  <label className="field">
+                    <span>Assignee</span>
+                    <select
+                      value={form.assignedToId || ''}
+                      disabled={!form.projectId}
+                      onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}
+                    >
+                      {!form.projectId && <option value="">Select project first</option>}
+                      {form.projectId && <option value="">Select employee</option>}
+                      {form.projectId && assigneeOptions.length === 0 && <option value="">No employees available</option>}
+                      {assigneeOptions.map((employee) => {
+                        const employeeId = getEmployeeId(employee);
+                        const employeeName = getEmployeeName(employee);
+                        return <option key={employeeId} value={employeeId}>{employeeName} - {employee.department || '-'}</option>;
+                      })}
+                    </select>
+                  </label>
+                </div>
+              </div>
             </>
           ) : (
             <>
