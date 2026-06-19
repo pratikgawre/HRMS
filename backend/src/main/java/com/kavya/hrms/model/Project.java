@@ -44,8 +44,6 @@ private String teamLeadDesignation;
   public void setTeamLeadDesignation(String teamLeadDesignation) { this.teamLeadDesignation = teamLeadDesignation; }
   public String getTeamLead() { return teamLead; }
   public void setTeamLead(String teamLead) { this.teamLead = teamLead; }
-  public String getTeamLeadId() { return teamLeadId; }
-  public void setTeamLeadId(String teamLeadId) { this.teamLeadId = teamLeadId; }
   public String getTeam() { return team; }
   public void setTeam(String team) { this.team = team; }
   public List<String> getTeamMembers() { return teamMembers; }
