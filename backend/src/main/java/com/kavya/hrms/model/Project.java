@@ -1,6 +1,7 @@
 package com.kavya.hrms.model;
 
 import java.util.List;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -12,9 +13,10 @@ public class Project {
   private String description;
   private String manager;
   private String managerId;
-  private String teamLeadId;
-  private String teamLeadName;
-  private String teamLeadDesignation;
+  private String teamLead;
+private String teamLeadId;
+private String teamLeadName;
+private String teamLeadDesignation;
   private String team;
   private List<String> teamMembers;
   private List<ProjectMember> teamMemberDetails;
@@ -40,6 +42,10 @@ public class Project {
   public void setTeamLeadName(String teamLeadName) { this.teamLeadName = teamLeadName; }
   public String getTeamLeadDesignation() { return teamLeadDesignation; }
   public void setTeamLeadDesignation(String teamLeadDesignation) { this.teamLeadDesignation = teamLeadDesignation; }
+  public String getTeamLead() { return teamLead; }
+  public void setTeamLead(String teamLead) { this.teamLead = teamLead; }
+  public String getTeamLeadId() { return teamLeadId; }
+  public void setTeamLeadId(String teamLeadId) { this.teamLeadId = teamLeadId; }
   public String getTeam() { return team; }
   public void setTeam(String team) { this.team = team; }
   public List<String> getTeamMembers() { return teamMembers; }

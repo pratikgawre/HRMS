@@ -107,14 +107,14 @@ export function normalizeProjectTeamMembers(project, employeeDirectory = null) {
   return members;
 }
 
-export function getTeamLeadProjects(projects = [], teamLeadId = '') {
-  const normalizedLeadId = normalizeLookupValue(teamLeadId);
-  if (!normalizedLeadId) {
+export function getTeamLeadProjects(projects = [], teamLeadIdentity = '') {
+  const identity = resolveTeamLeadIdentity(teamLeadIdentity);
+  if (identity.keys.length === 0) {
     return [];
   }
 
   return (Array.isArray(projects) ? projects : [])
-    .filter((project) => normalizeLookupValue(project?.teamLeadId) === normalizedLeadId)
+    .filter((project) => isProjectAssignedToTeamLead(project, identity))
     .map((project, index) => ({
       ...project,
       id: project?.id || `PRJ-${index + 1}`,
@@ -128,11 +128,15 @@ export function getSelectableTeamLeadProjects(projects = [], teamLeadId = '') {
 export function buildTeamLeadAssignmentGroups(projects = [], employees = [], teamLeadId = '') {
   const employeeDirectory = buildEmployeeDirectory(employees);
   const visibleProjects = getTeamLeadProjects(projects, teamLeadId);
+  const teamLeadIdentity = resolveTeamLeadIdentity(teamLeadId);
   const uniqueMembers = new Map();
+  const fallbackMembers = Array.isArray(employees)
+    ? employees.filter((employee) => isEmployeeAssignedToTeamLead(employee, teamLeadIdentity))
+    : [];
 
   const groups = visibleProjects.map((project) => {
     const members = normalizeProjectTeamMembers(project, employeeDirectory)
-      .filter((employee) => normalizeLookupValue(getEmployeeId(employee)) !== normalizeLookupValue(teamLeadId));
+      .filter((employee) => !teamLeadIdentity.keys.includes(normalizeLookupValue(getEmployeeId(employee))));
 
     members.forEach((member) => {
       uniqueMembers.set(normalizeLookupValue(member.id), member);
@@ -149,6 +153,26 @@ export function buildTeamLeadAssignmentGroups(projects = [], employees = [], tea
     };
   });
 
+  if (uniqueMembers.size === 0 && fallbackMembers.length > 0) {
+    const members = fallbackMembers
+      .map((employee) => employeeDirectory.get(normalizeLookupValue(getEmployeeId(employee))) || employee)
+      .filter((employee) => !teamLeadIdentity.keys.includes(normalizeLookupValue(getEmployeeId(employee))));
+
+    members.forEach((member) => {
+      uniqueMembers.set(normalizeLookupValue(member.id), member);
+    });
+
+    groups.push({
+      id: 'direct-reports',
+      projectId: 'direct-reports',
+      projectCode: 'DIRECT',
+      name: 'Direct Reports',
+      status: 'Active',
+      teamMembers: members,
+      teamMemberCount: members.length,
+    });
+  }
+
   return {
     employeeDirectory,
     projects: visibleProjects,
@@ -161,8 +185,9 @@ export function buildTeamLeadAssignmentGroups(projects = [], employees = [], tea
 
 export function getProjectAssigneeOptions(project, employees = [], teamLeadId = '') {
   const employeeDirectory = buildEmployeeDirectory(employees);
+  const teamLeadIdentity = resolveTeamLeadIdentity(teamLeadId);
   const members = normalizeProjectTeamMembers(project, employeeDirectory)
-    .filter((employee) => normalizeLookupValue(getEmployeeId(employee)) !== normalizeLookupValue(teamLeadId));
+    .filter((employee) => !teamLeadIdentity.keys.includes(normalizeLookupValue(getEmployeeId(employee))));
 
   return members.filter((employee) => isEligibleTeamMember(employee));
 }
@@ -199,4 +224,54 @@ export function buildEmployeeDirectory(employees = []) {
   });
 
   return directory;
+}
+
+function resolveTeamLeadIdentity(teamLeadIdentity) {
+  if (typeof teamLeadIdentity === 'string') {
+    const normalized = normalizeLookupValue(teamLeadIdentity);
+    return { keys: normalized ? [normalized] : [] };
+  }
+
+  const keys = [
+    teamLeadIdentity?.employeeId,
+    teamLeadIdentity?.employeeCode,
+    teamLeadIdentity?.userId,
+    teamLeadIdentity?.name,
+    teamLeadIdentity?.employeeName,
+  ]
+    .map((value) => normalizeLookupValue(value))
+    .filter(Boolean);
+
+  return { keys: Array.from(new Set(keys)) };
+}
+
+function isProjectAssignedToTeamLead(project, identity) {
+  const projectValues = [
+    project?.teamLeadId,
+    project?.teamLead,
+    project?.teamLeadName,
+    project?.managerId,
+    project?.manager,
+    project?.projectManagerId,
+    project?.projectManager,
+    project?.projectManagerName,
+    project?.team,
+  ].map((value) => normalizeLookupValue(value));
+
+  return identity.keys.some((key) => projectValues.includes(key));
+}
+
+function isEmployeeAssignedToTeamLead(employee, identity) {
+  if (!employee || !identity?.keys?.length) {
+    return false;
+  }
+
+  const employeeValues = [
+    employee?.managerId,
+    employee?.teamLeadId,
+    employee?.reportingManagerId,
+    employee?.reportingManager,
+  ].map((value) => normalizeLookupValue(value));
+
+  return identity.keys.some((key) => employeeValues.includes(key));
 }
