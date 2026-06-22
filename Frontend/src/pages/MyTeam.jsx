@@ -5,7 +5,6 @@ import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
-import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import {
   buildTeamLeadAssignmentGroups,
   buildTaskAssignmentGroups,
@@ -27,7 +26,6 @@ function MyTeam() {
 
 function LeadershipMyTeamView({ role }) {
   const navigate = useNavigate();
-  const currentTeamLeadIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
   const currentEmployeeName = getSessionValue('kavyaEmployeeName');
   const currentTeamLeadIdentity = useMemo(() => ({
@@ -36,8 +34,6 @@ function LeadershipMyTeamView({ role }) {
   }), [currentEmployeeId, currentEmployeeName]);
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [teamAssignments, setTeamAssignments] = useState([]);
   const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
@@ -142,7 +138,7 @@ function LeadershipMyTeamView({ role }) {
     })
   ), [effectiveEmployeeDirectory, memberProjectMap, tasks]);
 
-  const projectTaskMap = taskAssignmentGroups;
+  const projectTaskMap = taskAssignmentData.groups;
 
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
   const totalAssignments = teamAssignmentGroups.reduce((sum, group) => sum + (group.teamMemberCount || 0), 0);
