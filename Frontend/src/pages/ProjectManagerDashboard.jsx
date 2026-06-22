@@ -161,7 +161,7 @@ function ProjectManagerDashboard() {
       <CardGrid stats={dashboardStats} />
       <div className="project-manager-stack">
         <Section className="active-projects-table-section" title="Active Projects" action="Manage Projects" actionOnClick={() => navigate('/project-manager/projects')}>
-          <DataTable columns={dashboardProjectColumns} rows={liveProjects} emptyMessage="No projects available." />
+          <DataTable columns={dashboardProjectColumns} rows={liveProjects.slice(0, 5)} emptyMessage="No projects available." />
         </Section>
         <Section className="compact-table-section" title="Delivery Tasks" action="Assign" actionOnClick={() => navigate('/project-manager/tasks')}>
           <DataTable columns={taskColumns} rows={liveTasks.slice(0, 3)} emptyMessage="No tasks available." />

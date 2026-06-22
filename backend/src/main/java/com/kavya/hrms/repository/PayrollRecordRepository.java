@@ -7,4 +7,5 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 public interface PayrollRecordRepository extends MongoRepository<PayrollRecord, String> {
   List<PayrollRecord> findByEmployeeId(String employeeId);
   List<PayrollRecord> findByMonthAndYear(String month, String year);
+  List<PayrollRecord> findByEmployeeIdAndMonthAndYear(String employeeId, String month, String year);
 }

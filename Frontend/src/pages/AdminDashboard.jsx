@@ -125,7 +125,7 @@ function AdminDashboard() {
         ...stat,
         value: String(presentTodayCount),
         delta: `${presentRate}% attendance`,
-        onClick: () => navigate('/admin/attendance'),
+      onClick: () => navigate('/admin/team-attendance'),
       }
     : stat));
 
@@ -221,7 +221,7 @@ function AdminDashboard() {
         <Section title="Pending Leave Queue" action="Approve" actionTo="/admin/leave-management">
           <DataTable columns={leaveColumns} rows={pendingLeaveRequests} emptyMessage="No pending leave requests." />
         </Section>
-        <Section title="Checked In Today" action="View all" actionTo="/admin/attendance">
+        <Section title="Checked In Today" action="View all" actionTo="/admin/team-attendance">
           <DataTable columns={checkedInColumns} rows={checkedInTodayRows} emptyMessage="No employees have checked in today." />
         </Section>
       </div>

@@ -8,7 +8,7 @@ import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitials } from '../utils/user-management.js';
-import { loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
+import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
 import {
   getEmployeeId,
   getEmployeeName,
@@ -67,6 +67,11 @@ function Tasks() {
   const [form, setForm] = useState(getEmptyTaskForm());
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
+  const currentTeamLeadIdentity = {
+    employeeId: employeeIdentity.employeeId,
+    employeeName: employeeIdentity.employee,
+    userId: getSessionValue('kavyaUserId'),
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -84,10 +89,15 @@ function Tasks() {
     let active = true;
 
     const refreshData = () => {
+      const apiUrl = '/projects';
+      console.debug('[TeamLead Tasks] loggedInUser', employeeIdentity);
+      console.debug('[TeamLead Tasks] teamLeadId', currentEmployeeId);
+      console.debug('[TeamLead Tasks] selectedProjectId', form.projectId || '');
+      console.debug('[TeamLead Tasks] API URL', apiUrl);
       Promise.all([
         loadTasksWithSeed(),
         safeApiRequest('/employees', people),
-        safeApiRequest('/projects', []),
+        safeApiRequest(apiUrl, []),
       ]).then(([rows, employeeRows, projectRows]) => {
         if (!active) {
           return;
@@ -96,6 +106,12 @@ function Tasks() {
         setTaskRows(Array.isArray(rows) ? rows.map(normalizeTaskRow) : []);
         setEmployees(normalizeEmployees(employeeRows));
         setProjects(normalizeProjectRows(projectRows));
+        console.debug('[TeamLead Tasks] API response', {
+          taskCount: Array.isArray(rows) ? rows.length : 0,
+          employeeCount: Array.isArray(employeeRows) ? employeeRows.length : 0,
+          projectCount: Array.isArray(projectRows) ? projectRows.length : 0,
+          projectIds: Array.isArray(projectRows) ? projectRows.map((project) => project.id || project.projectId || '-') : [],
+        });
       });
     };
 
@@ -115,8 +131,10 @@ function Tasks() {
   }, []);
 
   const teamLeadProjects = useMemo(() => (
-    isTeamLead ? getSelectableTeamLeadProjects(projects, currentEmployeeId) : []
-  ), [currentEmployeeId, isTeamLead, projects]);
+    isTeamLead
+      ? getTeamLeadProjectOptions(projects, currentTeamLeadIdentity)
+      : []
+  ), [currentTeamLeadIdentity, isTeamLead, projects]);
   const selectedProject = useMemo(() => (
     isTeamLead
       ? teamLeadProjects.find((project) => project.id === form.projectId) || null
@@ -124,9 +142,9 @@ function Tasks() {
   ), [form.projectId, isTeamLead, teamLeadProjects]);
   const teamLeadAssigneeOptions = useMemo(() => (
     isTeamLead
-      ? getProjectAssigneeOptions(selectedProject, employees, currentEmployeeId)
+      ? getProjectAssigneeOptions(selectedProject, employees, currentTeamLeadIdentity)
       : []
-  ), [currentEmployeeId, employees, isTeamLead, selectedProject]);
+  ), [currentTeamLeadIdentity, employees, isTeamLead, selectedProject]);
   const assigneeOptions = useMemo(() => (
     isTeamLead
       ? teamLeadAssigneeOptions
@@ -221,7 +239,7 @@ function Tasks() {
           return;
         }
 
-        const allowedEmployees = getProjectAssigneeOptions(project, employees, currentEmployeeId);
+        const allowedEmployees = getProjectAssigneeOptions(project, employees, currentTeamLeadIdentity);
         const assignee = allowedEmployees.find((employee) => getEmployeeId(employee) === form.assignedToId) || null;
         if (!assignee) {
           setMessage('Please select a valid employee for the selected project.');
@@ -241,13 +259,13 @@ function Tasks() {
           assignedById: currentEmployeeId,
           assignedByRole: role,
           assignedByName: employeeIdentity.employee || getSessionValue('kavyaEmployeeName') || 'Team Lead',
+          teamLeadId: currentEmployeeId,
           priority: form.priority,
           dueDate: form.dueDate,
           status: form.status,
           projectId: project.id,
           projectName: project.name || '',
           projectCode: project.projectCode || project.id || '',
-          createdDateTime: new Date().toISOString(),
         };
 
         const saved = await apiRequest('/tasks', {
@@ -286,13 +304,11 @@ function Tasks() {
         assignedById: currentEmployeeId,
         assignedByRole: role,
         assignedByName: employeeIdentity.employee || getSessionValue('kavyaEmployeeName') || 'Team Lead',
+        teamLeadId: currentEmployeeId,
         priority: form.priority,
         dueDate: form.dueDate,
         status: form.status,
         projectId: form.projectId || '',
-        projectName: selectedProject?.name || '',
-        projectCode: selectedProject?.projectCode || selectedProject?.id || '',
-        createdDateTime: new Date().toISOString(),
       };
 
       const saved = await apiRequest('/tasks', {
@@ -792,6 +808,7 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
                 <span>Project</span>
                 <select value={form.projectId || ''} onChange={(event) => updateProject(event.target.value)}>
                   <option value="">Select project</option>
+                  {projectOptions.length === 0 && <option value="" disabled>No projects assigned to you.</option>}
                   {projectOptions.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name} - {project.projectCode || project.id}
@@ -863,6 +880,13 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
                 </select>
               </label>
             </>
+          )}
+          {teamLeadMode && selectedProject && form.projectId && (
+            <div className="task-summary-card task-summary-card-compact">
+              <small>{selectedProject.projectCode || selectedProject.id}</small>
+              <strong>{selectedProject.name}</strong>
+              <small>Team members: {Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers.length : 0}</small>
+            </div>
           )}
           <label className="field">
             <span>Priority</span>
@@ -965,11 +989,31 @@ function normalizeProjectRows(rows) {
     id: project.id || project.projectId || `PRJ-${index + 1}`,
     projectCode: project.projectCode || project.id || project.projectId || `PRJ-${index + 1}`,
     teamLeadId: project.teamLeadId || '',
+    teamLeadName: project.teamLeadName || '',
+    teamLeadDesignation: project.teamLeadDesignation || '',
     teamMembers: Array.isArray(project.teamMembers) ? project.teamMembers.filter(Boolean).map((value) => String(value)) : [],
     teamMemberDetails: Array.isArray(project.teamMemberDetails) ? project.teamMemberDetails : [],
     name: project.name || `Project ${index + 1}`,
     status: project.status || 'Planning',
   }));
+}
+
+function isActiveProject(project) {
+  const status = String(project?.status || '').trim().toLowerCase();
+  if (!status) {
+    return true;
+  }
+
+  return !['inactive', 'closed', 'archived', 'cancelled', 'completed'].includes(status);
+}
+
+function getTeamLeadProjectOptions(projects, teamLeadIdentity) {
+  const matchedProjects = getSelectableTeamLeadProjects(projects, teamLeadIdentity).filter((project) => isActiveProject(project));
+  if (matchedProjects.length > 0) {
+    return matchedProjects;
+  }
+
+  return (Array.isArray(projects) ? projects : []).filter((project) => isActiveProject(project));
 }
 
 function normalizeTaskRow(task) {
@@ -984,6 +1028,7 @@ function normalizeTaskRow(task) {
     due: task.due || task.dueDate || '-',
     dueDate: task.dueDate || task.due || '',
     status: task.status || 'Pending',
+    teamLeadId: task.teamLeadId || task.assignedById || '',
     projectId: task.projectId || '',
     projectName: task.projectName || '',
     projectCode: task.projectCode || '',

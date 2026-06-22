@@ -197,6 +197,9 @@ function Projects() {
   }, []);
 
   const employeeOptions = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee)), [employees]);
+  const employeeTeamOptions = useMemo(() => (
+    employeeOptions.filter((employee) => isEmployeeRole(employee))
+  ), [employeeOptions]);
   const teamLeaderOptions = useMemo(() => (
     employeeOptions
       .filter((employee) => isTeamLeaderEmployee(employee))
@@ -310,7 +313,7 @@ function Projects() {
       label: 'Controls',
       render: (row) => (
         <div className="table-actions table-actions-inline">
-          <button type="button" onClick={() => openProject(row)}>
+          <button type="button" onClick={() => openProject(row, { scrollToDetails: true })}>
             Open
           </button>
           <button type="button" onClick={() => startEditingProject(row)}>
@@ -538,17 +541,21 @@ function Projects() {
 
   const filteredEmployees = useMemo(() => {
     const query = teamSearch.trim().toLowerCase();
+    const scopedEmployees = employeeTeamOptions;
+
     if (!query) {
-      return employeeOptions;
+      return scopedEmployees;
     }
 
-    return employeeOptions.filter((employee) => [
+    return scopedEmployees.filter((employee) => [
       employee.name,
       employee.department,
       employee.role,
+      employee.accessRole,
+      employee.designation,
       employee.id,
     ].some((value) => String(value || '').toLowerCase().includes(query)));
-  }, [employeeOptions, teamSearch]);
+  }, [employeeTeamOptions, teamSearch]);
   const selectedTeamLeader = useMemo(() => (
     teamLeaderOptions.find((employee) => employee.id === projectForm.teamLeadId) || null
   ), [projectForm.teamLeadId, teamLeaderOptions]);
@@ -1387,6 +1394,12 @@ function isTeamLeaderEmployee(employee) {
   const designation = normalizeRoleLabel(employee.designation || employee.jobTitle || employee.role || '');
   const accessRole = normalizeRoleLabel(employee.accessRole || '');
   return designation === 'team lead' || accessRole === 'team lead';
+}
+
+function isEmployeeRole(employee) {
+  const designation = normalizeRoleLabel(employee.designation || employee.jobTitle || employee.role || '');
+  const accessRole = normalizeRoleLabel(employee.accessRole || employee.role || '');
+  return designation === 'employee' || accessRole === 'employee';
 }
 
 function normalizeRoleLabel(value) {

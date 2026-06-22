@@ -3,7 +3,7 @@ import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
-import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
+import { refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import {
@@ -20,20 +20,22 @@ function LeaveRequests() {
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
   const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
-  const [requests, setRequests] = useState(getInitialLeaveRequests);
+  const [requests, setRequests] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
   const [searchText, setSearchText] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
+  const [dataState, setDataState] = useState({ loading: true, error: '' });
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
   const [selectedRequest, setSelectedRequest] = useState(null);
   const leaveSummary = useMemo(
-    () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee), requests),
+    () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee)),
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
   );
   const leaveTypeOptions = useMemo(() => getLeaveTypeOptions(leaveTypes), [leaveTypes]);
+  const showMyLeaveSection = role !== 'admin';
 
   useEffect(() => {
     if (leaveTypeOptions.length === 0) {
@@ -75,6 +77,18 @@ function LeaveRequests() {
         request.status,
       ].some((value) => String(value || '').toLowerCase().includes(query));
     }), [visibleRequests, status, searchText]);
+  const visibleLeaveSummary = useMemo(() => {
+    const approvedRows = rows.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved');
+    const pendingRows = rows.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending');
+    const usedDays = approvedRows.reduce((total, request) => total + normalizeLeaveDays(request.days), 0);
+
+    return {
+      totalCount: rows.length,
+      approvedCount: approvedRows.length,
+      pendingCount: pendingRows.length,
+      usedDays,
+    };
+  }, [rows]);
 
   const selectedRequestDetails = useMemo(() => {
     if (!selectedRequest) {
@@ -89,8 +103,14 @@ function LeaveRequests() {
   useEffect(() => {
     const refreshRequests = () => {
       refreshStoredLeaveRequests()
-        .then(setRequests)
-        .catch(() => setRequests(getInitialLeaveRequests()));
+        .then((rows) => {
+          setRequests(Array.isArray(rows) ? rows : []);
+          setDataState((current) => ({ ...current, loading: false, error: '' }));
+        })
+        .catch(() => {
+          setRequests([]);
+          setDataState({ loading: false, error: 'Unable to load leave requests right now.' });
+        });
     };
     const refreshLeaveTypes = () => {
       safeApiRequest('/settings', { leaveTypes: DEFAULT_LEAVE_TYPES })
@@ -195,9 +215,11 @@ function LeaveRequests() {
   const refreshRequests = async () => {
     try {
       const stored = await refreshStoredLeaveRequests();
-      setRequests(stored);
+      setRequests(Array.isArray(stored) ? stored : []);
+      setDataState((current) => ({ ...current, loading: false, error: '' }));
     } catch {
-      setRequests(getInitialLeaveRequests());
+      setRequests([]);
+      setDataState({ loading: false, error: 'Unable to load leave requests right now.' });
     }
   };
 
@@ -314,26 +336,82 @@ function LeaveRequests() {
         </div>
       )}
 
-      <Section title="Leave Request Queue">
-        {(role === 'employee' || role === 'hr' || role === 'teamLead' || role === 'projectManager') && (
-          <section
-            className="leave-summary-grid"
-            aria-label="Leave request summary"
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.85rem', width: '100%', marginBottom: '1.5rem' }}
-          >
-            {leaveSummary.map((item) => (
+      <div className="leave-approval-stack">
+        {showMyLeaveSection && (
+          <Section title="My Leave">
+            {dataState.loading && (
+              <div className="user-alert" role="status">
+                <i className="ri-loader-4-line" aria-hidden="true" />
+                <span>Loading leave requests...</span>
+              </div>
+            )}
+            {dataState.error && (
+              <div className="user-alert" role="status">
+                <i className="ri-alert-line" aria-hidden="true" />
+                <span>{dataState.error}</span>
+              </div>
+            )}
+            <section
+              className="leave-summary-grid"
+              aria-label="Leave balance summary"
+            >
+              {leaveSummary.map((item) => (
+                <DashboardCard
+                  key={item.label}
+                  label={item.label}
+                  value={item.value}
+                  delta={item.delta}
+                  tone={item.tone}
+                />
+              ))}
+            </section>
+          </Section>
+        )}
+
+        <Section title="Leave Request Queue">
+          <section className="leave-queue-summary-grid" aria-label="Visible leave request count">
+            {[
+              {
+                label: 'Showing',
+                value: String(visibleLeaveSummary.totalCount).padStart(2, '0'),
+                delta: 'Leave requests on screen',
+                tone: 'teal',
+                icon: 'ri-eye-line',
+              },
+              {
+                label: 'Used Days',
+                value: String(visibleLeaveSummary.usedDays).padStart(2, '0'),
+                delta: 'Approved leave deducted',
+                tone: 'blue',
+                icon: 'ri-calendar-check-line',
+              },
+              {
+                label: 'Approved',
+                value: String(visibleLeaveSummary.approvedCount).padStart(2, '0'),
+                delta: 'Already deducted',
+                tone: 'orange',
+                icon: 'ri-checkbox-circle-line',
+              },
+              {
+                label: 'Pending',
+                value: String(visibleLeaveSummary.pendingCount).padStart(2, '0'),
+                delta: 'Waiting for review',
+                tone: 'pink',
+                icon: 'ri-time-line',
+              },
+            ].map((card) => (
               <DashboardCard
-                key={item.label}
-                label={item.label}
-                value={item.value}
-                delta={item.delta}
-                tone={item.tone}
-                className="leave-summary-card"
-                style={{ minHeight: '108px', padding: '0.8rem 0.9rem' }}
+                key={card.label}
+                label={card.label}
+                value={card.value}
+                delta={card.delta}
+                tone={card.tone}
+                icon={card.icon}
               />
             ))}
           </section>
-        )}
+        </Section>
+
         <div className="page-toolbar" style={{ gap: '1.2rem', marginTop: '1.5rem' }}>
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>
@@ -372,7 +450,7 @@ function LeaveRequests() {
             onRowClick={setSelectedRequest}
           />
         </div>
-      </Section>
+      </div>
 
       {showForm && (
         <LeaveRequestModal
@@ -579,6 +657,11 @@ function getEmptyLeaveForm(currentEmployee = getCurrentEmployeeIdentity(), leave
   };
 }
 
+function normalizeLeaveDays(value) {
+  const numeric = Number.parseInt(value, 10);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
 async function downloadMedicalReportAsPdf(request) {
   const medicalReport = request?.medicalReport;
   if (!medicalReport?.dataUrl) {
@@ -782,7 +865,7 @@ function formatRequesterRole(role) {
     .join(' ');
 }
 
-function buildLeaveSummary(summary, requests) {
+function buildLeaveSummary(summary) {
   const balances = Array.isArray(summary?.balances) ? summary.balances : [];
   const cards = [
     { name: 'Casual Leave', tone: 'blue' },
@@ -795,11 +878,10 @@ function buildLeaveSummary(summary, requests) {
     const matched = balances.find((item) => String(item.name || '').toLowerCase() === card.name.toLowerCase());
     const allocated = Number(matched?.days || 0);
     const used = Number(matched?.used || 0);
-    const remaining = Number(matched?.remaining || 0);
 
     return {
       label: card.name,
-      value: String(remaining),
+      value: String(allocated),
       delta: `${used}/${allocated} used`,
       tone: card.tone,
     };

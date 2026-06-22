@@ -37,6 +37,7 @@ public class PayrollRecord {
   private String panNo;
   private String location;
   private String status;
+  private String paidDate;
   private String attendanceSummary;
   private String deductionSummary;
 
@@ -102,6 +103,8 @@ public class PayrollRecord {
   public void setLocation(String location) { this.location = location; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
+  public String getPaidDate() { return paidDate; }
+  public void setPaidDate(String paidDate) { this.paidDate = paidDate; }
   public String getAttendanceSummary() { return attendanceSummary; }
   public void setAttendanceSummary(String attendanceSummary) { this.attendanceSummary = attendanceSummary; }
   public String getDeductionSummary() { return deductionSummary; }
