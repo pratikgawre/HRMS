@@ -313,7 +313,7 @@ function Projects() {
       label: 'Controls',
       render: (row) => (
         <div className="table-actions table-actions-inline">
-          <button type="button" onClick={() => openProject(row)}>
+          <button type="button" onClick={() => openProject(row, { scrollToDetails: true })}>
             Open
           </button>
           <button type="button" onClick={() => startEditingProject(row)}>
