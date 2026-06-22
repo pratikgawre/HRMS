@@ -34,6 +34,12 @@ export const projectColumns = [
   { key: 'status', label: 'Status' },
 ];
 
+const projectDetailColumns = [
+  { key: 'field', label: 'Field' },
+  { key: 'value', label: 'Value' },
+  { key: 'notes', label: 'Notes' },
+];
+
 const PROJECT_TABS = [
   { id: 'list', label: 'Project List', icon: 'ri-list-check-3' },
   { id: 'create', label: 'Create Project', icon: 'ri-add-circle-line' },
@@ -46,6 +52,7 @@ const PROJECT_TABS = [
 const PROJECT_REFRESH_MS = 10000;
 const PROJECT_SECTION_ID = 'project-create';
 const PROJECT_DETAILS_ID = 'project-selected-details';
+const PROJECT_INLINE_DETAILS_ID = 'project-inline-details';
 
 function Projects() {
   const navigate = useNavigate();
@@ -73,19 +80,19 @@ function Projects() {
   const [selectedTeamMembers, setSelectedTeamMembers] = useState([]);
   const [isTeamDraftDirty, setIsTeamDraftDirty] = useState(false);
   const [isTeamRosterOpen, setIsTeamRosterOpen] = useState(false);
-  const [savePopup, setSavePopup] = useState('');
+  const [savePopup, setSavePopup] = useState(null);
 
-  useEffect(() => {
-    if (!savePopup) {
-      return undefined;
+  function showProjectToast(text, tone = 'success') {
+    if (!isAdmin) {
+      return;
     }
 
-    const timer = window.setTimeout(() => {
-      setSavePopup('');
-    }, 2200);
+    setSavePopup({ text, tone });
+  }
 
-    return () => window.clearTimeout(timer);
-  }, [savePopup]);
+  function closeProjectToast() {
+    setSavePopup(null);
+  }
 
   const navigateProjectList = useCallback((status = '') => {
     const params = new URLSearchParams({ tab: 'list' });
@@ -190,6 +197,9 @@ function Projects() {
   }, []);
 
   const employeeOptions = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee)), [employees]);
+  const employeeTeamOptions = useMemo(() => (
+    employeeOptions.filter((employee) => isEmployeeRole(employee))
+  ), [employeeOptions]);
   const teamLeaderOptions = useMemo(() => (
     employeeOptions
       .filter((employee) => isTeamLeaderEmployee(employee))
@@ -230,6 +240,7 @@ function Projects() {
       || visibleProjects[0]
       || null
   ), [selectedProjectId, visibleProjects]);
+  const showInlineProjectDetails = role === 'hr' && activeTab === 'list' && Boolean(selectedProject);
   const selectedProjectTeamMembers = useMemo(
     () => getProjectTeamMemberDetails(selectedProject, employeeDirectory),
     [employeeDirectory, selectedProject],
@@ -302,7 +313,7 @@ function Projects() {
       label: 'Controls',
       render: (row) => (
         <div className="table-actions table-actions-inline">
-          <button type="button" onClick={() => openProject(row)}>
+          <button type="button" onClick={() => openProject(row, { scrollToDetails: true })}>
             Open
           </button>
           <button type="button" onClick={() => startEditingProject(row)}>
@@ -341,14 +352,16 @@ function Projects() {
     setSelectedProjectId(project.id);
     setSelectedTeamMembers(Array.isArray(project.teamMembers) ? project.teamMembers : []);
     setIsTeamDraftDirty(false);
-    setMessage(`${project.name} selected.`);
+    setMessage('');
+    showProjectToast(`${project.name} selected.`, 'success');
     if (!canManage) {
       setActiveTab('list');
     }
 
     if (options.scrollToDetails) {
       window.setTimeout(() => {
-        document.getElementById(PROJECT_DETAILS_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const target = document.getElementById(showInlineProjectDetails ? PROJECT_INLINE_DETAILS_ID : PROJECT_DETAILS_ID);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 0);
     }
   }
@@ -369,7 +382,8 @@ function Projects() {
     setProjectForm(projectToForm(project, managerName, managerId));
     setSelectedTeamMembers(Array.isArray(project.teamMembers) ? project.teamMembers : []);
     setIsTeamDraftDirty(false);
-    setMessage(`Editing ${project.name}.`);
+    setMessage('');
+    showProjectToast(`Editing ${project.name}.`, 'success');
     setActiveTab('create');
   }
 
@@ -379,6 +393,7 @@ function Projects() {
     setSelectedTeamMembers([]);
     setIsTeamDraftDirty(false);
     setMessage('');
+    showProjectToast('Project form cleared.', 'success');
   }
 
   async function handleProjectSubmit(event) {
@@ -387,6 +402,7 @@ function Projects() {
     const name = projectForm.name.trim();
     if (!name) {
       setMessage('Please add a project name first.');
+      showProjectToast('Please add a project name first.', 'error');
       return;
     }
 
@@ -425,18 +441,20 @@ function Projects() {
       setSelectedTeamMembers([]);
       setIsTeamDraftDirty(false);
       setActiveTab('list');
-      setSavePopup(editingProjectId ? 'Project updated successfully.' : 'Project created successfully.');
+      showProjectToast(editingProjectId ? 'Project updated successfully.' : 'Project created successfully.', 'success');
       setMessage('');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
       setMessage('Project could not be saved right now.');
+      showProjectToast('Project could not be saved right now.', 'error');
     }
   }
 
   async function handlePatchProject(patch, successMessage) {
     if (!selectedProject) {
       setMessage('Select a project first.');
+      showProjectToast('Select a project first.', 'error');
       return;
     }
 
@@ -459,12 +477,13 @@ function Projects() {
       setSelectedProjectId(normalized.id);
       setSelectedTeamMembers(Array.isArray(normalized.teamMembers) ? normalized.teamMembers : []);
       setIsTeamDraftDirty(false);
-      setSavePopup(successMessage);
+      showProjectToast(successMessage, 'success');
       setMessage('');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
       setMessage('Changes could not be saved.');
+      showProjectToast('Changes could not be saved.', 'error');
     }
   }
 
@@ -502,6 +521,7 @@ function Projects() {
   async function removeProject(project) {
     const confirmed = window.confirm(`Delete ${project.name}?`);
     if (!confirmed) {
+      showProjectToast('Delete cancelled.', 'error');
       return;
     }
 
@@ -510,26 +530,32 @@ function Projects() {
       setProjects((current) => current.filter((item) => item.id !== project.id && item.backendId !== project.id));
       setSelectedProjectId((current) => (current === project.id ? '' : current));
       setMessage(`${project.name} deleted.`);
+      showProjectToast(`${project.name} deleted.`, 'success');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
       setMessage('Project could not be deleted.');
+      showProjectToast('Project could not be deleted.', 'error');
     }
   }
 
   const filteredEmployees = useMemo(() => {
     const query = teamSearch.trim().toLowerCase();
+    const scopedEmployees = employeeTeamOptions;
+
     if (!query) {
-      return employeeOptions;
+      return scopedEmployees;
     }
 
-    return employeeOptions.filter((employee) => [
+    return scopedEmployees.filter((employee) => [
       employee.name,
       employee.department,
       employee.role,
+      employee.accessRole,
+      employee.designation,
       employee.id,
     ].some((value) => String(value || '').toLowerCase().includes(query)));
-  }, [employeeOptions, teamSearch]);
+  }, [employeeTeamOptions, teamSearch]);
   const selectedTeamLeader = useMemo(() => (
     teamLeaderOptions.find((employee) => employee.id === projectForm.teamLeadId) || null
   ), [projectForm.teamLeadId, teamLeaderOptions]);
@@ -569,17 +595,19 @@ function Projects() {
           </div>
         </div>
 
-      {message && <div className="user-alert"><i className="ri-checkbox-circle-line" aria-hidden="true" /><span>{message}</span></div>}
       {savePopup && (
-        <div className="save-toast" role="status" aria-live="polite">
-          <span className="save-toast-icon" aria-hidden="true">
-            <i className="ri-checkbox-circle-fill" />
+        <div className={`project-toast is-${savePopup.tone || 'success'}`} role="status" aria-live="polite">
+          <span className="project-toast__icon" aria-hidden="true">
+            <i className={savePopup.tone === 'error' ? 'ri-error-warning-line' : 'ri-checkbox-circle-fill'} />
           </span>
-          <div className="save-toast-body">
-            <span className="save-toast-kicker">Saved</span>
-            <strong>{savePopup}</strong>
+          <div className="project-toast__copy">
+            <span>{savePopup.tone === 'error' ? 'Warning' : 'Success'}</span>
+            <strong>{savePopup.text}</strong>
           </div>
-          <span className="save-toast-accent" aria-hidden="true" />
+          <button type="button" className="project-toast__close" onClick={closeProjectToast} aria-label="Dismiss notification">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+          <span className="project-toast__accent" aria-hidden="true" />
         </div>
       )}
 
@@ -594,7 +622,14 @@ function Projects() {
                 key={tab.id}
                 type="button"
                 className={`project-tab ${activeTab === tab.id ? 'is-active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  if (role === 'hr' && tab.id === 'list') {
+                    navigateProjectList(teamFilter === 'All' ? '' : teamFilter);
+                    return;
+                  }
+
+                  setActiveTab(tab.id);
+                }}
                 role="tab"
                 aria-selected={activeTab === tab.id}
               >
@@ -636,6 +671,26 @@ function Projects() {
                   onRowClick={(row) => openProject(row, { scrollToDetails: true })}
                   getRowClassName={(row) => (row.id === selectedProjectId ? 'is-selected-row' : '')}
                 />
+                {showInlineProjectDetails && selectedProject && (
+                  <div className="project-inline-details" id={PROJECT_INLINE_DETAILS_ID}>
+                    <div className="project-inline-details-head">
+                      <div>
+                        <p className="eyebrow">Project Details</p>
+                        <h4>{selectedProject.name}</h4>
+                      </div>
+                      <button type="button" className="project-team-summary" onClick={() => openProject(selectedProject, { scrollToDetails: true })}>
+                        <span>{selectedProject.projectCode}</span>
+                        <small>Selected project</small>
+                      </button>
+                    </div>
+                    <DataTable
+                      columns={projectDetailColumns}
+                      rows={buildProjectDetailRows(selectedProject)}
+                      emptyMessage="No project details available."
+                      getRowClassName={(row) => (row.field === 'Status' ? `is-${String(row.value).toLowerCase().replaceAll(' ', '-')}` : '')}
+                    />
+                  </div>
+                )}
               </>
             )}
 
@@ -1297,6 +1352,26 @@ function getProjectInitials(name) {
     .toUpperCase() || 'PR';
 }
 
+function buildProjectDetailRows(project) {
+  if (!project) {
+    return [];
+  }
+
+  return [
+    { field: 'Project Code', value: project.projectCode || '-', notes: 'Unique identifier' },
+    { field: 'Project Name', value: project.name || '-', notes: 'Selected project title' },
+    { field: 'Description', value: project.description || 'No description saved.', notes: 'Short project summary' },
+    { field: 'Manager', value: project.manager || '-', notes: project.managerId ? `Employee ID: ${project.managerId}` : 'Project owner' },
+    { field: 'Team Leader', value: project.teamLeadName || '-', notes: project.teamLeadId ? `TL ID: ${project.teamLeadId}` : 'Assigned lead' },
+    { field: 'Team', value: project.teamLabel || '-', notes: 'Current team size' },
+    { field: 'Milestone', value: project.milestone || '-', notes: 'Current delivery checkpoint' },
+    { field: 'Start Date', value: project.startDate || '-', notes: 'Planned kick-off date' },
+    { field: 'End Date', value: project.endDate || '-', notes: 'Target completion date' },
+    { field: 'Progress', value: project.progress || '-', notes: 'Tracked delivery progress' },
+    { field: 'Status', value: project.status || '-', notes: 'Project lifecycle state' },
+  ];
+}
+
 function getInitialsFromId(value) {
   return String(value || 'EM')
     .replace(/[^a-z0-9]/gi, ' ')
@@ -1319,6 +1394,12 @@ function isTeamLeaderEmployee(employee) {
   const designation = normalizeRoleLabel(employee.designation || employee.jobTitle || employee.role || '');
   const accessRole = normalizeRoleLabel(employee.accessRole || '');
   return designation === 'team lead' || accessRole === 'team lead';
+}
+
+function isEmployeeRole(employee) {
+  const designation = normalizeRoleLabel(employee.designation || employee.jobTitle || employee.role || '');
+  const accessRole = normalizeRoleLabel(employee.accessRole || employee.role || '');
+  return designation === 'employee' || accessRole === 'employee';
 }
 
 function normalizeRoleLabel(value) {

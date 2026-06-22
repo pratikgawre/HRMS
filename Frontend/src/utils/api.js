@@ -23,7 +23,18 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    let message = text || `Request failed: ${response.status}`;
+
+    try {
+      const payload = text ? JSON.parse(text) : null;
+      if (payload && typeof payload.message === 'string') {
+        message = payload.message;
+      }
+    } catch {
+      // Fall back to the raw response text below.
+    }
+
+    throw new Error(message);
   }
 
   const contentType = response.headers.get('content-type') || '';

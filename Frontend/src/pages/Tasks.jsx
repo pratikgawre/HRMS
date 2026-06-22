@@ -9,6 +9,12 @@ import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitials } from '../utils/user-management.js';
 import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
+import {
+  getEmployeeId,
+  getEmployeeName,
+  getProjectAssigneeOptions,
+  getSelectableTeamLeadProjects,
+} from '../utils/teamLeadAssignments.js';
 
 export const taskColumns = [
   { key: 'id', label: 'Task ID' },
@@ -28,7 +34,6 @@ export const employeeTaskColumns = [
   { key: 'status', label: 'Status' },
 ];
 
-const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 const priorityOptions = ['Low', 'Medium', 'High', 'Urgent'];
 const taskStatusOptions = ['Pending', 'Active', 'Approved', 'Completed'];
 const taskAssignableRoles = ['admin', 'projectManager', 'teamLead'];
@@ -50,6 +55,7 @@ function Tasks() {
   const canUpdateAnyTask = role === 'admin' || role === 'projectManager' || role === 'teamLead';
   const [taskRows, setTaskRows] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [status, setStatus] = useState('All');
   const [priority, setPriority] = useState('All');
   const [dueDate, setDueDate] = useState('');
@@ -61,6 +67,11 @@ function Tasks() {
   const [form, setForm] = useState(getEmptyTaskForm());
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
+  const currentTeamLeadIdentity = {
+    employeeId: employeeIdentity.employeeId,
+    employeeName: employeeIdentity.employee,
+    userId: getSessionValue('kavyaUserId'),
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -78,16 +89,29 @@ function Tasks() {
     let active = true;
 
     const refreshData = () => {
+      const apiUrl = '/projects';
+      console.debug('[TeamLead Tasks] loggedInUser', employeeIdentity);
+      console.debug('[TeamLead Tasks] teamLeadId', currentEmployeeId);
+      console.debug('[TeamLead Tasks] selectedProjectId', form.projectId || '');
+      console.debug('[TeamLead Tasks] API URL', apiUrl);
       Promise.all([
         loadTasksWithSeed(),
         safeApiRequest('/employees', people),
-      ]).then(([rows, employeeRows]) => {
+        safeApiRequest(apiUrl, []),
+      ]).then(([rows, employeeRows, projectRows]) => {
         if (!active) {
           return;
         }
 
         setTaskRows(Array.isArray(rows) ? rows.map(normalizeTaskRow) : []);
         setEmployees(normalizeEmployees(employeeRows));
+        setProjects(normalizeProjectRows(projectRows));
+        console.debug('[TeamLead Tasks] API response', {
+          taskCount: Array.isArray(rows) ? rows.length : 0,
+          employeeCount: Array.isArray(employeeRows) ? employeeRows.length : 0,
+          projectCount: Array.isArray(projectRows) ? projectRows.length : 0,
+          projectIds: Array.isArray(projectRows) ? projectRows.map((project) => project.id || project.projectId || '-') : [],
+        });
       });
     };
 
@@ -105,6 +129,27 @@ function Tasks() {
       window.removeEventListener('kavyaEmployeesChanged', refreshData);
     };
   }, []);
+
+  const teamLeadProjects = useMemo(() => (
+    isTeamLead
+      ? getTeamLeadProjectOptions(projects, currentTeamLeadIdentity)
+      : []
+  ), [currentTeamLeadIdentity, isTeamLead, projects]);
+  const selectedProject = useMemo(() => (
+    isTeamLead
+      ? teamLeadProjects.find((project) => project.id === form.projectId) || null
+      : null
+  ), [form.projectId, isTeamLead, teamLeadProjects]);
+  const teamLeadAssigneeOptions = useMemo(() => (
+    isTeamLead
+      ? getProjectAssigneeOptions(selectedProject, employees, currentTeamLeadIdentity)
+      : []
+  ), [currentTeamLeadIdentity, employees, isTeamLead, selectedProject]);
+  const assigneeOptions = useMemo(() => (
+    isTeamLead
+      ? teamLeadAssigneeOptions
+      : employees.filter((employee) => !isAdminEmployee(employee))
+  ), [employees, isTeamLead, teamLeadAssigneeOptions]);
 
   const filteredRows = useMemo(() => {
     let rows = [...taskRows];
@@ -128,7 +173,6 @@ function Tasks() {
     return rows;
   }, [currentEmployeeId, dueDate, employeeIdentity.employee, priority, role, status, taskRows]);
 
-  const assigneeOptions = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee)), [employees]);
   const assignableTasks = useMemo(() => (
     taskRows.filter((task) => role !== 'employee' || isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee))
   ), [currentEmployeeId, employeeIdentity.employee, role, taskRows]);
@@ -136,7 +180,10 @@ function Tasks() {
     taskRows.filter((task) => role !== 'employee' || isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee))
   ), [currentEmployeeId, employeeIdentity.employee, role, taskRows]);
   const openTaskModal = () => {
-    setForm(getEmptyTaskForm(assigneeOptions[0]));
+    setForm(getEmptyTaskForm({
+      teamLeadMode: isTeamLead,
+      projectId: selectedProject?.id || teamLeadProjects[0]?.id || '',
+    }));
     setMessage('');
     setIsTaskModalOpen(true);
   };
@@ -178,29 +225,92 @@ function Tasks() {
   const createTask = async (event) => {
     event.preventDefault();
 
-    const assignee = assigneeOptions.find((employee) => (employee.employeeCode || employee.employeeId || employee.id) === form.assignedToId) || assigneeOptions[0];
-    if (!assignee || !form.title.trim()) {
-      setMessage('Please choose an assignee and enter a task title.');
-      return;
-    }
-
-    const payload = {
-      id: `TSK-${Date.now()}`,
-      title: form.title.trim(),
-      description: form.description.trim(),
-      owner: assignee.displayName || assignee.name,
-      assignedToId: assignee.employeeCode || assignee.employeeId || assignee.id,
-      assignedToName: assignee.displayName || assignee.name,
-      assignedTo: assignee.displayName || assignee.name,
-      assignedByRole: role,
-      assignedByName: getSessionValue('kavyaEmployeeName') || 'Team Lead',
-      priority: form.priority,
-      dueDate: form.dueDate,
-      status: form.status,
-      projectId: '',
-    };
-
     try {
+      if (isTeamLead) {
+        const project = teamLeadProjects.find((item) => item.id === form.projectId) || null;
+        if (!project) {
+          setMessage('Please select a project first.');
+          return;
+        }
+
+        const title = form.title.trim();
+        if (!title) {
+          setMessage('Please enter a task title.');
+          return;
+        }
+
+        const allowedEmployees = getProjectAssigneeOptions(project, employees, currentTeamLeadIdentity);
+        const assignee = allowedEmployees.find((employee) => getEmployeeId(employee) === form.assignedToId) || null;
+        if (!assignee) {
+          setMessage('Please select a valid employee for the selected project.');
+          return;
+        }
+
+        const assigneeId = getEmployeeId(assignee);
+        const assigneeName = getEmployeeName(assignee);
+        const payload = {
+          id: `TSK-${Date.now()}`,
+          title,
+          description: form.description.trim(),
+          owner: assigneeName,
+          assignedToId: assigneeId,
+          assignedToName: assigneeName,
+          assignedTo: assigneeName,
+          assignedById: currentEmployeeId,
+          assignedByRole: role,
+          assignedByName: employeeIdentity.employee || getSessionValue('kavyaEmployeeName') || 'Team Lead',
+          teamLeadId: currentEmployeeId,
+          priority: form.priority,
+          dueDate: form.dueDate,
+          status: form.status,
+          projectId: project.id,
+          projectName: project.name || '',
+          projectCode: project.projectCode || project.id || '',
+        };
+
+        const saved = await apiRequest('/tasks', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        const nextTask = normalizeTaskRow(saved || payload);
+        setTaskRows((current) => [nextTask, ...current]);
+        window.dispatchEvent(new Event('kavyaTasksChanged'));
+        setIsTaskModalOpen(false);
+        setForm(getEmptyTaskForm({ teamLeadMode: true, projectId: project.id }));
+        setMessage('Task assigned successfully.');
+        return;
+      }
+
+      const title = form.title.trim();
+      if (!title) {
+        setMessage('Please enter a task title.');
+        return;
+      }
+
+      const assignee = assigneeOptions.find((employee) => getEmployeeId(employee) === form.assignedToId) || assigneeOptions[0];
+      if (!assignee) {
+        setMessage('Please choose an assignee first.');
+        return;
+      }
+
+      const payload = {
+        id: `TSK-${Date.now()}`,
+        title,
+        description: form.description.trim(),
+        owner: getEmployeeName(assignee),
+        assignedToId: getEmployeeId(assignee),
+        assignedToName: getEmployeeName(assignee),
+        assignedTo: getEmployeeName(assignee),
+        assignedById: currentEmployeeId,
+        assignedByRole: role,
+        assignedByName: employeeIdentity.employee || getSessionValue('kavyaEmployeeName') || 'Team Lead',
+        teamLeadId: currentEmployeeId,
+        priority: form.priority,
+        dueDate: form.dueDate,
+        status: form.status,
+        projectId: form.projectId || '',
+      };
+
       const saved = await apiRequest('/tasks', {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -367,6 +477,9 @@ function Tasks() {
           form={form}
           setForm={setForm}
           assigneeOptions={assigneeOptions}
+          projectOptions={teamLeadProjects}
+          selectedProject={selectedProject}
+          isTeamLead={isTeamLead}
           onClose={() => setIsTaskModalOpen(false)}
           onSubmit={createTask}
         />
@@ -666,7 +779,20 @@ function EmployeeTasksView() {
   );
 }
 
-function TaskAssignmentModal({ form, setForm, assigneeOptions, onClose, onSubmit }) {
+function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
+  const teamLeadMode = Boolean(isTeamLead);
+
+  const updateProject = (nextProjectId) => {
+    setForm((current) => {
+      return {
+        ...current,
+        projectId: nextProjectId,
+        title: '',
+        assignedToId: '',
+      };
+    });
+  };
+
   return (
     <div className="payroll-modal-backdrop" role="presentation">
       <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Assign task">
@@ -676,20 +802,92 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, onClose, onSubmit
         </div>
 
         <form className="salary-form" onSubmit={onSubmit}>
-          <label className="field">
-            <span>Task Title</span>
-            <input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter task title" />
-          </label>
-          <label className="field">
-            <span>Assignee</span>
-            <select value={form.assignedToId} onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}>
-              {assigneeOptions.map((employee) => {
-                const employeeId = employee.employeeCode || employee.employeeId || employee.id;
-                const employeeName = employee.displayName || employee.name;
-                return <option key={employeeId} value={employeeId}>{employeeName} - {employee.department || '-'}</option>;
-              })}
-            </select>
-          </label>
+          {teamLeadMode ? (
+            <>
+              <label className="field">
+                <span>Project</span>
+                <select value={form.projectId || ''} onChange={(event) => updateProject(event.target.value)}>
+                  <option value="">Select project</option>
+                  {projectOptions.length === 0 && <option value="" disabled>No projects assigned to you.</option>}
+                  {projectOptions.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name} - {project.projectCode || project.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="task-assignment-inline">
+                {selectedProject && form.projectId && (
+                  <div className="task-summary-card task-summary-card-compact">
+                    <small>{selectedProject.projectCode || selectedProject.id}</small>
+                    <strong>{selectedProject.name}</strong>
+                    <small>Team members: {Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers.length : 0}</small>
+                  </div>
+                )}
+
+                <div className="task-assignment-stack">
+                  {form.projectId ? (
+                    <label className="field">
+                      <span>Task Title</span>
+                      <input
+                        required
+                        value={form.title}
+                        onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                        placeholder="Enter task title"
+                      />
+                    </label>
+                  ) : (
+                    <p className="project-empty-state task-empty-inline">
+                      Select a project to enter a task title and load eligible assignees.
+                    </p>
+                  )}
+
+                  <label className="field">
+                    <span>Assignee</span>
+                    <select
+                      value={form.assignedToId || ''}
+                      disabled={!form.projectId}
+                      onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}
+                    >
+                      {!form.projectId && <option value="">Select project first</option>}
+                      {form.projectId && <option value="">Select employee</option>}
+                      {form.projectId && assigneeOptions.length === 0 && <option value="">No employees available</option>}
+                      {assigneeOptions.map((employee) => {
+                        const employeeId = getEmployeeId(employee);
+                        const employeeName = getEmployeeName(employee);
+                        return <option key={employeeId} value={employeeId}>{employeeName} - {employee.department || '-'}</option>;
+                      })}
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="field">
+                <span>Task Title</span>
+                <input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter task title" />
+              </label>
+              <label className="field">
+                <span>Assignee</span>
+                <select value={form.assignedToId} onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}>
+                  {assigneeOptions.map((employee) => {
+                    const employeeId = getEmployeeId(employee);
+                    const employeeName = getEmployeeName(employee);
+                    return <option key={employeeId} value={employeeId}>{employeeName} - {employee.department || '-'}</option>;
+                  })}
+                </select>
+              </label>
+            </>
+          )}
+          {teamLeadMode && selectedProject && form.projectId && (
+            <div className="task-summary-card task-summary-card-compact">
+              <small>{selectedProject.projectCode || selectedProject.id}</small>
+              <strong>{selectedProject.name}</strong>
+              <small>Team members: {Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers.length : 0}</small>
+            </div>
+          )}
           <label className="field">
             <span>Priority</span>
             <select value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}>
@@ -760,9 +958,13 @@ function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
 
 function getEmptyTaskForm(defaultEmployee = null) {
   const today = new Date().toISOString().slice(0, 10);
+  const isTeamLeadForm = Boolean(defaultEmployee && typeof defaultEmployee === 'object' && defaultEmployee.teamLeadMode);
+  const employee = isTeamLeadForm ? defaultEmployee.employee : defaultEmployee;
+  const projectId = isTeamLeadForm ? String(defaultEmployee.projectId || '') : '';
   return {
     title: '',
-    assignedToId: defaultEmployee ? (defaultEmployee.employeeCode || defaultEmployee.employeeId || defaultEmployee.id) : '',
+    projectId,
+    assignedToId: employee ? getEmployeeId(employee) : '',
     priority: 'Medium',
     dueDate: today,
     status: 'Pending',
@@ -781,6 +983,39 @@ function normalizeEmployees(rows) {
   }));
 }
 
+function normalizeProjectRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((project, index) => ({
+    ...project,
+    id: project.id || project.projectId || `PRJ-${index + 1}`,
+    projectCode: project.projectCode || project.id || project.projectId || `PRJ-${index + 1}`,
+    teamLeadId: project.teamLeadId || '',
+    teamLeadName: project.teamLeadName || '',
+    teamLeadDesignation: project.teamLeadDesignation || '',
+    teamMembers: Array.isArray(project.teamMembers) ? project.teamMembers.filter(Boolean).map((value) => String(value)) : [],
+    teamMemberDetails: Array.isArray(project.teamMemberDetails) ? project.teamMemberDetails : [],
+    name: project.name || `Project ${index + 1}`,
+    status: project.status || 'Planning',
+  }));
+}
+
+function isActiveProject(project) {
+  const status = String(project?.status || '').trim().toLowerCase();
+  if (!status) {
+    return true;
+  }
+
+  return !['inactive', 'closed', 'archived', 'cancelled', 'completed'].includes(status);
+}
+
+function getTeamLeadProjectOptions(projects, teamLeadIdentity) {
+  const matchedProjects = getSelectableTeamLeadProjects(projects, teamLeadIdentity).filter((project) => isActiveProject(project));
+  if (matchedProjects.length > 0) {
+    return matchedProjects;
+  }
+
+  return (Array.isArray(projects) ? projects : []).filter((project) => isActiveProject(project));
+}
+
 function normalizeTaskRow(task) {
   return {
     id: task.id,
@@ -793,6 +1028,11 @@ function normalizeTaskRow(task) {
     due: task.due || task.dueDate || '-',
     dueDate: task.dueDate || task.due || '',
     status: task.status || 'Pending',
+    teamLeadId: task.teamLeadId || task.assignedById || '',
+    projectId: task.projectId || '',
+    projectName: task.projectName || '',
+    projectCode: task.projectCode || '',
+    createdDateTime: task.createdDateTime || task.createdAt || '',
   };
 }
 

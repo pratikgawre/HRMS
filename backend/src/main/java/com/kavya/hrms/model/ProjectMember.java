@@ -8,6 +8,7 @@ public class ProjectMember {
   private String department;
   private String role;
   private String avatar;
+  private String status;
 
   public String getId() { return id; }
   public void setId(String id) { this.id = id; }
@@ -23,4 +24,6 @@ public class ProjectMember {
   public void setRole(String role) { this.role = role; }
   public String getAvatar() { return avatar; }
   public void setAvatar(String avatar) { this.avatar = avatar; }
+  public String getStatus() { return status; }
+  public void setStatus(String status) { this.status = status; }
 }

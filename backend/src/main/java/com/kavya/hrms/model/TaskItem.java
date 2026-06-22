@@ -20,7 +20,11 @@ public class TaskItem {
   private String priority;
   private String dueDate;
   private String status;
+  private String teamLeadId;
   private String projectId;
+  private String projectName;
+  private String projectCode;
+  private String createdDateTime;
 
   public String getId() { return id; }
   public void setId(String id) { this.id = id; }
@@ -50,6 +54,14 @@ public class TaskItem {
   public void setDueDate(String dueDate) { this.dueDate = dueDate; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
+  public String getTeamLeadId() { return teamLeadId; }
+  public void setTeamLeadId(String teamLeadId) { this.teamLeadId = teamLeadId; }
   public String getProjectId() { return projectId; }
   public void setProjectId(String projectId) { this.projectId = projectId; }
+  public String getProjectName() { return projectName; }
+  public void setProjectName(String projectName) { this.projectName = projectName; }
+  public String getProjectCode() { return projectCode; }
+  public void setProjectCode(String projectCode) { this.projectCode = projectCode; }
+  public String getCreatedDateTime() { return createdDateTime; }
+  public void setCreatedDateTime(String createdDateTime) { this.createdDateTime = createdDateTime; }
 }

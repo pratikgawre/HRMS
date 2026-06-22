@@ -80,16 +80,21 @@ function Header({ role, onMenuClick }) {
   };
 
   const handleNotificationClick = async (id) => {
+    const item = notificationItems.find((notification) => notification.id === id);
+    const targetPath = getNotificationTargetPath(item, role, roleBasePath);
+
     setNotificationItems((current) =>
-      current.map((item) => (item.id === id ? { ...item, readStatus: true } : item)),
+      current.map((notification) => (notification.id === id ? { ...notification, readStatus: true } : notification)),
     );
+    setShowNotifications(false);
+    navigate(targetPath);
 
     try {
       await apiRequest(`/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT' });
       window.dispatchEvent(new Event('kavyaNotificationsChanged'));
     } catch {
       setNotificationItems((current) =>
-        current.map((item) => (item.id === id ? { ...item, readStatus: false } : item)),
+        current.map((notification) => (notification.id === id ? { ...notification, readStatus: false } : notification)),
       );
     }
   };
@@ -122,6 +127,10 @@ function Header({ role, onMenuClick }) {
   const logout = () => {
     clearSession();
     navigate('/login', { replace: true });
+  };
+
+  const openProfile = () => {
+    navigate(`${roleBasePath}/profile`);
   };
 
   return (
@@ -201,7 +210,13 @@ function Header({ role, onMenuClick }) {
             </section>
           )}
         </div>
-        <div className="user-chip">
+        <button
+          type="button"
+          className="user-chip user-chip--clickable"
+          onClick={openProfile}
+          aria-label={`Open ${displayRole} profile`}
+          title={`Open ${displayRole} profile`}
+        >
           {employeeIdentity?.profilePicture ? (
             <img src={employeeIdentity.profilePicture} alt={`${employeeIdentity.employee} profile`} />
           ) : (
@@ -210,7 +225,7 @@ function Header({ role, onMenuClick }) {
           <div>
             <strong>{displayName}</strong>
           </div>
-        </div>
+        </button>
         <button className="logout-btn" onClick={logout}><i className="ri-logout-box-r-line" aria-hidden="true" />Logout</button>
       </div>
     </header>
@@ -223,7 +238,7 @@ function getSearchRoutes(role) {
       { path: '/admin/dashboard', keywords: ['dashboard', 'overview', 'home'] },
       { path: '/admin/employees', keywords: ['employee', 'employees', 'staff', 'member', 'people', 'team'] },
       { path: '/admin/users', keywords: ['user', 'users', 'access', 'role', 'account'] },
-      { path: '/admin/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/admin/team-attendance', keywords: ['attendance', 'team attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
       { path: '/admin/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
       { path: '/admin/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
       { path: '/admin/leave-management', keywords: ['leave', 'vacation', 'absence'] },
@@ -237,7 +252,8 @@ function getSearchRoutes(role) {
       { path: '/hr/dashboard', keywords: ['dashboard', 'overview', 'home'] },
       { path: '/hr/employees', keywords: ['employee', 'employees', 'staff', 'member', 'people', 'team'] },
       { path: '/hr/users', keywords: ['user', 'users', 'access', 'role', 'account'] },
-      { path: '/hr/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/hr/team-attendance', keywords: ['team attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/hr/my-attendance', keywords: ['my attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
       { path: '/hr/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
       { path: '/hr/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
       { path: '/hr/leave-approval', keywords: ['leave', 'vacation', 'absence'] },
@@ -251,7 +267,8 @@ function getSearchRoutes(role) {
     teamLead: [
       { path: '/team-lead/dashboard', keywords: ['dashboard', 'overview', 'home'] },
       { path: '/team-lead/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
-      { path: '/team-lead/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/team-lead/team-attendance', keywords: ['team attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/team-lead/my-attendance', keywords: ['my attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
       { path: '/team-lead/leave-review', keywords: ['leave', 'vacation', 'absence'] },
       { path: '/team-lead/tasks', keywords: ['task', 'tasks', 'assignment'] },
       { path: '/team-lead/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
@@ -264,7 +281,8 @@ function getSearchRoutes(role) {
       { path: '/project-manager/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
       { path: '/project-manager/projects', keywords: ['project', 'projects', 'delivery', 'milestone'] },
       { path: '/project-manager/tasks', keywords: ['task', 'tasks', 'assignment'] },
-      { path: '/project-manager/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/project-manager/team-attendance', keywords: ['team attendance', 'team', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/project-manager/my-attendance', keywords: ['my attendance', 'self attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
       { path: '/project-manager/leave-review', keywords: ['leave', 'vacation', 'absence'] },
       { path: '/project-manager/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
       { path: '/project-manager/assets', keywords: ['asset', 'assets', 'inventory'] },
@@ -296,6 +314,8 @@ function normalizeNotifications(rows) {
     createdAt: item.createdAt || '',
     createdByRole: item.createdByRole || '',
     createdByName: item.createdByName || '',
+    sourceType: item.sourceType || '',
+    sourceId: item.sourceId || '',
   }));
 }
 
@@ -320,6 +340,93 @@ function formatNotificationDate(value) {
     month: 'short',
     year: 'numeric',
   }).format(parsed);
+}
+
+function getNotificationTargetPath(notification, role, roleBasePath) {
+  const normalizedSourceType = String(notification?.sourceType || '').trim().toLowerCase();
+  const normalizedText = `${notification?.title || ''} ${notification?.message || ''} ${normalizedSourceType}`.trim().toLowerCase();
+  const payrollPath = getPayrollNotificationPath(notification, roleBasePath);
+
+  if (normalizedSourceType === 'payroll' || normalizedText.includes('salary') || normalizedText.includes('payroll') || normalizedText.includes('payslip')) {
+    return payrollPath;
+  }
+
+  if (normalizedSourceType === 'leave' || normalizedText.includes('leave')) {
+    return getRolePath(role, {
+      admin: '/admin/leave-management',
+      hr: '/hr/leave-approval',
+      teamLead: '/team-lead/leave-review',
+      projectManager: '/project-manager/leave-review',
+      employee: '/employee/leave-requests',
+    }, `${roleBasePath}/dashboard`);
+  }
+
+  if (normalizedSourceType === 'attendance' || normalizedText.includes('attendance') || normalizedText.includes('check in') || normalizedText.includes('check-in')) {
+    return getRolePath(role, {
+      admin: '/admin/team-attendance',
+      hr: '/hr/attendance',
+      teamLead: '/team-lead/team-attendance',
+      projectManager: '/project-manager/team-attendance',
+      employee: '/employee/attendance',
+    }, `${roleBasePath}/dashboard`);
+  }
+
+  if (normalizedSourceType === 'announcement' || normalizedText.includes('announcement') || normalizedText.includes('notice')) {
+    return `${roleBasePath}/announcements`;
+  }
+
+  if (normalizedSourceType === 'task' || normalizedText.includes('task')) {
+    return getRolePath(role, {
+      admin: '/admin/dashboard',
+      hr: '/hr/tasks',
+      teamLead: '/team-lead/tasks',
+      projectManager: '/project-manager/tasks',
+      employee: '/employee/tasks',
+    }, `${roleBasePath}/dashboard`);
+  }
+
+  if (normalizedSourceType === 'asset' || normalizedText.includes('asset')) {
+    return getRolePath(role, {
+      admin: '/admin/assets',
+      hr: '/hr/assets',
+      teamLead: '/team-lead/dashboard',
+      projectManager: '/project-manager/assets',
+      employee: '/employee/assets',
+    }, `${roleBasePath}/dashboard`);
+  }
+
+  if (normalizedSourceType === 'project' || normalizedText.includes('project')) {
+    return getRolePath(role, {
+      admin: '/admin/projects',
+      hr: '/hr/projects',
+      teamLead: '/team-lead/dashboard',
+      projectManager: '/project-manager/projects',
+      employee: '/employee/dashboard',
+    }, `${roleBasePath}/dashboard`);
+  }
+
+  if (normalizedSourceType === 'profile') {
+    return `${roleBasePath}/profile`;
+  }
+
+  if (normalizedSourceType === 'settings') {
+    return `${roleBasePath}/settings`;
+  }
+
+  return `${roleBasePath}/dashboard`;
+}
+
+function getPayrollNotificationPath(notification, roleBasePath) {
+  const sourceId = String(notification?.sourceId || '').trim();
+  if (!sourceId || sourceId.toLowerCase() === 'bulk') {
+    return `${roleBasePath}/payroll`;
+  }
+
+  return `${roleBasePath}/payroll?recordId=${encodeURIComponent(sourceId)}`;
+}
+
+function getRolePath(role, rolePaths, fallbackPath) {
+  return rolePaths[role] || fallbackPath;
 }
 
 export default Header;

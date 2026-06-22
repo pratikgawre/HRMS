@@ -16,7 +16,11 @@ export function normalizeTaskRows(rows = []) {
     due: task.due || task.dueDate || '-',
     dueDate: task.dueDate || task.due || '',
     status: task.status || 'Pending',
+    teamLeadId: task.teamLeadId || task.assignedById || '',
     projectId: task.projectId || '',
+    projectName: task.projectName || '',
+    projectCode: task.projectCode || '',
+    createdDateTime: task.createdDateTime || task.createdAt || '',
   }));
 }
 
@@ -36,7 +40,11 @@ export function serializeTaskForApi(task) {
     priority: task.priority || 'Medium',
     dueDate: task.due || task.dueDate || '',
     status: task.status || 'Pending',
+    teamLeadId: task.teamLeadId || task.assignedById || '',
     projectId: task.projectId || '',
+    projectName: task.projectName || '',
+    projectCode: task.projectCode || '',
+    createdDateTime: task.createdDateTime || task.createdAt || '',
   };
 }
 

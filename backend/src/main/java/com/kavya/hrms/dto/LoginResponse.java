@@ -9,7 +9,6 @@ public class LoginResponse {
   private String userId;
   private String lastLogin;
   private String token;
-  private boolean twoFactorRequired;
   private String message;
 
   public boolean isOk() { return ok; }
@@ -28,8 +27,6 @@ public class LoginResponse {
   public void setLastLogin(String lastLogin) { this.lastLogin = lastLogin; }
   public String getToken() { return token; }
   public void setToken(String token) { this.token = token; }
-  public boolean isTwoFactorRequired() { return twoFactorRequired; }
-  public void setTwoFactorRequired(boolean twoFactorRequired) { this.twoFactorRequired = twoFactorRequired; }
   public String getMessage() { return message; }
   public void setMessage(String message) { this.message = message; }
 }
