@@ -8,4 +8,5 @@ public interface PayrollRecordRepository extends MongoRepository<PayrollRecord, 
   List<PayrollRecord> findByEmployeeId(String employeeId);
   List<PayrollRecord> findByMonthAndYear(String month, String year);
   List<PayrollRecord> findByEmployeeIdAndMonthAndYear(String employeeId, String month, String year);
+  void deleteByMonthAndYear(String month, String year);
 }
