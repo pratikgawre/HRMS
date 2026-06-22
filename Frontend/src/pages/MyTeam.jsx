@@ -26,8 +26,10 @@ function MyTeam() {
 
 function LeadershipMyTeamView({ role }) {
   const navigate = useNavigate();
+  const currentTeamLeadIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
   const [projects, setProjects] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [teamAssignments, setTeamAssignments] = useState([]);
   const [tasks, setTasks] = useState([]);
 
@@ -36,9 +38,10 @@ function LeadershipMyTeamView({ role }) {
 
     const refreshTeamData = () => {
       Promise.all([
-        safeApiRequest(`/team-lead/${currentEmployeeId}/projects`, []),
-        safeApiRequest(`/tasks/assigned-by/${currentEmployeeId}`, []),
-      ]).then(([projectRows, assignmentRows]) => {
+        safeApiRequest('/projects', []),
+        safeApiRequest('/tasks', []),
+        safeApiRequest('/employees', []),
+      ]).then(([projectRows, taskRows, employeeRows]) => {
         if (!active) {
           return;
         }
@@ -71,21 +74,49 @@ function LeadershipMyTeamView({ role }) {
   }, []);
 
   const assignmentData = useMemo(
-    () => buildTeamLeadAssignmentGroups(projects, [], currentEmployeeId),
-    [currentEmployeeId, projects],
-  );
     () => buildTeamLeadAssignmentGroups(projects, employees, currentTeamLeadIdentity),
     [currentTeamLeadIdentity, employees, projects],
   );
 
-  const taskAssignmentData = useMemo(
-    () => buildTaskAssignmentGroups(tasks, currentTeamLeadIdentity),
-    [currentTeamLeadIdentity, tasks],
+  const taskAssignmentGroups = useMemo(
+    () => {
+      const map = new Map();
+      const normalize = (value) => String(value || '').trim().toLowerCase();
+      const currentLeadId = normalize(currentEmployeeId);
+      const currentLeadName = normalize(currentTeamLeadIdentity?.employeeName || currentTeamLeadIdentity?.name || '');
+
+      (Array.isArray(tasks) ? tasks : [])
+        .filter((task) => {
+          const assignedById = normalize(task.assignedById);
+          const assignedByName = normalize(task.assignedByName);
+          return (
+            (currentLeadId && assignedById === currentLeadId)
+            || (currentLeadName && assignedByName === currentLeadName)
+          );
+        })
+        .forEach((task) => {
+          const projectKey = normalizeLookupValue(task.projectId || task.project || task.projectCode || '');
+          const projectName = String(task.projectName || task.project || 'Project').trim() || 'Project';
+          const key = projectKey || normalize(projectName);
+          const rows = map.get(key) || [];
+          rows.push({
+            id: task.id || '-',
+            title: task.title || '-',
+            assignee: task.assignedToName || task.owner || task.assignedTo || '-',
+            priority: task.priority || 'Medium',
+            status: task.status || 'Pending',
+            dueDate: task.dueDate || task.due || '-',
+            projectName,
+          });
+          map.set(key, rows);
+        });
+
+      return map;
+    },
+    [currentEmployeeId, currentTeamLeadIdentity, tasks],
   );
-  const teamAssignmentGroups = assignmentData.groups.length > 0 ? assignmentData.groups : taskAssignmentData.groups;
-  const effectiveEmployeeDirectory = assignmentData.employeeDirectory.size > 0
-    ? assignmentData.employeeDirectory
-    : taskAssignmentData.employeeDirectory;
+  const teamAssignmentGroups = assignmentData.groups;
+  const effectiveEmployeeDirectory = assignmentData.employeeDirectory;
 
   const memberProjectMap = useMemo(() => {
     const map = new Map();
@@ -141,50 +172,7 @@ function LeadershipMyTeamView({ role }) {
     })
   ), [effectiveEmployeeDirectory, memberProjectMap, tasks]);
 
-  const projectTaskMap = useMemo(() => {
-    const map = new Map();
-    const normalize = (value) => String(value || '').trim().toLowerCase();
-    const currentLeadId = normalize(currentEmployeeId);
-    const currentLeadName = normalize(currentEmployeeName);
-    const visibleTasks = (Array.isArray(tasks) ? tasks : []).filter((task) => {
-      const assignedById = normalize(task.assignedById);
-      const assignedByName = normalize(task.assignedByName);
-      return (
-        (currentLeadId && assignedById === currentLeadId)
-        || (currentLeadName && assignedByName === currentLeadName)
-      );
-    });
-
-    teamAssignmentGroups.forEach((group) => {
-      map.set(group.id, []);
-    });
-
-    visibleTasks.forEach((task) => {
-      const projectKey = normalizeLookupValue(task.projectId || task.project || task.projectCode || '');
-      const projectName = String(task.projectName || task.project || 'Project').trim() || 'Project';
-      const groupKey = teamAssignmentGroups.length > 0
-        ? (teamAssignmentGroups.find((group) => normalizeLookupValue(group.projectId || group.projectCode || group.id) === projectKey)?.id || '')
-        : projectKey || normalize(projectName);
-
-      if (!groupKey) {
-        return;
-      }
-
-      const rows = map.get(groupKey) || [];
-      rows.push({
-        id: task.id || '-',
-        title: task.title || '-',
-        assignee: task.assignedToName || task.owner || task.assignedTo || '-',
-        priority: task.priority || 'Medium',
-        status: task.status || 'Pending',
-        dueDate: task.dueDate || task.due || '-',
-        projectName,
-      });
-      map.set(groupKey, rows);
-    });
-
-    return map;
-  }, [currentEmployeeId, currentEmployeeName, teamAssignmentGroups, tasks]);
+  const projectTaskMap = taskAssignmentGroups;
 
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
   const totalAssignments = teamAssignmentGroups.reduce((sum, group) => sum + (group.teamMemberCount || 0), 0);
