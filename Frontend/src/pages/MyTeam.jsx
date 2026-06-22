@@ -5,7 +5,6 @@ import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
-import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import {
   buildEmployeeDirectory,
   buildTeamLeadAssignmentGroups,
@@ -27,7 +26,6 @@ function MyTeam() {
 
 function LeadershipMyTeamView({ role }) {
   const navigate = useNavigate();
-  const currentTeamLeadIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
   const currentEmployeeName = getSessionValue('kavyaEmployeeName');
   const [employees, setEmployees] = useState([]);
@@ -139,6 +137,8 @@ function LeadershipMyTeamView({ role }) {
       };
     })
   ), [effectiveEmployeeDirectory, memberProjectMap, tasks]);
+
+  const projectTaskMap = taskAssignmentData.groups;
 
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
   const totalAssignments = assignmentData.groups.reduce((sum, group) => sum + group.teamMemberCount, 0);
