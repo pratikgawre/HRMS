@@ -26,10 +26,11 @@ function MyTeam() {
 
 function LeadershipMyTeamView({ role }) {
   const navigate = useNavigate();
-  const currentEmployeeId = getSessionValue('kavyaEmployeeId');
-  const currentEmployeeName = getSessionValue('kavyaEmployeeName');
-  const [employees, setEmployees] = useState([]);
+  const currentTeamLeadIdentity = getCurrentEmployeeIdentity();
+  const currentEmployeeId = String(currentTeamLeadIdentity.employeeId || '').trim();
   const [projects, setProjects] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [teamAssignments, setTeamAssignments] = useState([]);
   const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
@@ -47,9 +48,10 @@ function LeadershipMyTeamView({ role }) {
     const refreshTeamData = () => {
       Promise.all([
         safeApiRequest('/employees', []),
-        loadTeamLeadProjects(),
+        safeApiRequest(`/team-lead/${currentEmployeeId}/projects`, []),
         safeApiRequest('/tasks', []),
-      ]).then(([employeeRows, projectRows, taskRows]) => {
+        safeApiRequest(`/tasks/assigned-by/${currentEmployeeId}`, []),
+      ]).then(([employeeRows, projectRows, taskRows, assignmentRows]) => {
         if (!active) {
           return;
         }
@@ -57,6 +59,9 @@ function LeadershipMyTeamView({ role }) {
         setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
         setProjects(Array.isArray(projectRows) ? projectRows : []);
         setTasks(Array.isArray(taskRows) ? taskRows : []);
+        setTeamAssignments(Array.isArray(assignmentRows) ? assignmentRows : []);
+        console.debug('[TeamLead MyTeam] loggedInUser', currentTeamLeadIdentity);
+        console.debug('[TeamLead MyTeam] projectCount', Array.isArray(projectRows) ? projectRows.length : 0);
       });
     };
 
