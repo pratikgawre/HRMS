@@ -9,6 +9,7 @@ import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import {
   buildEmployeeDirectory,
   buildTeamLeadAssignmentGroups,
+  buildTaskAssignmentGroups,
   getEmployeeId,
   getEmployeeName,
   isEligibleTeamMember,
@@ -64,26 +65,29 @@ function LeadershipMyTeamView({ role }) {
     refreshTeamData();
     const intervalId = window.setInterval(refreshTeamData, 15000);
     window.addEventListener('focus', refreshTeamData);
-    window.addEventListener('kavyaProjectsChanged', refreshTeamData);
     window.addEventListener('kavyaEmployeesChanged', refreshTeamData);
+    window.addEventListener('kavyaProjectsChanged', refreshTeamData);
     window.addEventListener('kavyaTasksChanged', refreshTeamData);
 
     return () => {
       active = false;
       window.clearInterval(intervalId);
       window.removeEventListener('focus', refreshTeamData);
-      window.removeEventListener('kavyaProjectsChanged', refreshTeamData);
       window.removeEventListener('kavyaEmployeesChanged', refreshTeamData);
+      window.removeEventListener('kavyaProjectsChanged', refreshTeamData);
       window.removeEventListener('kavyaTasksChanged', refreshTeamData);
     };
-  }, []);
+  }, [currentEmployeeId]);
 
   const assignmentData = useMemo(
     () => buildTeamLeadAssignmentGroups(projects, employees, currentEmployeeId),
     [currentEmployeeId, employees, projects],
   );
-  const teamAssignmentGroups = assignmentData.groups;
-  const effectiveEmployeeDirectory = assignmentData.employeeDirectory;
+
+  const teamAssignmentGroups = assignmentData.groups.length > 0 ? assignmentData.groups : taskAssignmentData.groups;
+  const effectiveEmployeeDirectory = assignmentData.employeeDirectory.size > 0
+    ? assignmentData.employeeDirectory
+    : taskAssignmentData.employeeDirectory;
 
   const memberProjectMap = useMemo(() => {
     const map = new Map();
@@ -95,10 +99,7 @@ function LeadershipMyTeamView({ role }) {
           return;
         }
 
-        const current = map.get(key) || {
-          ...member,
-          projects: [],
-        };
+        const current = map.get(key) || { ...member, projects: [] };
         current.projects = Array.from(new Set([...(current.projects || []), group.name]));
         map.set(key, current);
       });
