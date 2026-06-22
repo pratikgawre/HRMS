@@ -6,6 +6,7 @@ import com.kavya.hrms.service.PayrollGenerationService;
 import com.kavya.hrms.service.PayrollValidationService;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -57,8 +58,7 @@ public class PayrollController {
       @PathVariable String employeeId,
       @RequestParam String month,
       @RequestParam String year) {
-    return payrollRecordRepository.findByEmployeeIdAndMonthAndYear(employeeId, month, year).stream()
-        .findFirst()
+    return selectPreferredPayrollRecord(employeeId, month, year)
         .map(record -> ResponseEntity.<Object>ok(record))
         .orElseGet(() -> notFound("Salary record not found for the selected month and year."));
   }
@@ -105,8 +105,7 @@ public class PayrollController {
       @RequestParam String employeeId,
       @RequestParam String month,
       @RequestParam String year) {
-    return payrollRecordRepository.findByEmployeeIdAndMonthAndYear(employeeId, month, year).stream()
-        .findFirst()
+    return selectPreferredPayrollRecord(employeeId, month, year)
         .map(record -> {
           if (!payrollValidationService.canGeneratePayslip(record)) {
             return forbidden(PAYSLIP_LIMIT_MESSAGE);
@@ -135,13 +134,30 @@ public class PayrollController {
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", message));
   }
 
+  private java.util.Optional<PayrollRecord> selectPreferredPayrollRecord(String employeeId, String month, String year) {
+    return payrollRecordRepository.findByEmployeeIdAndMonthAndYear(employeeId, month, year).stream()
+        .max(Comparator.comparingInt(this::paidRecordPriority));
+  }
+
+  private int paidRecordPriority(PayrollRecord record) {
+    if (record == null) {
+      return 0;
+    }
+
+    if (payrollValidationService.isPaidStatus(record.getStatus())) {
+      return 2;
+    }
+
+    return record.getNetSalary() > 0 ? 1 : 0;
+  }
+
   private ResponseEntity<Object> updatePaidStatus(PayrollRecord record) {
     if (record.getNetSalary() <= 0) {
       return badRequest("Zero salary records cannot be marked as paid.");
     }
 
     if (payrollValidationService.isPaidStatus(record.getStatus())) {
-      return badRequest("Salary record has already been marked as paid.");
+      return ResponseEntity.ok(record);
     }
 
     if (payrollValidationService.isCurrentMonthUnpaidAfterCutoff(record, LocalDate.now())) {
