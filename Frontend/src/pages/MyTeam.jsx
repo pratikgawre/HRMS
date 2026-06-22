@@ -19,7 +19,13 @@ function MyTeam() {
 function TeamLeadMyTeamView() {
   const navigate = useNavigate();
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
+  const currentEmployeeName = getSessionValue('kavyaEmployeeName');
+  const currentTeamLeadIdentity = useMemo(() => ({
+    employeeId: currentEmployeeId,
+    employeeName: currentEmployeeName,
+  }), [currentEmployeeId, currentEmployeeName]);
   const [projects, setProjects] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [teamAssignments, setTeamAssignments] = useState([]);
   const [tasks, setTasks] = useState([]);
 
@@ -28,9 +34,10 @@ function TeamLeadMyTeamView() {
 
     const refreshTeamData = () => {
       Promise.all([
+        safeApiRequest('/employees', []),
         safeApiRequest(`/team-lead/${currentEmployeeId}/projects`, []),
         safeApiRequest(`/tasks/assigned-by/${currentEmployeeId}`, []),
-      ]).then(([projectRows, assignmentRows]) => {
+      ]).then(([employeeRows, projectRows, assignmentRows]) => {
         if (!active) {
           return;
         }
@@ -38,9 +45,7 @@ function TeamLeadMyTeamView() {
         setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
         setProjects(Array.isArray(projectRows) ? projectRows : []);
         setTeamAssignments(Array.isArray(assignmentRows) ? assignmentRows : []);
-        setTasks(Array.isArray(taskRows) ? taskRows : []);
-        console.debug('[TeamLead MyTeam] loggedInUser', currentTeamLeadIdentity);
-        console.debug('[TeamLead MyTeam] projectCount', Array.isArray(projectRows) ? projectRows.length : 0);
+        setTasks(Array.isArray(assignmentRows) ? assignmentRows : []);
       });
     };
 
@@ -60,9 +65,6 @@ function TeamLeadMyTeamView() {
   }, []);
 
   const assignmentData = useMemo(
-    () => buildTeamLeadAssignmentGroups(projects, [], currentEmployeeId),
-    [currentEmployeeId, projects],
-  );
     () => buildTeamLeadAssignmentGroups(projects, employees, currentTeamLeadIdentity),
     [currentTeamLeadIdentity, employees, projects],
   );
