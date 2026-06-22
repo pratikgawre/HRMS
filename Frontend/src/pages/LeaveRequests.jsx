@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
@@ -31,6 +31,8 @@ function LeaveRequests() {
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [queueFilter, setQueueFilter] = useState('all');
+  const tableRef = useRef(null);
   const leaveSummary = useMemo(
     () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee)),
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
@@ -62,44 +64,70 @@ function LeaveRequests() {
     return request.employeeId === currentEmployee.employeeId;
   }), [requests, role, currentEmployee.employeeId]);
 
-  const rows = useMemo(() => visibleRequests
-    .filter((request) => status === 'All' || request.status === status)
-    .filter((request) => {
-      const query = searchText.trim().toLowerCase();
-      if (!query) {
-        return true;
-      }
+  const filteredLeaveRequests = useMemo(() => {
+    const baseRows = queueFilter === 'approved'
+      ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved')
+      : queueFilter === 'pending'
+        ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending')
+        : queueFilter === 'used'
+          ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved' && normalizeLeaveDays(request.days) > 0)
+          : visibleRequests;
 
-      return [
-        request.employee,
-        request.employeeId,
-        request.type,
-        request.reason,
-        request.status,
-      ].some((value) => String(value || '').toLowerCase().includes(query));
-    }), [visibleRequests, status, searchText]);
+    return baseRows
+      .filter((request) => status === 'All' || request.status === status)
+      .filter((request) => {
+        const query = searchText.trim().toLowerCase();
+        if (!query) {
+          return true;
+        }
+
+        return [
+          request.employee,
+          request.employeeId,
+          request.type,
+          request.reason,
+          request.status,
+        ].some((value) => String(value || '').toLowerCase().includes(query));
+      });
+  }, [queueFilter, searchText, status, visibleRequests]);
   const visibleLeaveSummary = useMemo(() => {
-    const approvedRows = rows.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved');
-    const pendingRows = rows.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending');
-    const usedDays = approvedRows.reduce((total, request) => total + normalizeLeaveDays(request.days), 0);
+    const showingRows = visibleRequests;
+    const approvedRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved');
+    const pendingRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending');
+    const usedRows = approvedRows.filter((request) => normalizeLeaveDays(request.days) > 0);
+    const usedDays = usedRows.reduce((total, request) => total + normalizeLeaveDays(request.days), 0);
 
     return {
-      totalCount: rows.length,
+      totalCount: showingRows.length,
+      usedCount: usedRows.length,
       approvedCount: approvedRows.length,
       pendingCount: pendingRows.length,
       usedDays,
     };
-  }, [rows]);
+  }, [visibleRequests]);
+  const queueEmptyMessage = queueFilter === 'pending'
+    ? 'No pending leave requests found.'
+    : 'No leave requests found.';
+
+  const handleQueueCardClick = (filter) => {
+    setQueueFilter(filter);
+    window.requestAnimationFrame(() => {
+      tableRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  };
 
   const selectedRequestDetails = useMemo(() => {
     if (!selectedRequest) {
       return null;
     }
 
-    return rows.find((request) => request.id === selectedRequest.id)
+    return filteredLeaveRequests.find((request) => request.id === selectedRequest.id)
       || visibleRequests.find((request) => request.id === selectedRequest.id)
       || null;
-  }, [rows, selectedRequest, visibleRequests]);
+  }, [filteredLeaveRequests, selectedRequest, visibleRequests]);
 
   useEffect(() => {
     const refreshRequests = () => {
@@ -378,13 +406,15 @@ function LeaveRequests() {
                 delta: 'Leave requests on screen',
                 tone: 'teal',
                 icon: 'ri-eye-line',
+                filter: 'all',
               },
               {
                 label: 'Used Days',
-                value: String(visibleLeaveSummary.usedDays).padStart(2, '0'),
+                value: String(visibleLeaveSummary.usedCount).padStart(2, '0'),
                 delta: 'Approved leave deducted',
                 tone: 'blue',
                 icon: 'ri-calendar-check-line',
+                filter: 'used',
               },
               {
                 label: 'Approved',
@@ -392,6 +422,7 @@ function LeaveRequests() {
                 delta: 'Already deducted',
                 tone: 'orange',
                 icon: 'ri-checkbox-circle-line',
+                filter: 'approved',
               },
               {
                 label: 'Pending',
@@ -399,6 +430,7 @@ function LeaveRequests() {
                 delta: 'Waiting for review',
                 tone: 'pink',
                 icon: 'ri-time-line',
+                filter: 'pending',
               },
             ].map((card) => (
               <DashboardCard
@@ -408,6 +440,8 @@ function LeaveRequests() {
                 delta={card.delta}
                 tone={card.tone}
                 icon={card.icon}
+                onClick={() => handleQueueCardClick(card.filter)}
+                isActive={queueFilter === card.filter}
               />
             ))}
           </section>
@@ -443,11 +477,11 @@ function LeaveRequests() {
             </button>
           )}
         </div>
-        <div style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+        <div ref={tableRef} style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '0.25rem' }}>
           <DataTable
             columns={columns}
-            rows={rows}
-            emptyMessage="No leave requests match your filter."
+            rows={filteredLeaveRequests}
+            emptyMessage={queueEmptyMessage}
             onRowClick={setSelectedRequest}
           />
         </div>

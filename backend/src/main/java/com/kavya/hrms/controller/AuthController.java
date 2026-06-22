@@ -123,7 +123,6 @@ public class AuthController {
         return "Super Admin";
       case "hrmanager":
       case "hr":
-      case "hrmanager":
         return "HR Manager";
       case "projectmanager":
       case "manager":

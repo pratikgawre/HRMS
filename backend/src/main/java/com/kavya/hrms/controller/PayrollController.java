@@ -9,11 +9,12 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -82,8 +83,22 @@ public class PayrollController {
   }
 
   @PostMapping
-  public PayrollRecord save(@RequestBody PayrollRecord record) {
-    return payrollRecordRepository.save(record);
+  public ResponseEntity<Object> save(@RequestBody PayrollRecord record) {
+    if (record == null || isBlank(record.getEmployeeId()) || isBlank(record.getMonth()) || isBlank(record.getYear())) {
+      return badRequest("Employee, month, and year are required.");
+    }
+
+    return payrollRecordRepository.findByEmployeeIdAndMonthAndYear(record.getEmployeeId(), record.getMonth(), record.getYear())
+        .stream()
+        .findFirst()
+        .map(existing -> {
+          if (existing.getId() != null && !existing.getId().equals(record.getId())) {
+            return badRequest("Salary record already exists for the selected employee and period.");
+          }
+          record.setId(existing.getId());
+          return ResponseEntity.<Object>ok(payrollRecordRepository.save(record));
+        })
+        .orElseGet(() -> ResponseEntity.<Object>ok(payrollRecordRepository.save(record)));
   }
 
   @PatchMapping("/{payrollId}/mark-paid")
@@ -166,10 +181,6 @@ public class PayrollController {
       return forbidden(FUTURE_PERIOD_LIMIT_MESSAGE);
     }
 
-    if (payrollValidationService.isFuturePayrollPeriod(record.getMonth(), record.getYear(), LocalDate.now())) {
-      return forbidden(FUTURE_PERIOD_LIMIT_MESSAGE);
-    }
-
     if (payrollValidationService.isCurrentMonthUnpaidAfterCutoff(record, LocalDate.now())) {
       return forbidden(CURRENT_MONTH_LIMIT_MESSAGE);
     }
@@ -177,5 +188,9 @@ public class PayrollController {
     record.setStatus("PAID");
     record.setPaidDate(Instant.now().toString());
     return ResponseEntity.<Object>ok(payrollRecordRepository.save(record));
+  }
+
+  private boolean isBlank(String value) {
+    return value == null || value.trim().isEmpty();
   }
 }

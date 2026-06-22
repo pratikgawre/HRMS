@@ -925,6 +925,13 @@ button.attendance-summary-card.is-clickable:focus-visible {
   border-top-color: #de5ca8;
 }
 
+.leave-queue-summary-grid .dashboard-card.is-active {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 32px rgba(15, 159, 154, 0.14), var(--shadow-line);
+  outline: 2px solid rgba(15, 159, 154, 0.14);
+  outline-offset: 0;
+}
+
 .smart-summary-backdrop {
   position: fixed;
   inset: 0;

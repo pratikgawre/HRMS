@@ -53,8 +53,7 @@ public class PayrollValidationService {
     }
 
     return year == today.getYear()
-        && monthIndex == today.getMonthValue() - 1
-        && today.getDayOfMonth() > 15;
+        && monthIndex == today.getMonthValue() - 1;
   }
 
   public boolean isFuturePayrollYear(String salaryYear, LocalDate today) {

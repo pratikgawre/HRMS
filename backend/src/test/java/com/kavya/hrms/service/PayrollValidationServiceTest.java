@@ -10,20 +10,16 @@ class PayrollValidationServiceTest {
   private final PayrollValidationService service = new PayrollValidationService();
 
   @Test
-  void enablesCurrentMonthBeforeCutoff() {
-    assertFalse(service.isMarkPaidDisabled("June", "2026", "Unpaid", LocalDate.of(2026, 6, 10)));
-    assertFalse(service.isMarkPaidDisabled("6", "2026", "Unpaid", LocalDate.of(2026, 6, 15)));
-  }
-
-  @Test
-  void disablesCurrentMonthAfterCutoffUnlessAlreadyPaid() {
-    assertTrue(service.isMarkPaidDisabled("June", "2026", "Unpaid", LocalDate.of(2026, 6, 16)));
+  void locksCurrentMonthForTheEntireMonth() {
+    assertTrue(service.isMarkPaidDisabled("June", "2026", "Unpaid", LocalDate.of(2026, 6, 1)));
+    assertTrue(service.isMarkPaidDisabled("6", "2026", "Unpaid", LocalDate.of(2026, 6, 15)));
+    assertTrue(service.isMarkPaidDisabled("June", "2026", "Unpaid", LocalDate.of(2026, 6, 30)));
     assertTrue(service.isMarkPaidDisabled("June", "2026", "Paid", LocalDate.of(2026, 6, 30)));
   }
 
   @Test
   void keepsPreviousMonthsEnabled() {
-    assertFalse(service.isMarkPaidDisabled("May", "2026", "Unpaid", LocalDate.of(2026, 7, 15)));
+    assertFalse(service.isMarkPaidDisabled("May", "2026", "Unpaid", LocalDate.of(2026, 7, 1)));
     assertFalse(service.isMarkPaidDisabled("December", "2025", "Unpaid", LocalDate.of(2026, 7, 15)));
     assertFalse(service.isMarkPaidDisabled("May", "2026", "Unpaid", LocalDate.of(2026, 6, 16)));
     assertFalse(service.isMarkPaidDisabled("June", "2025", "Unpaid", LocalDate.of(2026, 6, 16)));

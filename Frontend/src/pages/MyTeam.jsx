@@ -26,11 +26,10 @@ function MyTeam() {
 
 function LeadershipMyTeamView({ role }) {
   const navigate = useNavigate();
-  const currentTeamLeadIdentity = getCurrentEmployeeIdentity();
-  const currentEmployeeId = String(currentTeamLeadIdentity.employeeId || '').trim();
+  const currentEmployeeId = getSessionValue('kavyaEmployeeId');
+  const currentEmployeeName = getSessionValue('kavyaEmployeeName');
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [teamAssignments, setTeamAssignments] = useState([]);
   const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
@@ -48,10 +47,9 @@ function LeadershipMyTeamView({ role }) {
     const refreshTeamData = () => {
       Promise.all([
         safeApiRequest('/employees', []),
-        safeApiRequest(`/team-lead/${currentEmployeeId}/projects`, []),
+        loadTeamLeadProjects(),
         safeApiRequest('/tasks', []),
-        safeApiRequest(`/tasks/assigned-by/${currentEmployeeId}`, []),
-      ]).then(([employeeRows, projectRows, taskRows, assignmentRows]) => {
+      ]).then(([employeeRows, projectRows, taskRows]) => {
         if (!active) {
           return;
         }
@@ -59,9 +57,6 @@ function LeadershipMyTeamView({ role }) {
         setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
         setProjects(Array.isArray(projectRows) ? projectRows : []);
         setTasks(Array.isArray(taskRows) ? taskRows : []);
-        setTeamAssignments(Array.isArray(assignmentRows) ? assignmentRows : []);
-        console.debug('[TeamLead MyTeam] loggedInUser', currentTeamLeadIdentity);
-        console.debug('[TeamLead MyTeam] projectCount', Array.isArray(projectRows) ? projectRows.length : 0);
       });
     };
 
@@ -85,6 +80,10 @@ function LeadershipMyTeamView({ role }) {
   const assignmentData = useMemo(
     () => buildTeamLeadAssignmentGroups(projects, employees, currentEmployeeId),
     [currentEmployeeId, employees, projects],
+  );
+  const taskAssignmentData = useMemo(
+    () => buildTaskAssignmentGroups(tasks, currentEmployeeId),
+    [currentEmployeeId, tasks],
   );
 
   const teamAssignmentGroups = assignmentData.groups.length > 0 ? assignmentData.groups : taskAssignmentData.groups;
@@ -143,7 +142,19 @@ function LeadershipMyTeamView({ role }) {
     })
   ), [effectiveEmployeeDirectory, memberProjectMap, tasks]);
 
-  const projectTaskMap = taskAssignmentData.groups;
+  const projectTaskMap = useMemo(() => {
+    const map = new Map();
+
+    (Array.isArray(tasks) ? tasks : []).forEach((task, index) => {
+      const projectKey = normalizeLookupValue(task?.projectId || task?.projectCode || task?.projectName || task?.project);
+      const groupKey = projectKey || `project-${index + 1}`;
+      const currentRows = map.get(groupKey) || [];
+
+      map.set(groupKey, [...currentRows, task]);
+    });
+
+    return map;
+  }, [tasks]);
 
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
   const totalAssignments = assignmentData.groups.reduce((sum, group) => sum + group.teamMemberCount, 0);
