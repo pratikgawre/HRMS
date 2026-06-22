@@ -37,6 +37,7 @@ function LeadershipMyTeamView({ role }) {
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [teamAssignments, setTeamAssignments] = useState([]);
   const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
