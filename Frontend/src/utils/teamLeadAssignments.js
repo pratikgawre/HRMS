@@ -183,6 +183,108 @@ export function buildTeamLeadAssignmentGroups(projects = [], employees = [], tea
   };
 }
 
+export function buildTaskAssignmentGroups(tasks = [], teamLeadIdentity = '') {
+  const employeeDirectory = new Map();
+  const visibleTasks = (Array.isArray(tasks) ? tasks : []).filter((task) => isTaskAssignedByTeamLead(task, teamLeadIdentity));
+  const groupsByProject = new Map();
+  const uniqueMembers = new Map();
+
+  const upsertEmployee = (employee) => {
+    const employeeId = getEmployeeId(employee);
+    const employeeName = getEmployeeName(employee);
+    const keys = [
+      employeeId,
+      employee?.employeeCode,
+      employee?.employeeName,
+      employee?.name,
+      employee?.displayName,
+      employee?.assignedToName,
+      employee?.owner,
+    ]
+      .map((value) => normalizeLookupValue(value))
+      .filter(Boolean);
+
+    if (!keys.length) {
+      return;
+    }
+
+    const normalizedEmployee = {
+      ...employee,
+      id: employeeId || String(employee?.id || employee?.assignedToId || employee?.owner || '').trim(),
+      name: employeeName || String(employee?.assignedToName || employee?.owner || employee?.assignedTo || '').trim(),
+      displayName: employeeName || String(employee?.assignedToName || employee?.owner || employee?.assignedTo || '').trim(),
+      department: String(employee?.department || employee?.departmentName || '-').trim() || '-',
+      role: String(employee?.role || employee?.jobTitle || 'Employee').trim() || 'Employee',
+      avatar: String(employee?.avatar || employee?.initials || (employeeName || '').slice(0, 2).toUpperCase() || 'EM').trim(),
+      status: String(employee?.status || '').trim(),
+    };
+
+    keys.forEach((key) => {
+      employeeDirectory.set(key, normalizedEmployee);
+    });
+  };
+
+  const resolveAssignee = (task) => {
+    const assigneeId = String(task?.assignedToId || '').trim();
+    const assigneeName = String(task?.assignedToName || task?.owner || task?.assignedTo || '').trim();
+
+    return {
+      id: assigneeId || assigneeName,
+      employeeCode: assigneeId || assigneeName,
+      name: assigneeName || assigneeId,
+      displayName: assigneeName || assigneeId,
+      department: String(task?.assignedToDepartment || '-').trim() || '-',
+      role: String(task?.assignedToRole || task?.role || 'Employee').trim() || 'Employee',
+      avatar: String(task?.assignedToAvatar || (assigneeName || assigneeId || 'EM').slice(0, 2).toUpperCase()).trim(),
+      status: String(task?.assignedToStatus || '').trim(),
+    };
+  };
+
+  const resolveProjectGroup = (task, index) => {
+    const projectId = String(task?.projectId || task?.projectCode || task?.projectName || task?.project || '').trim();
+    const groupId = normalizeLookupValue(projectId) || `project-${index + 1}`;
+    return {
+      id: groupId,
+      projectId: task?.projectId || projectId || groupId,
+      projectCode: task?.projectCode || task?.projectId || projectId || groupId,
+      name: String(task?.projectName || task?.project || task?.projectCode || 'Project').trim() || 'Project',
+      status: String(task?.status || 'Open').trim() || 'Open',
+      teamMembers: [],
+      teamMemberCount: 0,
+    };
+  };
+
+  visibleTasks.forEach((task, index) => {
+    const projectKey = normalizeLookupValue(task?.projectId || task?.projectCode || task?.projectName || task?.project);
+    const groupKey = projectKey || `project-${index + 1}`;
+    const group = groupsByProject.get(groupKey) || resolveProjectGroup(task, index);
+
+    const assignee = resolveAssignee(task);
+    const assigneeKey = normalizeLookupValue(getEmployeeId(assignee) || assignee.name);
+
+    if (assigneeKey && !group.teamMembers.some((member) => normalizeLookupValue(getEmployeeId(member) || member.name) === assigneeKey)) {
+      group.teamMembers.push(assignee);
+    }
+
+    if (assigneeKey) {
+      uniqueMembers.set(assigneeKey, assignee);
+      upsertEmployee(assignee);
+    }
+
+    group.teamMemberCount = group.teamMembers.length;
+    groupsByProject.set(groupKey, group);
+  });
+
+  return {
+    employeeDirectory,
+    tasks: visibleTasks,
+    groups: Array.from(groupsByProject.values()),
+    teamMembers: Array.from(uniqueMembers.values()),
+    totalTeamMembers: uniqueMembers.size,
+    totalTasks: visibleTasks.length,
+  };
+}
+
 export function getProjectAssigneeOptions(project, employees = [], teamLeadId = '') {
   const employeeDirectory = buildEmployeeDirectory(employees);
   const teamLeadIdentity = resolveTeamLeadIdentity(teamLeadId);
@@ -274,4 +376,20 @@ function isEmployeeAssignedToTeamLead(employee, identity) {
   ].map((value) => normalizeLookupValue(value));
 
   return identity.keys.some((key) => employeeValues.includes(key));
+}
+
+function isTaskAssignedByTeamLead(task, teamLeadIdentity) {
+  const identity = resolveTeamLeadIdentity(teamLeadIdentity);
+  if (identity.keys.length === 0) {
+    return false;
+  }
+
+  const taskValues = [
+    task?.assignedById,
+    task?.assignedBy,
+    task?.assignedByName,
+    task?.teamLeadId,
+  ].map((value) => normalizeLookupValue(value));
+
+  return identity.keys.some((key) => taskValues.includes(key));
 }
