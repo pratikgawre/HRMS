@@ -13,6 +13,7 @@ import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
 import com.kavya.hrms.repository.TaskRepository;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.CommandLineRunner;
@@ -30,9 +31,13 @@ public class DataSeeder {
       ProjectRepository projectRepository,
       SystemSettingsRepository settingsRepository) {
     return args -> {
+      removeNamedData(appUserRepository, taskRepository, "Meera Nair", "Rohan Das");
+
       seedUser(appUserRepository, "admin@gmail.com", "admin123", "admin", "ADMIN-001", "Admin Kavya");
       seedUser(appUserRepository, "hr@gmail.com", "hr123", "hr", "HR-001", "Meera Nair");
       seedUser(appUserRepository, "teamlead@gmail.com", "teamlead123", "teamLead", "KV003", "Kabir Khan");
+      seedUser(appUserRepository, "manager@gmail.com", "manager123", "projectManager", "KV004", "Isha Patel");
+      seedUser(appUserRepository, "projectmanager@gmail.com", "manager123", "projectManager", "KV004", "Isha Patel");
       seedUser(appUserRepository, "employee@gmail.com", "employee123", "employee", "KV001", "Aarav Sharma");
 
       if (leaveRequestRepository.count() == 0) {
@@ -75,8 +80,6 @@ public class DataSeeder {
 
       if (taskRepository.count() == 0) {
         taskRepository.save(buildTask("TSK-101", "Finalize sprint board", "Kabir Khan", "High", "25 Apr 2026", "Pending"));
-        taskRepository.save(buildTask("TSK-102", "Review onboarding checklist", "Meera Nair", "Medium", "26 Apr 2026", "Active"));
-        taskRepository.save(buildTask("TSK-103", "QA release sign-off", "Rohan Das", "High", "27 Apr 2026", "Pending"));
         taskRepository.save(buildTask("TSK-104", "Design handoff audit", "Aarav Sharma", "Low", "28 Apr 2026", "Completed"));
       }
 
@@ -156,6 +159,36 @@ public class DataSeeder {
         settingsRepository.save(settings);
       }
     };
+  }
+
+  private void removeNamedData(
+      AppUserRepository appUserRepository,
+      TaskRepository taskRepository,
+      String... names) {
+    List<AppUser> usersToDelete = appUserRepository.findAll().stream()
+        .filter(user -> matchesAnyName(user.getEmployeeName(), names))
+        .toList();
+    if (!usersToDelete.isEmpty()) {
+      appUserRepository.deleteAll(usersToDelete);
+    }
+
+    List<TaskItem> tasksToDelete = taskRepository.findAll().stream()
+        .filter(task -> matchesAnyName(task.getOwner(), names)
+            || matchesAnyName(task.getAssignedToName(), names)
+            || matchesAnyName(task.getAssignedByName(), names)
+            || matchesAnyName(task.getAssignedTo(), names)
+            || matchesAnyName(task.getAssignedBy(), names))
+        .toList();
+    if (!tasksToDelete.isEmpty()) {
+      taskRepository.deleteAll(tasksToDelete);
+    }
+  }
+
+  private boolean matchesAnyName(String value, String... names) {
+    if (value == null) {
+      return false;
+    }
+    return Arrays.stream(names).anyMatch(name -> name.equalsIgnoreCase(value));
   }
 
   private void seedUser(

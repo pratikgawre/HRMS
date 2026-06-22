@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { attendanceColumns } from './EmployeeDashboard.jsx';
@@ -25,12 +26,15 @@ import { people as fallbackPeople, projects as fallbackProjects } from '../data/
 function TeamAttendance() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const roleLabel = getRoleLabel(role);
+  const location = useLocation();
+  const navigate = useNavigate();
   const attendanceEmployee = getAttendanceEmployee();
   const todayInputValue = getDateInputValue(new Date());
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
   const [status, setStatus] = useState('All');
+  const [searchText, setSearchText] = useState('');
   const [dateRange, setDateRange] = useState('day');
   const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(new Date()));
   const [selectedMonth, setSelectedMonth] = useState(() => getMonthInputValue(new Date()));
@@ -115,22 +119,82 @@ function TeamAttendance() {
       .filter((row) => {
         const matchesStatus = status === 'All' || row.status === status;
         const matchesRange = isRowWithinSelectedRange(row, dateRange, selectedDate, selectedMonth);
-        return matchesStatus && matchesRange;
+        const query = searchText.trim().toLowerCase();
+        const matchesSearch = !query
+          || String(row.employee || '').toLowerCase().includes(query)
+          || String(row.employeeId || '').toLowerCase().includes(query);
+        return matchesStatus && matchesRange && matchesSearch;
       })
       .map((row) => ({
         ...row,
         employee: row.employee || row.employeeName || row.name || 'Employee',
         employeeId: row.employeeId || row.employeeCode || '-',
       }))
-  ), [dateRange, selectedDate, selectedMonth, status, teamRows]);
+  ), [dateRange, searchText, selectedDate, selectedMonth, status, teamRows]);
   const summaryText = role === 'employee'
     ? 'This page is for managers and team leads. Use My Attendance for your own record.'
     : 'Review your team attendance records without mixing them with your personal check-in or check-out.';
   const rangeLabel = getRangeLabel(dateRange, selectedDate, selectedMonth);
   const currentRangeValue = getCurrentRangeValue(dateRange, selectedDate, selectedMonth);
+  const teamAttendancePath = getTeamAttendancePath(role);
+  const myAttendancePath = getMyAttendancePath(role);
+  const teamPagePath = getTeamPagePath(role);
   const cardCount = teamIds.size;
   const presentCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'present').length;
   const lateCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'late').length;
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nextStatus = params.get('status');
+    const nextRange = params.get('range');
+
+    if (nextStatus && ['All', 'Present', 'Half Day', 'Absent', 'Late', 'Leave'].includes(nextStatus)) {
+      setStatus(nextStatus);
+    }
+
+    if (nextRange && ['day', 'last7', 'last15', 'month', 'custom', 'all'].includes(nextRange)) {
+      setDateRange(nextRange);
+    }
+  }, [location.search]);
+
+  const summaryCards = [
+    {
+      key: 'team',
+      label: 'Team Members',
+      value: String(cardCount).padStart(2, '0'),
+      delta: 'Visible in this scope',
+      tone: 'teal',
+      icon: 'ri-team-line',
+      onClick: () => navigate(teamPagePath),
+    },
+    {
+      key: 'present',
+      label: 'Present',
+      value: String(presentCount).padStart(2, '0'),
+      delta: currentRangeValue,
+      tone: 'blue',
+      icon: 'ri-user-follow-line',
+      onClick: () => navigate(`${teamAttendancePath}?status=Present`),
+    },
+    {
+      key: 'late',
+      label: 'Late',
+      value: String(lateCount).padStart(2, '0'),
+      delta: 'Filtered attendance rows',
+      tone: 'orange',
+      icon: 'ri-time-line',
+      onClick: () => navigate(`${teamAttendancePath}?status=Late`),
+    },
+    {
+      key: 'range',
+      label: 'Range',
+      value: currentRangeValue,
+      delta: rangeLabel,
+      tone: 'pink',
+      icon: 'ri-calendar-event-line',
+      onClick: () => navigate(`${teamAttendancePath}?range=month`),
+    },
+  ];
 
   function downloadCsv() {
     const reportHtml = buildAttendanceWorkbook({
@@ -197,147 +261,152 @@ function TeamAttendance() {
 
   return (
     <>
-      <Hero
-        title="Attendance"
-        copy={`${roleLabel} view. ${summaryText}`}
-      />
-
-      {message && (
-        <div className="user-alert" role="status">
-          <i className="ri-checkbox-circle-line" aria-hidden="true" />
-          <span>{message}</span>
-        </div>
-      )}
-
-      <section className="attendance-summary-grid" aria-label="Attendance summary">
-        <article className="attendance-summary-card is-teal">
-          <div className="attendance-summary-copy">
-            <span>Team Members</span>
-            <strong>{String(cardCount).padStart(2, '0')}</strong>
-            <small>Visible in this scope</small>
-          </div>
-          <div className="attendance-summary-icon">
-            <i className="ri-team-line" aria-hidden="true" />
-          </div>
-        </article>
-        <article className="attendance-summary-card is-blue">
-          <div className="attendance-summary-copy">
-            <span>Present</span>
-            <strong>{String(presentCount).padStart(2, '0')}</strong>
-            <small>{currentRangeValue}</small>
-          </div>
-          <div className="attendance-summary-icon">
-            <i className="ri-user-follow-line" aria-hidden="true" />
-          </div>
-        </article>
-        <article className="attendance-summary-card is-orange">
-          <div className="attendance-summary-copy">
-            <span>Late</span>
-            <strong>{String(lateCount).padStart(2, '0')}</strong>
-            <small>Filtered attendance rows</small>
-          </div>
-          <div className="attendance-summary-icon">
-            <i className="ri-time-line" aria-hidden="true" />
-          </div>
-        </article>
-        <article className="attendance-summary-card attendance-summary-card--range is-pink">
-          <div className="attendance-summary-copy">
-            <span>Range</span>
-            <strong>{currentRangeValue}</strong>
-            <small>{rangeLabel}</small>
-          </div>
-          <div className="attendance-summary-icon">
-            <i className="ri-calendar-event-line" aria-hidden="true" />
-          </div>
-        </article>
-      </section>
-
-      <Section
-        title="Attendance Register"
-        action={role !== 'employee' ? 'Download CSV' : ''}
-        actionOnClick={role !== 'employee' ? downloadCsv : undefined}
-      >
-        <div className="page-toolbar compact">
-          <select value={dateRange} onChange={(event) => setDateRange(event.target.value)}>
-            <option value="day">Day</option>
-            <option value="last7">Last 7 Days</option>
-            <option value="last15">Last 15 Days</option>
-            <option value="month">Month</option>
-            <option value="custom">Custom</option>
-            <option value="all">All</option>
-          </select>
-
-          {(dateRange === 'day' || dateRange === 'last7' || dateRange === 'last15') && (
-            <label className="toolbar-date">
-              <i className="ri-calendar-line" aria-hidden="true" />
-              <input
-                type="date"
-                value={selectedDate}
-                max={todayInputValue}
-                onChange={(event) => setSelectedDate(event.target.value || todayInputValue)}
-                aria-label="Select reference attendance date"
-              />
-            </label>
-          )}
-
-          {(dateRange === 'month' || dateRange === 'custom') && (
-            <label className="toolbar-date">
-              <i className="ri-calendar-line" aria-hidden="true" />
-              <input
-                type="month"
-                value={selectedMonth}
-                max={getMonthInputValue(new Date())}
-                onChange={(event) => setSelectedMonth(event.target.value || getMonthInputValue(new Date()))}
-                aria-label="Select attendance month"
-              />
-            </label>
-          )}
-
-          <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter attendance status">
-            <option>All</option>
-            <option>Present</option>
-            <option>Half Day</option>
-            <option>Absent</option>
-            <option>Late</option>
-            <option>Leave</option>
-          </select>
-        </div>
-
-        <DataTable
-          columns={[
-            {
-              key: 'employee',
-              label: 'Employee',
-              render: (row) => (
-                <div className="employee-cell">
-                  <span>{getInitials(row.employee)}</span>
-                  <div>
-                    <strong>{row.employee}</strong>
-                    <small>{row.employeeId}</small>
-                  </div>
-                </div>
-              ),
-            },
-            ...attendanceColumns,
-            {
-              key: 'actions',
-              label: 'Actions',
-              render: (row) => (
-                <button
-                  className="payroll-secondary"
-                  type="button"
-                  onClick={() => openCorrectDialog(row)}
-                >
-                  <i className="ri-edit-line" aria-hidden="true" />
-                  Correct
-                </button>
-              ),
-            },
-          ]}
-          rows={rows}
-          emptyMessage={`No attendance records found for ${rangeLabel}.`}
+      <div className="attendance-page-stack project-manager-attendance">
+        <Hero
+          title="Attendance"
+          copy={`${roleLabel} view. ${summaryText}`}
         />
-      </Section>
+
+        {message && (
+          <div className="user-alert" role="status">
+            <i className="ri-checkbox-circle-line" aria-hidden="true" />
+            <span>{message}</span>
+          </div>
+        )}
+
+        <section className="attendance-summary-grid" aria-label="Attendance summary">
+          {summaryCards.map((card) => (
+            <button
+              key={card.key}
+              type="button"
+              className={`attendance-summary-card is-${card.tone} is-clickable`}
+              onClick={card.onClick}
+              aria-label={`${card.label} - open related page`}
+            >
+              <div className="attendance-summary-copy">
+                <span>{card.label}</span>
+                <strong>{card.value}</strong>
+                <small>{card.delta}</small>
+              </div>
+              <div className="attendance-summary-icon">
+                <i className={card.icon} aria-hidden="true" />
+              </div>
+            </button>
+          ))}
+        </section>
+
+        <Section
+          title="Attendance Register"
+          action={role !== 'employee' ? 'Download CSV' : ''}
+          actionOnClick={role !== 'employee' ? downloadCsv : undefined}
+        >
+          {role !== 'admin' && (
+            <div className="attendance-view-switcher" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+              <button
+                className="payroll-secondary"
+                type="button"
+                onClick={() => navigate(myAttendancePath)}
+              >
+                <i className="ri-user-line" aria-hidden="true" />
+                My Attendance
+              </button>
+            </div>
+          )}
+          <div className="page-toolbar compact">
+            <select value={dateRange} onChange={(event) => setDateRange(event.target.value)}>
+              <option value="day">Day</option>
+              <option value="last7">Last 7 Days</option>
+              <option value="last15">Last 15 Days</option>
+              <option value="month">Month</option>
+              <option value="custom">Custom</option>
+              <option value="all">All</option>
+            </select>
+
+            {(dateRange === 'day' || dateRange === 'last7' || dateRange === 'last15') && (
+              <label className="toolbar-date">
+                <i className="ri-calendar-line" aria-hidden="true" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={todayInputValue}
+                  onChange={(event) => setSelectedDate(event.target.value || todayInputValue)}
+                  aria-label="Select reference attendance date"
+                />
+              </label>
+            )}
+
+            {(dateRange === 'month' || dateRange === 'custom') && (
+              <label className="toolbar-date">
+                <i className="ri-calendar-line" aria-hidden="true" />
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  max={getMonthInputValue(new Date())}
+                  onChange={(event) => setSelectedMonth(event.target.value || getMonthInputValue(new Date()))}
+                  aria-label="Select attendance month"
+                />
+              </label>
+            )}
+
+            <label className="toolbar-search" style={{ minWidth: '260px' }}>
+              <i className="ri-search-line" aria-hidden="true" />
+              <input
+                type="search"
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Search employee name or ID"
+                aria-label="Search employee name or ID"
+              />
+            </label>
+
+            <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter attendance status">
+              <option>All</option>
+              <option>Present</option>
+              <option>Half Day</option>
+              <option>Absent</option>
+              <option>Late</option>
+              <option>Leave</option>
+            </select>
+          </div>
+
+          <div className="attendance-table-container">
+            <DataTable
+              columns={[
+                {
+                  key: 'employee',
+                  label: 'Employee',
+                  render: (row) => (
+                    <div className="employee-cell">
+                      <span>{getInitials(row.employee)}</span>
+                      <div>
+                        <strong>{row.employee}</strong>
+                        <small>{row.employeeId}</small>
+                      </div>
+                    </div>
+                  ),
+                },
+                ...attendanceColumns,
+                {
+                  key: 'actions',
+                  label: 'Actions',
+                  render: (row) => (
+                    <button
+                      className="payroll-secondary"
+                      type="button"
+                      onClick={() => openCorrectDialog(row)}
+                    >
+                      <i className="ri-edit-line" aria-hidden="true" />
+                      Correct
+                    </button>
+                  ),
+                },
+              ]}
+              rows={rows}
+              emptyMessage={`No attendance records found for ${rangeLabel}.`}
+            />
+          </div>
+        </Section>
+      </div>
 
       {editingRow && (
         <div className="smart-summary-backdrop" role="presentation" onClick={closeCorrectDialog}>
@@ -450,6 +519,62 @@ function getCurrentRangeValue(dateRange, selectedDate, selectedMonth) {
   }
 
   return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(selectedDate));
+}
+
+function getTeamAttendancePath(role) {
+  if (role === 'admin') {
+    return '/admin/team-attendance';
+  }
+
+  if (role === 'hr') {
+    return '/hr/team-attendance';
+  }
+
+  if (role === 'teamLead') {
+    return '/team-lead/team-attendance';
+  }
+
+  if (role === 'projectManager') {
+    return '/project-manager/team-attendance';
+  }
+
+  return '/employee/attendance';
+}
+
+function getMyAttendancePath(role) {
+  if (role === 'hr') {
+    return '/hr/my-attendance';
+  }
+
+  if (role === 'teamLead') {
+    return '/team-lead/my-attendance';
+  }
+
+  if (role === 'projectManager') {
+    return '/project-manager/my-attendance';
+  }
+
+  return '/employee/attendance';
+}
+
+function getTeamPagePath(role) {
+  if (role === 'admin') {
+    return '/admin/employees';
+  }
+
+  if (role === 'hr') {
+    return '/hr/employees';
+  }
+
+  if (role === 'teamLead') {
+    return '/team-lead/team';
+  }
+
+  if (role === 'projectManager') {
+    return '/project-manager/team';
+  }
+
+  return '/employee/dashboard';
 }
 
 function formatTimeLabel(timeValue) {

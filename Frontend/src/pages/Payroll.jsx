@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { salaryRecords } from '../data/dummyData.js';
@@ -7,6 +8,7 @@ import { getSessionValue } from '../utils/appSession.js';
 import { getInitialAttendanceRows } from '../utils/attendanceStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getStoredPayrollRecords, refreshStoredPayrollRecords, saveStoredPayrollRecords } from '../utils/payrollStorage.js';
+import { isMarkPaidDisabled, isPaidStatus } from '../utils/payrollRules.js';
 import kavyaLogo from '../assets/logo.png';
 
 const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -60,6 +62,7 @@ function getPayrollAvailabilityText(month, year) {
 }
 
 function Payroll() {
+  const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
   const canManagePayroll = role === 'admin';
   const defaultPeriod = getDefaultPayrollPeriod();
@@ -71,6 +74,7 @@ function Payroll() {
   const [statusOverrides, setStatusOverrides] = useState(() => getInitialPayrollStatuses(getStoredPayrollRecords()));
   const [isPayrollStorageReady, setIsPayrollStorageReady] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const notificationTarget = useMemo(() => parsePayrollNotificationTarget(location.search), [location.search]);
   const payrollPeriod = useMemo(() => ({
     monthIndex: months.indexOf(selectedMonth),
     year: Number(selectedYear),
@@ -78,6 +82,16 @@ function Payroll() {
   const records = useMemo(() => {
     return buildPayrollRecords(employees, getInitialAttendanceRows(), leaveRequests, statusOverrides, payrollPeriod, savedPayrollRecords);
   }, [employees, leaveRequests, payrollPeriod, refreshKey, savedPayrollRecords, statusOverrides]);
+
+  useEffect(() => {
+    if (notificationTarget?.month && selectedMonth !== notificationTarget.month) {
+      setSelectedMonth(notificationTarget.month);
+    }
+
+    if (notificationTarget?.year && selectedYear !== notificationTarget.year) {
+      setSelectedYear(notificationTarget.year);
+    }
+  }, [notificationTarget?.month, notificationTarget?.year, selectedMonth, selectedYear]);
 
   useEffect(() => {
     let active = true;
@@ -171,6 +185,7 @@ function Payroll() {
         setSelectedMonth={setSelectedMonth}
         setSelectedYear={setSelectedYear}
         setStatusOverrides={setStatusOverrides}
+        focusRecordId={notificationTarget?.recordId || ''}
       />
     );
   }
@@ -184,20 +199,23 @@ function Payroll() {
       year={selectedYear}
       setMonth={setSelectedMonth}
       setYear={setSelectedYear}
+      setStatusOverrides={setStatusOverrides}
+      focusRecordId={notificationTarget?.recordId || ''}
     />
   );
 }
 
-function PayrollManagement({ records, savedPayrollRecords, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear, setStatusOverrides }) {
+function PayrollManagement({ records, savedPayrollRecords, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear, setStatusOverrides, focusRecordId = '' }) {
   const [message, setMessage] = useState('');
   const [selectedPayslip, setSelectedPayslip] = useState(null);
+  const [loadingPayslipId, setLoadingPayslipId] = useState('');
   const [activeSummary, setActiveSummary] = useState('total');
   const [searchTerm, setSearchTerm] = useState('');
   const tableSectionRef = useRef(null);
 
   const summary = useMemo(() => {
     const totalPayroll = records.reduce((sum, record) => sum + getNetSalary(record), 0);
-    const paid = records.filter((record) => record.status === 'Paid').length;
+    const paid = records.filter((record) => isPaidStatus(record.status)).length;
     const unpaid = records.length - paid;
 
     return [
@@ -230,28 +248,33 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
     ].some((value) => String(value || '').toLowerCase().includes(query)));
   }, [activeSummary, records, searchTerm]);
 
-  const toggleStatus = (recordId) => {
-    setStatusOverrides((current) => {
-      const record = records.find((item) => item.id === recordId);
-      if (!record) {
-        return current;
-      }
+  useEffect(() => {
+    if (!focusRecordId) {
+      return;
+    }
 
-      if (record.status === 'Paid') {
-        return current;
-      }
+    const focusedRecord = records.find((record) => record.id === focusRecordId);
+    if (focusedRecord && isPaidStatus(focusedRecord.status)) {
+      setSelectedPayslip(focusedRecord);
+    }
+  }, [focusRecordId, records]);
 
-      return {
+  const toggleStatus = async (recordId) => {
+    const record = records.find((item) => item.id === recordId);
+    if (!record || isMarkPaidDisabled(record.month, record.year, record.status)) {
+      return;
+    }
+
+    try {
+      await apiRequest(`/payroll/${encodeURIComponent(recordId)}/mark-paid`, { method: 'PATCH' });
+      setStatusOverrides((current) => ({
         ...current,
         [recordId]: 'Paid',
-      };
-    });
-    saveStoredPayrollRecords(mergePayrollRecords(savedPayrollRecords, records.map((record) => (
-      record.id === recordId
-        ? { ...record, status: 'Paid', statusManuallySet: true }
-        : record
-    ))));
-    setMessage('Payroll payment status updated successfully');
+      }));
+      setMessage('Payroll payment status updated successfully');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to mark salary as paid');
+    }
   };
 
   const handleSummaryClick = (summaryId) => {
@@ -267,6 +290,41 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
     requestAnimationFrame(() => {
       tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
+  };
+
+  const handlePayslipClick = async ({ employeeId, month, year, status, id }) => {
+    if (!employeeId || !month || !year || loadingPayslipId === id) {
+      return;
+    }
+
+    setSelectedPayslip(null);
+
+    if (!isPaidStatus(status)) {
+      setMessage('Payslip is available only after the salary is marked as paid.');
+      return;
+    }
+
+    setLoadingPayslipId(id);
+    try {
+      const payload = await apiRequest(`/payroll/payslip?employeeId=${encodeURIComponent(employeeId)}&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}`);
+      const normalizedRecord = normalizePayrollRecords([payload])[0];
+
+      if (
+        !normalizedRecord
+        || String(normalizedRecord.employeeId || '') !== String(employeeId || '')
+        || String(normalizedRecord.month || '') !== String(month || '')
+        || String(normalizedRecord.year || '') !== String(year || '')
+      ) {
+        setMessage('Salary record not found for the selected month and year.');
+        return;
+      }
+
+      setSelectedPayslip(normalizedRecord);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Payslip is available only after the salary is marked as paid.');
+    } finally {
+      setLoadingPayslipId('');
+    }
   };
 
   return (
@@ -375,13 +433,23 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
                         <button
                           type="button"
                           onClick={() => toggleStatus(record.id)}
-                          disabled={record.status === 'Paid'}
-                          aria-disabled={record.status === 'Paid'}
+                          disabled={isMarkPaidDisabled(record.month, record.year, record.status)}
+                          aria-disabled={isMarkPaidDisabled(record.month, record.year, record.status)}
                         >
                           <i className="ri-exchange-dollar-line" aria-hidden="true" />
-                          {record.status === 'Paid' ? 'Paid' : 'Mark Paid'}
+                          {isPaidStatus(record.status) ? 'Paid' : 'Mark Paid'}
                         </button>
-                        <button type="button" onClick={() => setSelectedPayslip(record)}>
+                        <button
+                          type="button"
+                          onClick={() => handlePayslipClick({
+                            employeeId: record.employeeId,
+                            month: record.month,
+                            year: record.year,
+                            status: record.status,
+                            id: record.id,
+                          })}
+                          title="Open payslip preview"
+                        >
                           <i className="ri-file-download-line" aria-hidden="true" />
                           Payslip
                         </button>
@@ -403,14 +471,22 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   );
 }
 
-function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMonth, setYear }) {
+function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMonth, setYear, setStatusOverrides, focusRecordId = '' }) {
+  const [message, setMessage] = useState('');
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [periodRecords, setPeriodRecords] = useState([]);
   const [periodLoading, setPeriodLoading] = useState(false);
+  const [payrollData, setPayrollData] = useState(null);
+  const [payrollLoading, setPayrollLoading] = useState(false);
+  const [payslipMonth, setPayslipMonth] = useState(month);
+  const [payslipYear, setPayslipYear] = useState(year);
   const employeeId = getSessionValue('kavyaEmployeeId');
   const safeRecords = Array.isArray(records) ? records : [];
   const safeSavedPayrollRecords = Array.isArray(savedPayrollRecords) ? savedPayrollRecords : [];
-  const canDownloadPayslip = isPayrollPeriodAvailable(month, year);
+  const isHrPayroll = role === 'hr';
+  const previewMonth = isHrPayroll ? payslipMonth : month;
+  const previewYear = isHrPayroll ? payslipYear : year;
+  const canDownloadPayslip = isPayrollPeriodAvailable(previewMonth, previewYear);
 
   useEffect(() => {
     let active = true;
@@ -418,7 +494,7 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
     const loadPeriodPayroll = async () => {
       setPeriodLoading(true);
       try {
-        const rows = await apiRequest(`/payroll/${encodeURIComponent(month)}/${encodeURIComponent(year)}`);
+        const rows = await apiRequest(`/payroll/${encodeURIComponent(previewMonth)}/${encodeURIComponent(previewYear)}`);
         if (!active) {
           return;
         }
@@ -450,7 +526,55 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
       window.removeEventListener('storage', refreshPeriodPayroll);
       window.removeEventListener('kavyaPayrollRecordsChanged', refreshPeriodPayroll);
     };
-  }, [month, year]);
+  }, [previewMonth, previewYear]);
+
+  useEffect(() => {
+    if (!isHrPayroll || !employeeId) {
+      return undefined;
+    }
+
+    let active = true;
+
+    const loadPayrollRecord = async () => {
+      setPayrollLoading(true);
+      setMessage('');
+      setPayrollData(null);
+
+      try {
+        const payload = await apiRequest(
+          `/payroll/employee/${encodeURIComponent(employeeId)}?month=${encodeURIComponent(previewMonth)}&year=${encodeURIComponent(previewYear)}`,
+        );
+
+        if (!active) {
+          return;
+        }
+
+        const normalizedRecord = normalizePayrollRecords([payload])[0] || null;
+        setPayrollData(normalizedRecord);
+
+        if (!normalizedRecord) {
+          setMessage('Salary record not found for the selected month and year.');
+        }
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setPayrollData(null);
+        setMessage('Salary record not found for the selected month and year.');
+      } finally {
+        if (active) {
+          setPayrollLoading(false);
+        }
+      }
+    };
+
+    loadPayrollRecord();
+
+    return () => {
+      active = false;
+    };
+  }, [employeeId, isHrPayroll, previewMonth, previewYear]);
 
   const payrollRecordsForSelection = useMemo(() => {
     const combined = [
@@ -462,86 +586,149 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
     return normalizePayrollRecords(combined);
   }, [periodRecords, safeRecords, safeSavedPayrollRecords]);
 
-  const payslip = payrollRecordsForSelection.find((record) => employeeId && record.employeeId === employeeId && record.month === month && record.year === year)
-    || payrollRecordsForSelection.find((record) => record.ownerRole === role && record.month === month && record.year === year)
+  useEffect(() => {
+    if (!focusRecordId) {
+      return;
+    }
+
+    const focusedRecord = payrollRecordsForSelection.find((record) => record.id === focusRecordId);
+    if (focusedRecord) {
+      setSelectedPayslip(focusedRecord);
+    }
+  }, [focusRecordId, payrollRecordsForSelection]);
+
+  const payslip = payrollRecordsForSelection.find((record) => employeeId && record.employeeId === employeeId && record.month === previewMonth && record.year === previewYear)
+    || payrollRecordsForSelection.find((record) => record.ownerRole === role && record.month === previewMonth && record.year === previewYear)
     || payrollRecordsForSelection.find((record) => record.id === roleEmployeeFallback[role])
-    || getEmptyPayslip(role, month, year);
+    || getEmptyPayslip(role, previewMonth, previewYear);
+  const previewRecord = isHrPayroll ? payrollData : payslip;
+  const displayRecord = previewRecord || getEmptyPayslip(role, previewMonth, previewYear);
 
   return (
     <>
       <Hero title="My Payslip" copy="View your salary details, earnings, deductions, payment status, and download your monthly payslip." />
 
+      {message && (
+        <div className="payroll-alert" role="status">
+          <i className="ri-checkbox-circle-line" aria-hidden="true" />
+          <span>{message}</span>
+        </div>
+      )}
+
       <Section title="Payslip Filter" action={roleLabels[role] || 'Employee'}>
         <div className="payslip-filter">
           <label className="field">
             <span>Month</span>
-            <select value={month} onChange={(event) => setMonth(event.target.value)}>
+            <select
+              value={isHrPayroll ? payslipMonth : month}
+              onChange={(event) => {
+                if (isHrPayroll) {
+                  setPayslipMonth(event.target.value);
+                  setSelectedPayslip(null);
+                  return;
+                }
+                setMonth(event.target.value);
+              }}
+            >
               {months.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
           <label className="field">
             <span>Year</span>
-            <select value={year} onChange={(event) => setYear(event.target.value)}>
+            <select
+              value={isHrPayroll ? payslipYear : year}
+              onChange={(event) => {
+                if (isHrPayroll) {
+                  setPayslipYear(event.target.value);
+                  setSelectedPayslip(null);
+                  return;
+                }
+                setYear(event.target.value);
+              }}
+            >
               {years.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          {canDownloadPayslip ? (
-            <button className="payroll-primary" type="button" onClick={() => setSelectedPayslip(payslip)} disabled={periodLoading}>
+          {isHrPayroll || canDownloadPayslip ? (
+            <button
+              className="payroll-primary"
+              type="button"
+              onClick={async () => {
+                if (isHrPayroll) {
+                  if (!previewRecord || !employeeId) {
+                    setMessage('Payslip is available only for paid salaries.');
+                    return;
+                  }
+
+                  if (!isPaidStatus(previewRecord.status)) {
+                    setMessage('Payslip is available only for paid salaries.');
+                    return;
+                  }
+
+                  setMessage('');
+                  printPayslip(previewRecord);
+                  return;
+                }
+
+                setSelectedPayslip(payslip);
+              }}
+              disabled={(!isHrPayroll && periodLoading) || (isHrPayroll && payrollLoading)}
+            >
               <i className="ri-download-cloud-2-line" aria-hidden="true" />
-              {periodLoading ? 'Loading...' : 'Download Payslip'}
+              {(isHrPayroll && payrollLoading) || (!isHrPayroll && periodLoading) ? 'Loading...' : 'Download Payslip'}
             </button>
           ) : (
             <div className="payroll-alert" role="status">
               <i className="ri-lock-line" aria-hidden="true" />
-              <span>{getPayrollAvailabilityText(month, year)}</span>
+              <span>{getPayrollAvailabilityText(previewMonth, previewYear)}</span>
             </div>
           )}
         </div>
       </Section>
 
-      {canDownloadPayslip ? (
+      {isHrPayroll || canDownloadPayslip ? (
         <>
           <div className="payslip-layout">
             <section className="payslip-card">
               <div className="payslip-head">
                 <div>
                   <p className="eyebrow">Salary Slip</p>
-                  <h3>{payslip.employeeName}</h3>
-                  <span>{payslip.employeeId} - {payslip.role}</span>
+                  <h3>{displayRecord.employeeName}</h3>
+                  <span>{displayRecord.employeeId} - {displayRecord.role}</span>
                 </div>
-                <span className={`status status-${payslip.status.toLowerCase()}`}>{payslip.status}</span>
+                <span className={`status status-${displayRecord.status.toLowerCase()}`}>{displayRecord.status}</span>
               </div>
 
               <div className="payslip-info-grid">
-                <div><span>Department</span><strong>{payslip.department}</strong></div>
-                <div><span>Pay Period</span><strong>{payslip.month} {payslip.year}</strong></div>
-                <div><span>Gross Earnings</span><strong>{formatCurrency(getEarnings(payslip))}</strong></div>
-                <div><span>Total Deductions</span><strong>{formatCurrency(getDeductions(payslip))}</strong></div>
+                <div><span>Department</span><strong>{displayRecord.department}</strong></div>
+                <div><span>Pay Period</span><strong>{displayRecord.month} {displayRecord.year}</strong></div>
+                <div><span>Gross Earnings</span><strong>{formatCurrency(getEarnings(displayRecord))}</strong></div>
+                <div><span>Total Deductions</span><strong>{formatCurrency(getDeductions(displayRecord))}</strong></div>
               </div>
 
               <div className="net-salary-box">
                 <span>Net Salary</span>
-                <strong>{formatCurrency(getNetSalary(payslip))}</strong>
+                <strong>{formatCurrency(getNetSalary(displayRecord))}</strong>
               </div>
             </section>
 
             <SalaryBreakdown title="Earnings" items={[
-              ['Monthly Package', payslip.basic],
-              ['HRA', payslip.hra],
-              ['Allowance', payslip.allowance],
-              ['Bonus', payslip.bonus],
-            ]} total={getEarnings(payslip)} tone="earnings" />
+              ['Monthly Package', displayRecord.basic],
+              ['HRA', displayRecord.hra],
+              ['Allowance', displayRecord.allowance],
+              ['Bonus', displayRecord.bonus],
+            ]} total={getEarnings(displayRecord)} tone="earnings" />
 
             <SalaryBreakdown title="Deductions" items={[
-              ['PF', payslip.providentFund],
-              ['GRATUITY', payslip.gratuity],
-              ['PROF TAX', payslip.professionalTax],
-              ['Half Days', payslip.halfDayDeduction],
-              ['Other Deduction', payslip.otherDeduction],
-            ]} total={getDeductions(payslip)} tone="deductions" />
+              ['PF', displayRecord.providentFund],
+              ['GRATUITY', displayRecord.gratuity],
+              ['PROF TAX', displayRecord.professionalTax],
+              ['Half Days', displayRecord.halfDayDeduction],
+              ['Other Deduction', displayRecord.otherDeduction],
+            ]} total={getDeductions(displayRecord)} tone="deductions" />
           </div>
 
-          {selectedPayslip && (
+          {selectedPayslip && !isHrPayroll && (
             <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
           )}
         </>
@@ -552,6 +739,283 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
             <span>{getPayrollAvailabilityText(month, year)}</span>
           </div>
         </Section>
+      )}
+
+      {role === 'hr' && (
+        <PayrollSalaryTable
+          records={records}
+          savedPayrollRecords={savedPayrollRecords}
+          selectedMonth={month}
+          selectedYear={year}
+          setSelectedMonth={setMonth}
+          setSelectedYear={setYear}
+          setStatusOverrides={setStatusOverrides}
+          focusRecordId={focusRecordId}
+        />
+      )}
+    </>
+  );
+}
+
+function PayrollSalaryTable({ records, savedPayrollRecords, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear, setStatusOverrides, focusRecordId = '' }) {
+  const [message, setMessage] = useState('');
+  const [selectedPayslip, setSelectedPayslip] = useState(null);
+  const [loadingPayslipId, setLoadingPayslipId] = useState('');
+  const [activeSummary, setActiveSummary] = useState('total');
+  const [searchTerm, setSearchTerm] = useState('');
+  const tableSectionRef = useRef(null);
+
+  const summary = useMemo(() => {
+    const totalPayroll = records.reduce((sum, record) => sum + getNetSalary(record), 0);
+    const paid = records.filter((record) => isPaidStatus(record.status)).length;
+    const unpaid = records.length - paid;
+
+    return [
+      { id: 'total', label: 'Total Payroll', value: formatCurrency(totalPayroll), delta: `${records.length} salary records`, tone: 'blue', icon: 'ri-wallet-3-line' },
+      { id: 'paid', label: 'Paid Salaries', value: String(paid).padStart(2, '0'), delta: 'Completed this cycle', tone: 'green', icon: 'ri-checkbox-circle-line' },
+      { id: 'unpaid', label: 'Unpaid Salaries', value: String(unpaid).padStart(2, '0'), delta: 'Needs action', tone: 'orange', icon: 'ri-time-line' },
+      { id: 'average', label: 'Avg Net Salary', value: formatCurrency(Math.round(totalPayroll / Math.max(records.length, 1))), delta: 'Current month', tone: 'pink', icon: 'ri-line-chart-line' },
+    ];
+  }, [records]);
+
+  const summaryDetail = useMemo(() => getPayrollSummaryDetail(activeSummary, records), [activeSummary, records]);
+  const filteredRecords = useMemo(() => {
+    const summaryFilteredRecords = getFilteredPayrollRecords(activeSummary, records);
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) {
+      return summaryFilteredRecords;
+    }
+
+    return summaryFilteredRecords.filter((record) => [
+      record.employeeName,
+      record.employeeId,
+      record.department,
+      record.month,
+      record.year,
+      record.status,
+      formatCurrency(getNetSalary(record)),
+      formatCurrency(getEarnings(record)),
+      formatCurrency(getDeductions(record)),
+    ].some((value) => String(value || '').toLowerCase().includes(query)));
+  }, [activeSummary, records, searchTerm]);
+
+  useEffect(() => {
+    if (!focusRecordId) {
+      return;
+    }
+
+    const focusedRecord = records.find((record) => record.id === focusRecordId);
+    if (focusedRecord && isPaidStatus(focusedRecord.status)) {
+      setSelectedPayslip(focusedRecord);
+    }
+  }, [focusRecordId, records]);
+
+  const toggleStatus = async (recordId) => {
+    const record = records.find((item) => item.id === recordId);
+    if (!record || isMarkPaidDisabled(record.month, record.year, record.status)) {
+      return;
+    }
+
+    try {
+      await apiRequest(`/payroll/${encodeURIComponent(recordId)}/mark-paid`, { method: 'PATCH' });
+      setStatusOverrides((current) => ({
+        ...current,
+        [recordId]: 'Paid',
+      }));
+      setMessage('Payroll payment status updated successfully');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to mark salary as paid');
+    }
+  };
+
+  const handleSummaryClick = (summaryId) => {
+    setActiveSummary(summaryId);
+    requestAnimationFrame(() => {
+      tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const handleGeneratePayroll = () => {
+    saveStoredPayrollRecords(mergePayrollRecords(savedPayrollRecords, records));
+    setMessage(`${selectedMonth} ${selectedYear} payroll generated and saved (${records.length} records).`);
+    requestAnimationFrame(() => {
+      tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const handlePayslipClick = async ({ employeeId, month, year, status, id }) => {
+    if (!employeeId || !month || !year || loadingPayslipId === id) {
+      return;
+    }
+
+    setSelectedPayslip(null);
+
+    if (!isPaidStatus(status)) {
+      setMessage('Payslip is available only after the salary is marked as paid.');
+      return;
+    }
+
+    setLoadingPayslipId(id);
+    try {
+      const payload = await apiRequest(`/payroll/payslip?employeeId=${encodeURIComponent(employeeId)}&month=${encodeURIComponent(month)}&year=${encodeURIComponent(year)}`);
+      const normalizedRecord = normalizePayrollRecords([payload])[0];
+
+      if (
+        !normalizedRecord
+        || String(normalizedRecord.employeeId || '') !== String(employeeId || '')
+        || String(normalizedRecord.month || '') !== String(month || '')
+        || String(normalizedRecord.year || '') !== String(year || '')
+      ) {
+        setMessage('Salary record not found for the selected month and year.');
+        return;
+      }
+
+      setSelectedPayslip(normalizedRecord);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Payslip is available only after the salary is marked as paid.');
+    } finally {
+      setLoadingPayslipId('');
+    }
+  };
+
+  return (
+    <>
+      {message && (
+        <div className="payroll-alert" role="status">
+          <i className="ri-checkbox-circle-line" aria-hidden="true" />
+          <span>{message}</span>
+        </div>
+      )}
+
+      <div className="card-grid">
+        {summary.map((item) => (
+          <DashboardCard
+            key={item.label}
+            {...item}
+            onClick={() => handleSummaryClick(item.id)}
+          />
+        ))}
+      </div>
+
+      <section className="payroll-detail-panel" aria-live="polite">
+        <div className="payroll-detail-head">
+          <div>
+            <p className="eyebrow">{selectedMonth} {selectedYear}</p>
+            <h3>{summaryDetail.title}</h3>
+          </div>
+          <strong>{summaryDetail.value}</strong>
+        </div>
+        <div className="payroll-detail-grid">
+          {summaryDetail.metrics.map((metric) => (
+            <div key={metric.label}>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div ref={tableSectionRef}>
+        <Section title="Employee Salary Table">
+          <div className="payroll-toolbar">
+            <label className="toolbar-search payroll-search-field">
+              <i className="ri-search-line" aria-hidden="true" />
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search employee, department, or status"
+              />
+            </label>
+            <label className="field payroll-filter-field">
+              <span>Month</span>
+              <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
+                {months.map((month) => <option key={month} value={month}>{month}</option>)}
+              </select>
+            </label>
+            <label className="field payroll-filter-field">
+              <span>Year</span>
+              <select value={selectedYear} onChange={(event) => setSelectedYear(event.target.value)}>
+                {years.map((year) => <option key={year} value={year}>{year}</option>)}
+              </select>
+            </label>
+            <button className="payroll-primary" type="button" onClick={handleGeneratePayroll}>
+              <i className="ri-file-list-3-line" aria-hidden="true" />
+              Generate
+            </button>
+          </div>
+          <div className="table-card payroll-table-card">
+            <div className="table-responsive">
+              <table className="table align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Month</th>
+                    <th>Earnings</th>
+                    <th>Deductions</th>
+                    <th>Net Salary</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRecords.map((record) => (
+                    <tr key={record.id}>
+                      <td data-label="Employee">
+                        <div className="employee-cell payroll-employee-cell">
+                          <span>{getInitials(record.employeeName)}</span>
+                          <div>
+                            <strong>{record.employeeName}</strong>
+                            <small>{record.employeeId} - {record.department}</small>
+                          </div>
+                        </div>
+                      </td>
+                      <td data-label="Month">{record.month} {record.year}</td>
+                      <td data-label="Earnings">{formatCurrency(getEarnings(record))}</td>
+                      <td data-label="Deductions">
+                        <strong>{formatCurrency(getDeductions(record))}</strong>
+                      </td>
+                      <td data-label="Net Salary"><strong>{formatCurrency(getNetSalary(record))}</strong></td>
+                      <td data-label="Status"><span className={`status status-${record.status.toLowerCase()}`}>{record.status}</span></td>
+                      <td data-label="Actions">
+                        <div className="payroll-actions">
+                          <button
+                            type="button"
+                            onClick={() => toggleStatus(record.id)}
+                            disabled={isMarkPaidDisabled(record.month, record.year, record.status)}
+                            aria-disabled={isMarkPaidDisabled(record.month, record.year, record.status)}
+                          >
+                            <i className="ri-exchange-dollar-line" aria-hidden="true" />
+                            {isPaidStatus(record.status) ? 'Paid' : 'Mark Paid'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePayslipClick({
+                              employeeId: record.employeeId,
+                              month: record.month,
+                              year: record.year,
+                              status: record.status,
+                              id: record.id,
+                            })}
+                            title="Open payslip preview"
+                          >
+                            <i className="ri-file-download-line" aria-hidden="true" />
+                            Payslip
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Section>
+      </div>
+
+      {selectedPayslip && (
+        <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
       )}
     </>
   );
@@ -863,10 +1327,10 @@ function getPayslipTableMarkup(title, columns, rows, totalLabel, total) {
 }
 
 function getPayslipFileName(record) {
-  const employeeName = String(record.employeeName || 'Employee').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const employeeCode = String(record.employeeId || 'EmployeeCode').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   const month = String(record.month || 'Month').replace(/[^a-zA-Z0-9]+/g, '_');
   const year = String(record.year || 'Year').replace(/[^a-zA-Z0-9]+/g, '_');
-  return `KIPL_${employeeName}_${month}_${year}`;
+  return `Payslip_${employeeCode}_${month}_${year}.pdf`;
 }
 
 function escapeHtml(value) {
@@ -912,6 +1376,9 @@ function getDeductions(record) {
 }
 
 function getNetSalary(record) {
+  if (record && record.netSalary !== null && record.netSalary !== undefined && record.netSalary !== '') {
+    return Number(record.netSalary);
+  }
   return getEarnings(record) - getDeductions(record);
 }
 
@@ -931,10 +1398,7 @@ function getInitialPayrollStatuses(storedRecords = []) {
   const initialStatuses = Object.fromEntries(salaryRecords.map((record) => [record.id, 'Unpaid']));
 
   storedRecords.forEach((record) => {
-    const storedStatus = record.status || 'Unpaid';
-    initialStatuses[record.id] = storedStatus === 'Paid' && Boolean(record.statusManuallySet)
-      ? 'Paid'
-      : 'Unpaid';
+    initialStatuses[record.id] = isPaidStatus(record.status) ? 'Paid' : 'Unpaid';
   });
 
   return initialStatuses;
@@ -944,8 +1408,8 @@ function getPayrollSummaryDetail(summaryId, records) {
   const totalNet = records.reduce((sum, record) => sum + getNetSalary(record), 0);
   const totalEarnings = records.reduce((sum, record) => sum + getEarnings(record), 0);
   const totalDeductions = records.reduce((sum, record) => sum + getDeductions(record), 0);
-  const paidRecords = records.filter((record) => record.status === 'Paid');
-  const unpaidRecords = records.filter((record) => record.status !== 'Paid');
+  const paidRecords = records.filter((record) => isPaidStatus(record.status));
+  const unpaidRecords = records.filter((record) => !isPaidStatus(record.status));
   const averageNet = Math.round(totalNet / Math.max(records.length, 1));
 
   if (summaryId === 'paid') {
@@ -1008,6 +1472,33 @@ function getPayrollRecordId(employeeId, month, year) {
   return `PAY-${employeeId}-${month}-${year}`;
 }
 
+function parsePayrollNotificationTarget(search = '') {
+  const params = new URLSearchParams(search);
+  const recordId = String(params.get('recordId') || '').trim();
+  const month = String(params.get('month') || '').trim();
+  const year = String(params.get('year') || '').trim();
+  const inferredFromRecordId = parsePayrollRecordId(recordId);
+
+  return {
+    recordId,
+    month: month || inferredFromRecordId?.month || '',
+    year: year || inferredFromRecordId?.year || '',
+  };
+}
+
+function parsePayrollRecordId(recordId) {
+  const match = String(recordId || '').trim().match(/^PAY-(.+)-([A-Za-z]+)-(\d{4})$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    employeeId: match[1],
+    month: match[2],
+    year: match[3],
+  };
+}
+
 function normalizePayrollRecords(rows = []) {
   return (Array.isArray(rows) ? rows : []).map((record, index) => ({
     ...record,
@@ -1030,6 +1521,7 @@ function normalizePayrollRecords(rows = []) {
     absentDeduction: Number(record.absentDeduction || 0),
     halfDayDeduction: Number(record.halfDayDeduction || 0),
     otherDeduction: Number(record.otherDeduction || 0),
+    netSalary: Object.prototype.hasOwnProperty.call(record, 'netSalary') ? Number(record.netSalary) : null,
     packageAmount: Number(record.packageAmount || 0),
     daysInMonth: Number(record.daysInMonth || 0),
     payableDays: Number(record.payableDays || 0),
@@ -1103,9 +1595,7 @@ function buildPayrollRecords(employees, attendance, leaveRequests, statusOverrid
       aadhaarNo: employee.aadhaarCardNo || '-',
       panNo: employee.panCardNo || '-',
       location: employee.workingLocation || employee.presentCityDistrict || employee.permanentCityDistrict || '-',
-      status: (savedRecord?.status === 'Paid' && savedRecord?.statusManuallySet) || statusOverrides[id] === 'Paid'
-        ? 'Paid'
-        : 'Unpaid',
+      status: isPaidStatus(savedRecord?.status) || isPaidStatus(statusOverrides[id]) ? 'Paid' : 'Unpaid',
       attendanceSummary: `${attendanceSummary.payableDays + approvedLeaveDays} paid days, ${approvedLeaveDays} approved leave, ${attendanceSummary.absentDays} absent, ${attendanceSummary.halfDays} half day`,
       deductionSummary: `PF ${formatCurrency(providentFund)}, Gratuity ${formatCurrency(gratuity)}, Prof Tax ${formatCurrency(professionalTax)}, LOP ${formatCurrency(absentDeduction + halfDayDeduction)}`,
     };

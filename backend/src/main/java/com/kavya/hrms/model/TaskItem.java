@@ -20,6 +20,7 @@ public class TaskItem {
   private String priority;
   private String dueDate;
   private String status;
+  private String teamLeadId;
   private String projectId;
   private String projectName;
   private String projectCode;
@@ -53,6 +54,8 @@ public class TaskItem {
   public void setDueDate(String dueDate) { this.dueDate = dueDate; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
+  public String getTeamLeadId() { return teamLeadId; }
+  public void setTeamLeadId(String teamLeadId) { this.teamLeadId = teamLeadId; }
   public String getProjectId() { return projectId; }
   public void setProjectId(String projectId) { this.projectId = projectId; }
   public String getProjectName() { return projectName; }
