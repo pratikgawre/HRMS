@@ -5,6 +5,7 @@ import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
+import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { buildTeamLeadAssignmentGroups, getEmployeeId, getEmployeeName, normalizeLookupValue } from '../utils/teamLeadAssignments.js';
 
 function MyTeam() {
@@ -18,8 +19,10 @@ function MyTeam() {
 
 function TeamLeadMyTeamView() {
   const navigate = useNavigate();
-  const currentEmployeeId = getSessionValue('kavyaEmployeeId');
+  const currentTeamLeadIdentity = getCurrentEmployeeIdentity();
+  const currentEmployeeId = String(currentTeamLeadIdentity.employeeId || '').trim();
   const [projects, setProjects] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [teamAssignments, setTeamAssignments] = useState([]);
   const [tasks, setTasks] = useState([]);
 
@@ -28,17 +31,19 @@ function TeamLeadMyTeamView() {
 
     const refreshTeamData = () => {
       Promise.all([
+        safeApiRequest('/employees', []),
         safeApiRequest(`/team-lead/${currentEmployeeId}/projects`, []),
+        safeApiRequest('/tasks', []),
         safeApiRequest(`/tasks/assigned-by/${currentEmployeeId}`, []),
-      ]).then(([projectRows, assignmentRows]) => {
+      ]).then(([employeeRows, projectRows, taskRows, assignmentRows]) => {
         if (!active) {
           return;
         }
 
         setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
         setProjects(Array.isArray(projectRows) ? projectRows : []);
-        setTeamAssignments(Array.isArray(assignmentRows) ? assignmentRows : []);
         setTasks(Array.isArray(taskRows) ? taskRows : []);
+        setTeamAssignments(Array.isArray(assignmentRows) ? assignmentRows : []);
         console.debug('[TeamLead MyTeam] loggedInUser', currentTeamLeadIdentity);
         console.debug('[TeamLead MyTeam] projectCount', Array.isArray(projectRows) ? projectRows.length : 0);
       });
@@ -60,11 +65,8 @@ function TeamLeadMyTeamView() {
   }, []);
 
   const assignmentData = useMemo(
-    () => buildTeamLeadAssignmentGroups(projects, [], currentEmployeeId),
-    [currentEmployeeId, projects],
-  );
-    () => buildTeamLeadAssignmentGroups(projects, employees, currentTeamLeadIdentity),
-    [currentTeamLeadIdentity, employees, projects],
+    () => buildTeamLeadAssignmentGroups(projects, employees, currentEmployeeId),
+    [currentEmployeeId, employees, projects],
   );
 
   const taskAssignmentData = useMemo(
