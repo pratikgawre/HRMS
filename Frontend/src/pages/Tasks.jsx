@@ -67,6 +67,11 @@ function Tasks() {
   const [form, setForm] = useState(getEmptyTaskForm());
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
+  const currentTeamLeadIdentity = {
+    employeeId: employeeIdentity.employeeId,
+    employeeName: employeeIdentity.employee,
+    userId: getSessionValue('kavyaUserId'),
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -84,10 +89,15 @@ function Tasks() {
     let active = true;
 
     const refreshData = () => {
+      const apiUrl = '/projects';
+      console.debug('[TeamLead Tasks] loggedInUser', employeeIdentity);
+      console.debug('[TeamLead Tasks] teamLeadId', currentEmployeeId);
+      console.debug('[TeamLead Tasks] selectedProjectId', form.projectId || '');
+      console.debug('[TeamLead Tasks] API URL', apiUrl);
       Promise.all([
         loadTasksWithSeed(),
         safeApiRequest('/employees', people),
-        safeApiRequest('/projects', []),
+        safeApiRequest(apiUrl, []),
       ]).then(([rows, employeeRows, projectRows]) => {
         if (!active) {
           return;
@@ -96,6 +106,12 @@ function Tasks() {
         setTaskRows(Array.isArray(rows) ? rows.map(normalizeTaskRow) : []);
         setEmployees(normalizeEmployees(employeeRows));
         setProjects(normalizeProjectRows(projectRows));
+        console.debug('[TeamLead Tasks] API response', {
+          taskCount: Array.isArray(rows) ? rows.length : 0,
+          employeeCount: Array.isArray(employeeRows) ? employeeRows.length : 0,
+          projectCount: Array.isArray(projectRows) ? projectRows.length : 0,
+          projectIds: Array.isArray(projectRows) ? projectRows.map((project) => project.id || project.projectId || '-') : [],
+        });
       });
     };
 
@@ -115,8 +131,10 @@ function Tasks() {
   }, []);
 
   const teamLeadProjects = useMemo(() => (
-    isTeamLead ? getSelectableTeamLeadProjects(projects, currentEmployeeId).filter((project) => isActiveProject(project)) : []
-  ), [currentEmployeeId, isTeamLead, projects]);
+    isTeamLead
+      ? getTeamLeadProjectOptions(projects, currentTeamLeadIdentity)
+      : []
+  ), [currentTeamLeadIdentity, isTeamLead, projects]);
   const selectedProject = useMemo(() => (
     isTeamLead
       ? teamLeadProjects.find((project) => project.id === form.projectId) || null
@@ -124,9 +142,9 @@ function Tasks() {
   ), [form.projectId, isTeamLead, teamLeadProjects]);
   const teamLeadAssigneeOptions = useMemo(() => (
     isTeamLead
-      ? getProjectAssigneeOptions(selectedProject, employees, currentEmployeeId)
+      ? getProjectAssigneeOptions(selectedProject, employees, currentTeamLeadIdentity)
       : []
-  ), [currentEmployeeId, employees, isTeamLead, selectedProject]);
+  ), [currentTeamLeadIdentity, employees, isTeamLead, selectedProject]);
   const assigneeOptions = useMemo(() => (
     isTeamLead
       ? teamLeadAssigneeOptions
@@ -221,7 +239,7 @@ function Tasks() {
           return;
         }
 
-        const allowedEmployees = getProjectAssigneeOptions(project, employees, currentEmployeeId);
+        const allowedEmployees = getProjectAssigneeOptions(project, employees, currentTeamLeadIdentity);
         const assignee = allowedEmployees.find((employee) => getEmployeeId(employee) === form.assignedToId) || null;
         if (!assignee) {
           setMessage('Please select a valid employee for the selected project.');
@@ -790,6 +808,7 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
                 <span>Project</span>
                 <select value={form.projectId || ''} onChange={(event) => updateProject(event.target.value)}>
                   <option value="">Select project</option>
+                  {projectOptions.length === 0 && <option value="" disabled>No projects assigned to you.</option>}
                   {projectOptions.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name} - {project.projectCode || project.id}
@@ -981,7 +1000,20 @@ function normalizeProjectRows(rows) {
 
 function isActiveProject(project) {
   const status = String(project?.status || '').trim().toLowerCase();
-  return !status || status === 'active';
+  if (!status) {
+    return true;
+  }
+
+  return !['inactive', 'closed', 'archived', 'cancelled', 'completed'].includes(status);
+}
+
+function getTeamLeadProjectOptions(projects, teamLeadIdentity) {
+  const matchedProjects = getSelectableTeamLeadProjects(projects, teamLeadIdentity).filter((project) => isActiveProject(project));
+  if (matchedProjects.length > 0) {
+    return matchedProjects;
+  }
+
+  return (Array.isArray(projects) ? projects : []).filter((project) => isActiveProject(project));
 }
 
 function normalizeTaskRow(task) {
