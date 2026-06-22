@@ -2,6 +2,7 @@ package com.kavya.hrms.controller;
 
 import com.kavya.hrms.model.PayrollRecord;
 import com.kavya.hrms.repository.PayrollRecordRepository;
+import com.kavya.hrms.service.PayrollGenerationService;
 import com.kavya.hrms.service.PayrollValidationService;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -32,12 +33,15 @@ public class PayrollController {
 
   private final PayrollRecordRepository payrollRecordRepository;
   private final PayrollValidationService payrollValidationService;
+  private final PayrollGenerationService payrollGenerationService;
 
   public PayrollController(
       PayrollRecordRepository payrollRecordRepository,
-      PayrollValidationService payrollValidationService) {
+      PayrollValidationService payrollValidationService,
+      PayrollGenerationService payrollGenerationService) {
     this.payrollRecordRepository = payrollRecordRepository;
     this.payrollValidationService = payrollValidationService;
+    this.payrollGenerationService = payrollGenerationService;
   }
 
   @GetMapping
@@ -64,6 +68,17 @@ public class PayrollController {
   @GetMapping("/{month}/{year}")
   public List<PayrollRecord> byPeriod(@PathVariable String month, @PathVariable String year) {
     return payrollRecordRepository.findByMonthAndYear(month, year);
+  }
+
+  @PostMapping("/generate")
+  public ResponseEntity<Object> generatePayroll(
+      @RequestParam String month,
+      @RequestParam String year) {
+    try {
+      return ResponseEntity.ok(payrollGenerationService.generateAndStorePayrollRecords(month, year));
+    } catch (IllegalArgumentException ex) {
+      return badRequest(ex.getMessage());
+    }
   }
 
   @PostMapping
@@ -107,7 +122,6 @@ public class PayrollController {
   @PostMapping("/bulk")
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
-    payrollRecordRepository.deleteAll();
     return payrollRecordRepository.saveAll(records);
   }
 
@@ -124,6 +138,10 @@ public class PayrollController {
   }
 
   private ResponseEntity<Object> updatePaidStatus(PayrollRecord record) {
+    if (record.getNetSalary() <= 0) {
+      return badRequest("Zero salary records cannot be marked as paid.");
+    }
+
     if (payrollValidationService.isPaidStatus(record.getStatus())) {
       return badRequest("Salary record has already been marked as paid.");
     }
