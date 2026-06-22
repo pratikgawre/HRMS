@@ -34,7 +34,7 @@ public class PayrollValidationService {
   }
 
   public boolean canGeneratePayslip(PayrollRecord record) {
-    return record != null && canGeneratePayslip(record.getStatus());
+    return record != null && canGeneratePayslip(record.getStatus()) && record.getNetSalary() > 0;
   }
 
   public boolean isCurrentMonthUnpaidAfterCutoff(PayrollRecord record, LocalDate today) {

@@ -255,6 +255,15 @@ function Employees() {
   const [form, setForm] = useState(getEmptyEmployeeForm());
 
   useEffect(() => {
+    const savedEmployees = getStoredEmployees([]);
+    const directoryEmployees = getUserEnteredEmployees();
+
+    if (directoryEmployees.length !== savedEmployees.length) {
+      saveStoredEmployees(directoryEmployees);
+    }
+  }, []);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const nextStatus = params.get('status');
     const nextDepartment = params.get('department');
@@ -1098,16 +1107,10 @@ function getEmptyEmployeeForm() {
 
 function getUserEnteredEmployees() {
   const savedEmployees = getStoredEmployees([]);
-  const directoryEmployees = mergeEmployees([
+  return mergeEmployees([
     ...people.map(getEmployeeFromFallbackPerson),
     ...savedEmployees.map(normalizeDirectoryEmployee),
   ]).filter((employee) => !isAdminEmployee(employee));
-
-  if (directoryEmployees.length !== savedEmployees.length) {
-    saveStoredEmployees(directoryEmployees);
-  }
-
-  return directoryEmployees;
 }
 
 function getEmployeeFromFallbackPerson(person) {
@@ -1703,3 +1706,4 @@ function getEmployeeDocumentLabel(documentValue) {
 }
 
 export default Employees;
+
