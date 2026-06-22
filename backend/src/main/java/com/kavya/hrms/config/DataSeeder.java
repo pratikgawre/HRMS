@@ -4,6 +4,7 @@ import com.kavya.hrms.model.Announcement;
 import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.LeaveRequest;
 import com.kavya.hrms.model.Project;
+import com.kavya.hrms.model.ProjectMember;
 import com.kavya.hrms.model.SystemSettings;
 import com.kavya.hrms.model.TaskItem;
 import com.kavya.hrms.repository.AnnouncementRepository;
@@ -80,9 +81,42 @@ public class DataSeeder {
       }
 
       if (projectRepository.count() == 0) {
-        projectRepository.save(buildProject("PRJ-01", "Employee Self Service", "Priya Menon", "8 members", "Security review", "72%", "Active"));
-        projectRepository.save(buildProject("PRJ-02", "Payroll Automation", "Nikhil Rao", "6 members", "Tax workflow", "54%", "Pending"));
-        projectRepository.save(buildProject("PRJ-03", "Attendance Insights", "Priya Menon", "5 members", "Monthly analytics", "88%", "Approved"));
+        projectRepository.save(buildProject(
+            "PRJ-01",
+            "Employee Self Service",
+            "Priya Menon",
+            "8 members",
+            "Security review",
+            "72%",
+            "Active",
+            "KV003",
+            "Kabir Khan",
+            "Team Lead",
+            List.of("KV001", "KV002")));
+        projectRepository.save(buildProject(
+            "PRJ-02",
+            "Payroll Automation",
+            "Nikhil Rao",
+            "6 members",
+            "Tax workflow",
+            "54%",
+            "Active",
+            "KV003",
+            "Kabir Khan",
+            "Team Lead",
+            List.of("KV004")));
+        projectRepository.save(buildProject(
+            "PRJ-03",
+            "Attendance Insights",
+            "Priya Menon",
+            "5 members",
+            "Monthly analytics",
+            "88%",
+            "Approved",
+            "KV003",
+            "Kabir Khan",
+            "Team Lead",
+            List.of("KV005")));
       }
 
       if (settingsRepository.count() == 0) {
@@ -163,15 +197,69 @@ public class DataSeeder {
     return task;
   }
 
-  private Project buildProject(String id, String name, String manager, String team, String milestone, String progress, String status) {
+  private Project buildProject(
+      String id,
+      String name,
+      String manager,
+      String team,
+      String milestone,
+      String progress,
+      String status,
+      String teamLeadId,
+      String teamLeadName,
+      String teamLeadDesignation,
+      List<String> memberIds) {
     Project project = new Project();
     project.setId(id);
     project.setName(name);
     project.setManager(manager);
     project.setTeam(team);
+    project.setTeamLeadId(teamLeadId);
+    project.setTeamLeadName(teamLeadName);
+    project.setTeamLeadDesignation(teamLeadDesignation);
+    project.setTeamMembers(memberIds);
+    project.setTeamMemberDetails(memberIds.stream().map(this::buildProjectMember).toList());
     project.setMilestone(milestone);
     project.setProgress(progress);
     project.setStatus(status);
     return project;
+  }
+
+  private ProjectMember buildProjectMember(String employeeId) {
+    ProjectMember member = new ProjectMember();
+    member.setId(employeeId);
+    member.setEmployeeCode(employeeId);
+    if ("KV001".equalsIgnoreCase(employeeId)) {
+      member.setName("Aarav Sharma");
+      member.setDisplayName("Aarav Sharma");
+      member.setDepartment("Design");
+      member.setRole("Product Designer");
+      member.setAvatar("AS");
+    } else if ("KV002".equalsIgnoreCase(employeeId)) {
+      member.setName("Meera Nair");
+      member.setDisplayName("Meera Nair");
+      member.setDepartment("People Ops");
+      member.setRole("HR Executive");
+      member.setAvatar("MN");
+    } else if ("KV004".equalsIgnoreCase(employeeId)) {
+      member.setName("Isha Patel");
+      member.setDisplayName("Isha Patel");
+      member.setDepartment("Finance");
+      member.setRole("Finance Analyst");
+      member.setAvatar("IP");
+    } else if ("KV005".equalsIgnoreCase(employeeId)) {
+      member.setName("Rohan Das");
+      member.setDisplayName("Rohan Das");
+      member.setDepartment("Quality");
+      member.setRole("QA Engineer");
+      member.setAvatar("RD");
+    } else {
+      member.setName(employeeId);
+      member.setDisplayName(employeeId);
+      member.setDepartment("-");
+      member.setRole("Employee");
+      member.setAvatar(employeeId.length() >= 2 ? employeeId.substring(0, 2).toUpperCase() : "EM");
+    }
+    return member;
   }
 }

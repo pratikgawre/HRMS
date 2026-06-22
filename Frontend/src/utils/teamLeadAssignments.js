@@ -114,7 +114,7 @@ export function getTeamLeadProjects(projects = [], teamLeadId = '') {
   }
 
   return (Array.isArray(projects) ? projects : [])
-    .filter((project) => normalizeLookupValue(project?.teamLeadId) === normalizedLeadId)
+    .filter((project) => isTeamLeadProject(project, normalizedLeadId))
     .map((project, index) => ({
       ...project,
       id: project?.id || `PRJ-${index + 1}`,
@@ -165,6 +165,36 @@ export function getProjectAssigneeOptions(project, employees = [], teamLeadId = 
     .filter((employee) => normalizeLookupValue(getEmployeeId(employee)) !== normalizeLookupValue(teamLeadId));
 
   return members.filter((employee) => isEligibleTeamMember(employee));
+}
+
+export function isTeamLeadProject(project, teamLeadId = '') {
+  const normalizedLeadId = normalizeLookupValue(teamLeadId);
+  if (!normalizedLeadId || !project) {
+    return false;
+  }
+
+  const directMatches = [
+    project?.teamLeadId,
+    project?.managerId,
+  ].map(normalizeLookupValue);
+
+  if (directMatches.includes(normalizedLeadId)) {
+    return true;
+  }
+
+  if (Array.isArray(project.teamMembers) && project.teamMembers.some((memberId) => normalizeLookupValue(memberId) === normalizedLeadId)) {
+    return true;
+  }
+
+  if (Array.isArray(project.teamMemberDetails)) {
+    return project.teamMemberDetails.some((member) => [
+      member?.id,
+      member?.employeeCode,
+      member?.employeeId,
+    ].some((value) => normalizeLookupValue(value) === normalizedLeadId));
+  }
+
+  return false;
 }
 
 export function buildEmployeeDirectory(employees = []) {

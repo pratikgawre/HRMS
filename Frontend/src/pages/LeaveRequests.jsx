@@ -20,6 +20,7 @@ function LeaveRequests() {
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
   const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
+  const isAdminOrHr = role === 'admin' || role === 'hr';
   const [requests, setRequests] = useState(getInitialLeaveRequests);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
@@ -101,12 +102,12 @@ function LeaveRequests() {
         <div className="table-actions">
           <button
             type="button"
-            onClick={() => updateLeaveStatus(row.id, role === 'admin' || role === 'hr' ? 'Approved' : 'Recommended')}
+            onClick={() => updateLeaveStatus(row.id, isAdminOrHr ? 'Approved' : 'Recommended')}
           >
             <i className="ri-checkbox-circle-line" aria-hidden="true" />
-            {role === 'admin' || role === 'hr' ? 'Approve' : 'Recommend'}
+            {isAdminOrHr ? 'Approve' : 'Recommend'}
           </button>
-          {row.status === 'Pending' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
+          {isAdminOrHr && row.status === 'Pending' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
         </div>
       ),
     }] : []),
