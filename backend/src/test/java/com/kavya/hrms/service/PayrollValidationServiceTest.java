@@ -30,6 +30,14 @@ class PayrollValidationServiceTest {
   }
 
   @Test
+  void blocksFutureCalendarYearsUntilTheYearArrives() {
+    assertTrue(service.isMarkPaidDisabled("February", "2027", "Unpaid", LocalDate.of(2027, 1, 31)));
+    assertTrue(service.isFuturePayrollPeriod("February", "2027", LocalDate.of(2027, 1, 31)));
+    assertFalse(service.isFuturePayrollPeriod("February", "2027", LocalDate.of(2027, 2, 1)));
+    assertFalse(service.isMarkPaidDisabled("February", "2027", "Unpaid", LocalDate.of(2027, 2, 10)));
+  }
+
+  @Test
   void generatesPayslipOnlyWhenPaid() {
     assertTrue(service.canGeneratePayslip("PAID"));
     assertTrue(service.canGeneratePayslip("Paid"));

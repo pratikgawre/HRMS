@@ -25,6 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class PayrollController {
   private static final String CURRENT_MONTH_LIMIT_MESSAGE =
       "Current month salary can only be marked as paid between the 1st and 15th.";
+  private static final String FUTURE_PERIOD_LIMIT_MESSAGE =
+      "Salary payments cannot be processed for future payroll periods.";
   private static final String PAYSLIP_LIMIT_MESSAGE =
       "Payslip is available only after the salary is marked as paid.";
   private static final String NOT_FOUND_MESSAGE = "Salary record not found";
@@ -142,6 +144,10 @@ public class PayrollController {
 
     if (payrollValidationService.isPaidStatus(record.getStatus())) {
       return badRequest("Salary record has already been marked as paid.");
+    }
+
+    if (payrollValidationService.isFuturePayrollPeriod(record.getMonth(), record.getYear(), LocalDate.now())) {
+      return forbidden(FUTURE_PERIOD_LIMIT_MESSAGE);
     }
 
     if (payrollValidationService.isCurrentMonthUnpaidAfterCutoff(record, LocalDate.now())) {
