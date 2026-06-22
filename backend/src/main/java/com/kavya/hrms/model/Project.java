@@ -14,9 +14,9 @@ public class Project {
   private String manager;
   private String managerId;
   private String teamLead;
-private String teamLeadId;
-private String teamLeadName;
-private String teamLeadDesignation;
+  private String teamLeadId;
+  private String teamLeadName;
+  private String teamLeadDesignation;
   private String team;
   private List<String> teamMembers;
   private List<ProjectMember> teamMemberDetails;
