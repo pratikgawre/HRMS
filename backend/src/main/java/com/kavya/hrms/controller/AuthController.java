@@ -1,14 +1,9 @@
 package com.kavya.hrms.controller;
 
-import com.kavya.hrms.dto.LoginRequest;
-import com.kavya.hrms.dto.LoginResponse;
-import com.kavya.hrms.model.AuthSession;
-import com.kavya.hrms.model.AppUser;
-import com.kavya.hrms.repository.AppUserRepository;
-import com.kavya.hrms.repository.AuthSessionRepository;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -19,6 +14,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.kavya.hrms.dto.LoginRequest;
+import com.kavya.hrms.dto.LoginResponse;
+import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.model.AuthSession;
+import com.kavya.hrms.repository.AppUserRepository;
+import com.kavya.hrms.repository.AuthSessionRepository;
 
 @RestController
 @RequestMapping("/api/auth")

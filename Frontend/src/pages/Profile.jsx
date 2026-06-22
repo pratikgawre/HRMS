@@ -457,7 +457,7 @@ function Profile() {
   };
 
   return (
-    <>
+    <div className="profile-page">
       <Hero title="Profile Management" copy="Edit your personal details, contact information, profile photo, and password in one place." />
 
       <section className="dashboard-card-grid">
@@ -1002,7 +1002,7 @@ function Profile() {
           </div>
         </Section>
       </div>
-    </>
+    </div>
   );
 }
 
