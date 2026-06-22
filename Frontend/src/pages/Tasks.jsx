@@ -88,6 +88,19 @@ function Tasks() {
   useEffect(() => {
     let active = true;
 
+    const loadTeamLeadProjects = async () => {
+      if (!isTeamLead) {
+        return safeApiRequest('/projects', []);
+      }
+
+      const teamLeadProjects = await safeApiRequest(`/projects/team-lead/${currentEmployeeId}`, []);
+      if (Array.isArray(teamLeadProjects) && teamLeadProjects.length > 0) {
+        return teamLeadProjects;
+      }
+
+      return safeApiRequest('/projects', []);
+    };
+
     const refreshData = () => {
       const apiUrl = '/projects';
       console.debug('[TeamLead Tasks] loggedInUser', employeeIdentity);
@@ -97,7 +110,7 @@ function Tasks() {
       Promise.all([
         loadTasksWithSeed(),
         safeApiRequest('/employees', people),
-        safeApiRequest(apiUrl, []),
+        loadTeamLeadProjects(),
       ]).then(([rows, employeeRows, projectRows]) => {
         if (!active) {
           return;
@@ -120,6 +133,7 @@ function Tasks() {
     window.addEventListener('focus', refreshData);
     window.addEventListener('kavyaTasksChanged', refreshData);
     window.addEventListener('kavyaEmployeesChanged', refreshData);
+    window.addEventListener('kavyaProjectsChanged', refreshData);
 
     return () => {
       active = false;
@@ -127,6 +141,7 @@ function Tasks() {
       window.removeEventListener('focus', refreshData);
       window.removeEventListener('kavyaTasksChanged', refreshData);
       window.removeEventListener('kavyaEmployeesChanged', refreshData);
+      window.removeEventListener('kavyaProjectsChanged', refreshData);
     };
   }, []);
 
@@ -275,6 +290,7 @@ function Tasks() {
         const nextTask = normalizeTaskRow(saved || payload);
         setTaskRows((current) => [nextTask, ...current]);
         window.dispatchEvent(new Event('kavyaTasksChanged'));
+        window.dispatchEvent(new Event('kavyaProjectsChanged'));
         setIsTaskModalOpen(false);
         setForm(getEmptyTaskForm({ teamLeadMode: true, projectId: project.id }));
         setMessage('Task assigned successfully.');
@@ -318,6 +334,7 @@ function Tasks() {
       const nextTask = normalizeTaskRow(saved || payload);
       setTaskRows((current) => [nextTask, ...current]);
       window.dispatchEvent(new Event('kavyaTasksChanged'));
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
       setIsTaskModalOpen(false);
       setMessage('Task assigned successfully.');
     } catch {
@@ -351,6 +368,7 @@ function Tasks() {
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
       window.dispatchEvent(new Event('kavyaTasksChanged'));
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
       setIsStatusModalOpen(false);
       setSelectedTask(null);
       setMessage('Task status updated successfully.');
