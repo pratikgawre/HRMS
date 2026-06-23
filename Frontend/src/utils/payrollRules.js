@@ -91,10 +91,5 @@ export function isMarkPaidDisabled(salaryMonth, salaryYear, status, referenceDat
 
   const currentMonthIndex = referenceDate.getMonth();
   const currentYear = referenceDate.getFullYear();
-
-  if (targetYear === currentYear && monthIndex === currentMonthIndex) {
-    return referenceDate.getDate() > 15;
-  }
-
-  return false;
+  return targetYear === currentYear && monthIndex === currentMonthIndex;
 }

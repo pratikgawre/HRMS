@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Hero, Section } from "./AdminDashboard.jsx";
-import { apiRequest } from "../utils/api.js";
+import { apiRequest, safeApiRequest } from "../utils/api.js";
+import { announcements as fallbackAnnouncements } from "../data/dummyData.js";
 import { getSessionValue } from "../utils/appSession.js";
 
 const categories = ["Company", "Policy", "Wellness", "Payroll", "Attendance", "Event", "Vacancy", "Other"];
@@ -86,7 +87,10 @@ function Announcements() {
   const loadAnnouncements = async () => {
     setLoading(true);
     try {
-      const data = await apiRequest(filterCategory ? `/announcements?category=${encodeURIComponent(filterCategory)}` : "/announcements");
+      const data = await safeApiRequest(
+        filterCategory ? `/announcements?category=${encodeURIComponent(filterCategory)}` : "/announcements",
+        fallbackAnnouncements
+      );
       setAnnouncements(normalizeList(data));
     } catch (error) {
       setMessage(error.message || "Failed to load announcements");

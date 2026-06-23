@@ -28,8 +28,8 @@ function LeadershipMyTeamView({ role }) {
   const navigate = useNavigate();
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
   const currentEmployeeName = getSessionValue('kavyaEmployeeName');
-  const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
@@ -142,6 +142,7 @@ function LeadershipMyTeamView({ role }) {
     })
   ), [effectiveEmployeeDirectory, memberProjectMap, tasks]);
 
+  const projectTaskMap = taskAssignmentData.groups;
 
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
   const totalAssignments = assignmentData.groups.reduce((sum, group) => sum + group.teamMemberCount, 0);
