@@ -17,11 +17,8 @@ import {
 } from '../utils/teamLeadAssignments.js';
 
 export const taskColumns = [
-  { key: 'id', label: 'Task ID' },
-  { key: 'title', label: 'Task' },
-  { key: 'owner', label: 'Assignee' },
-  { key: 'priority', label: 'Priority' },
-  { key: 'due', label: 'Due' },
+  { key: 'owner', label: 'Assign' },
+  { key: 'title', label: 'Module' },
   { key: 'status', label: 'Status' },
 ];
 
@@ -52,7 +49,6 @@ function Tasks() {
   }
   const isTeamLead = role === 'teamLead';
   const canAssignTasks = taskAssignableRoles.includes(role);
-  const canUpdateAnyTask = role === 'admin' || role === 'projectManager' || role === 'teamLead';
   const [taskRows, setTaskRows] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -65,6 +61,8 @@ function Tasks() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(getEmptyTaskForm());
+  const [taskFormMode, setTaskFormMode] = useState('create');
+  const [editingTask, setEditingTask] = useState(null);
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
   const currentTeamLeadIdentity = {
@@ -195,6 +193,8 @@ function Tasks() {
     taskRows.filter((task) => role !== 'employee' || isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee))
   ), [currentEmployeeId, employeeIdentity.employee, role, taskRows]);
   const openTaskModal = () => {
+    setTaskFormMode('create');
+    setEditingTask(null);
     setForm(getEmptyTaskForm({
       teamLeadMode: isTeamLead,
       projectId: selectedProject?.id || teamLeadProjects[0]?.id || '',
@@ -222,15 +222,75 @@ function Tasks() {
     setIsStatusModalOpen(true);
   }
 
+  const closeTaskModal = () => {
+    setIsTaskModalOpen(false);
+    setTaskFormMode('create');
+    setEditingTask(null);
+    setForm(getEmptyTaskForm({
+      teamLeadMode: isTeamLead,
+      projectId: selectedProject?.id || teamLeadProjects[0]?.id || '',
+    }));
+  };
+
+  const openTaskEditModal = (task) => {
+    if (!task) {
+      return;
+    }
+
+    if (!canAssignTasks) {
+      setMessage('You do not have permission to edit task assignments.');
+      return;
+    }
+
+    setTaskFormMode('edit');
+    setEditingTask(task);
+    setMessage('');
+    setForm(buildTaskFormFromTask(task, isTeamLead));
+    setIsTaskModalOpen(true);
+  };
+
   const taskListColumns = [
-    ...taskColumns,
     {
-      key: 'actions',
-      label: canUpdateAnyTask || role === 'employee' ? 'Actions' : 'View',
+      key: 'owner',
+      label: 'Assign',
+      render: (row) => row.assignedToName || row.owner || '-',
+    },
+    {
+      key: 'title',
+      label: 'Module',
+      render: (row) => row.title || '-',
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (row) => (
+        <span style={{ padding: '0.18rem 0.6rem', borderRadius: 999, background: 'rgba(15,159,154,0.08)', color: '#0f9f9a', fontWeight: 800, fontSize: '0.86rem' }}>
+          {row.status || 'Pending'}
+        </span>
+      ),
+    },
+    {
+      key: 'edit',
+      label: 'Edit',
       render: (row) => (
         <div className="table-actions table-actions-inline">
-          <button type="button" onClick={() => openTaskStatusModal(row)}>
-            {role === 'employee' ? 'Update Status' : 'View / Update'}
+          <button type="button" className="section-action" onClick={() => openTaskEditModal(row)}>
+            Edit
+          </button>
+        </div>
+      ),
+    },
+    {
+      key: 'delete',
+      label: 'Delete',
+      render: (row) => (
+        <div className="table-actions table-actions-inline">
+          <button
+            type="button"
+            className="section-action danger"
+            onClick={() => deleteTaskAssignment(row)}
+          >
+            Delete
           </button>
         </div>
       ),
@@ -264,7 +324,7 @@ function Tasks() {
         const assigneeId = getEmployeeId(assignee);
         const assigneeName = getEmployeeName(assignee);
         const payload = {
-          id: `TSK-${Date.now()}`,
+          id: getNextTaskCode(taskRows),
           title,
           description: form.description.trim(),
           owner: assigneeName,
@@ -291,8 +351,7 @@ function Tasks() {
         setTaskRows((current) => [nextTask, ...current]);
         window.dispatchEvent(new Event('kavyaTasksChanged'));
         window.dispatchEvent(new Event('kavyaProjectsChanged'));
-        setIsTaskModalOpen(false);
-        setForm(getEmptyTaskForm({ teamLeadMode: true, projectId: project.id }));
+        closeTaskModal();
         setMessage('Task assigned successfully.');
         return;
       }
@@ -310,7 +369,7 @@ function Tasks() {
       }
 
       const payload = {
-        id: `TSK-${Date.now()}`,
+        id: getNextTaskCode(taskRows),
         title,
         description: form.description.trim(),
         owner: getEmployeeName(assignee),
@@ -335,12 +394,120 @@ function Tasks() {
       setTaskRows((current) => [nextTask, ...current]);
       window.dispatchEvent(new Event('kavyaTasksChanged'));
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
-      setIsTaskModalOpen(false);
+      closeTaskModal();
       setMessage('Task assigned successfully.');
     } catch {
       setMessage('Task could not be assigned right now.');
     }
   };
+
+  const updateTaskAssignment = async (event) => {
+    event.preventDefault();
+
+    if (!editingTask) {
+      setMessage('Please select a task first.');
+      return;
+    }
+
+    try {
+      if (isTeamLead) {
+        const project = teamLeadProjects.find((item) => item.id === form.projectId) || null;
+        if (!project) {
+          setMessage('Please select a project first.');
+          return;
+        }
+
+        const allowedEmployees = getProjectAssigneeOptions(project, employees, currentTeamLeadIdentity);
+        const assignee = allowedEmployees.find((employee) => getEmployeeId(employee) === form.assignedToId) || null;
+        if (!assignee) {
+          setMessage('Please select a valid employee for the selected project.');
+          return;
+        }
+
+        const payload = buildTaskAssignmentPayload({
+          taskId: editingTask.id,
+          existingTask: editingTask,
+          form,
+          assignee,
+          project,
+          role,
+          currentEmployeeId,
+          employeeIdentity,
+        });
+
+        const saved = await apiRequest(`/tasks/${editingTask.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+        const normalized = normalizeTaskRow(saved || payload);
+        setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
+        window.dispatchEvent(new Event('kavyaTasksChanged'));
+        window.dispatchEvent(new Event('kavyaProjectsChanged'));
+        closeTaskModal();
+        setMessage('Task updated successfully.');
+        return;
+      }
+
+      const assignee = assigneeOptions.find((employee) => getEmployeeId(employee) === form.assignedToId) || assigneeOptions[0];
+      if (!assignee) {
+        setMessage('Please choose an assignee first.');
+        return;
+      }
+
+      const payload = buildTaskAssignmentPayload({
+        taskId: editingTask.id,
+        existingTask: editingTask,
+        form,
+        assignee,
+        project: null,
+        role,
+        currentEmployeeId,
+        employeeIdentity,
+      });
+
+      const saved = await apiRequest(`/tasks/${editingTask.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      const normalized = normalizeTaskRow(saved || payload);
+      setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
+      window.dispatchEvent(new Event('kavyaTasksChanged'));
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
+      closeTaskModal();
+      setMessage('Task updated successfully.');
+    } catch {
+      setMessage('Task could not be updated right now.');
+    }
+  };
+
+  function deleteTaskAssignment(task) {
+    if (!task) {
+      return;
+    }
+
+    if (!canAssignTasks) {
+      setMessage('You do not have permission to delete task assignments.');
+      return;
+    }
+
+    const confirmDelete = window.confirm(`Delete task "${task.title || task.id}"?`);
+    if (!confirmDelete) {
+      return;
+    }
+
+    apiRequest(`/tasks/${task.id}`, {
+      method: 'DELETE',
+    })
+      .then(() => {
+        setTaskRows((current) => current.filter((row) => row.id !== task.id));
+        window.dispatchEvent(new Event('kavyaTasksChanged'));
+        window.dispatchEvent(new Event('kavyaProjectsChanged'));
+        setMessage('Task deleted successfully.');
+      })
+      .catch(() => {
+        setMessage('Task could not be deleted right now.');
+      });
+  }
 
   const updateTaskStatus = async (event) => {
     event.preventDefault();
@@ -492,14 +659,15 @@ function Tasks() {
 
       {isTaskModalOpen && (
         <TaskAssignmentModal
+          mode={taskFormMode}
           form={form}
           setForm={setForm}
           assigneeOptions={assigneeOptions}
           projectOptions={teamLeadProjects}
           selectedProject={selectedProject}
           isTeamLead={isTeamLead}
-          onClose={() => setIsTaskModalOpen(false)}
-          onSubmit={createTask}
+          onClose={closeTaskModal}
+          onSubmit={taskFormMode === 'edit' ? updateTaskAssignment : createTask}
         />
       )}
 
@@ -797,8 +965,9 @@ function EmployeeTasksView() {
   );
 }
 
-function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
+function TaskAssignmentModal({ mode, form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
   const teamLeadMode = Boolean(isTeamLead);
+  const isEditMode = mode === 'edit';
 
   const updateProject = (nextProjectId) => {
     setForm((current) => {
@@ -815,7 +984,7 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
     <div className="payroll-modal-backdrop" role="presentation">
       <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Assign task">
         <div className="payroll-modal-head">
-          <h3>Assign Task</h3>
+          <h3>{isEditMode ? 'Edit Task' : 'Assign Task'}</h3>
           <button type="button" onClick={onClose} aria-label="Close task modal"><i className="ri-close-line" aria-hidden="true" /></button>
         </div>
 
@@ -933,7 +1102,7 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
           </label>
 
           <div className="salary-form-actions">
-            <button className="payroll-primary" type="submit">Save Task</button>
+            <button className="payroll-primary" type="submit">{isEditMode ? 'Update Task' : 'Save Task'}</button>
             <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
           </div>
         </form>
@@ -1032,6 +1201,59 @@ function getTeamLeadProjectOptions(projects, teamLeadIdentity) {
   }
 
   return (Array.isArray(projects) ? projects : []).filter((project) => isActiveProject(project));
+}
+
+function buildTaskFormFromTask(task, isTeamLead) {
+  return {
+    title: task?.title || '',
+    projectId: isTeamLead ? String(task?.projectId || '') : '',
+    assignedToId: task?.assignedToId || '',
+    priority: task?.priority || 'Medium',
+    dueDate: task?.dueDate || task?.due || new Date().toISOString().slice(0, 10),
+    status: task?.status || 'Pending',
+    description: task?.description || '',
+  };
+}
+
+function buildTaskAssignmentPayload({
+  taskId,
+  form,
+  assignee,
+  project,
+  role,
+  currentEmployeeId,
+  employeeIdentity,
+  existingTask = null,
+}) {
+  const assigneeId = getEmployeeId(assignee);
+  const assigneeName = getEmployeeName(assignee);
+  const assignedById = existingTask?.assignedById || currentEmployeeId;
+  const assignedByName = existingTask?.assignedByName || employeeIdentity.employee || 'Team Lead';
+  const assignedByRole = existingTask?.assignedByRole || role;
+  const teamLeadId = existingTask?.teamLeadId || currentEmployeeId;
+  const resolvedProjectId = project?.id || project?.projectId || existingTask?.projectId || '';
+  const resolvedProjectName = project?.name || existingTask?.projectName || '';
+  const resolvedProjectCode = project?.projectCode || project?.id || existingTask?.projectCode || '';
+
+  return {
+    id: taskId || existingTask?.id || `TSK-${Date.now()}`,
+    title: String(form.title || '').trim(),
+    description: String(form.description || '').trim(),
+    owner: assigneeName,
+    assignedToId: assigneeId,
+    assignedToName: assigneeName,
+    assignedTo: assigneeName,
+    assignedById,
+    assignedByName,
+    assignedByRole,
+    teamLeadId,
+    priority: form.priority,
+    dueDate: form.dueDate,
+    status: form.status,
+    projectId: resolvedProjectId,
+    projectName: resolvedProjectName,
+    projectCode: resolvedProjectCode,
+  };
 }
 
 function normalizeTaskRow(task) {

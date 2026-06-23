@@ -3,7 +3,7 @@ import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
-import { refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
+import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import {

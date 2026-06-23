@@ -5,8 +5,9 @@ import com.kavya.hrms.repository.AnnouncementRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
 import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -38,17 +39,14 @@ public class AnnouncementController {
 
   @GetMapping
   public List<Announcement> list(@RequestParam(required = false) String category) {
-    List<Document> documents = mongoTemplate.findAll(Document.class, "announcements");
-    List<Announcement> announcements = new ArrayList<>();
-    for (Document document : documents) {
-      Announcement announcement = fromDocument(document);
-      if (category == null || category.isBlank() || equalsIgnoreCase(announcement.getCategory(), category)) {
-        announcements.add(announcement);
-      }
-    }
-
+    List<Announcement> announcements = loadAnnouncementsSafely();
     return announcements.stream()
-        .sorted(Comparator.comparing((Announcement announcement) -> String.valueOf(announcement.getPostedAt() == null ? "" : announcement.getPostedAt())).reversed())
+        .filter(Objects::nonNull)
+        .filter(announcement -> category == null
+            || category.isBlank()
+            || equalsIgnoreCase(announcement.getCategory(), category))
+        .sorted(Comparator.comparing(
+            (Announcement announcement) -> asString(announcement.getPostedAt())).reversed())
         .toList();
   }
 
@@ -144,6 +142,19 @@ public class AnnouncementController {
     announcement.setOwnerRole(asString(document.get("ownerRole")));
     announcement.setStatus(asString(document.get("status")));
     return announcement;
+  }
+
+  private List<Announcement> loadAnnouncementsSafely() {
+    try {
+      List<Document> documents = mongoTemplate.findAll(Document.class, "announcements");
+      List<Announcement> announcements = new ArrayList<>();
+      for (Document document : documents) {
+        announcements.add(fromDocument(document));
+      }
+      return announcements;
+    } catch (RuntimeException ex) {
+      return List.of();
+    }
   }
 
   private String asString(Object value) {
