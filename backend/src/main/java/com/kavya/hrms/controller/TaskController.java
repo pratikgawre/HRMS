@@ -10,10 +10,6 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.List;
 import java.time.OffsetDateTime;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,10 +24,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/tasks")
 public class TaskController {
   private final TaskRepository taskRepository;
+  private final ProjectRepository projectRepository;
+  private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
 
-  public TaskController(TaskRepository taskRepository, NotificationService notificationService) {
+  public TaskController(
+      TaskRepository taskRepository,
+      ProjectRepository projectRepository,
+      EmployeeRepository employeeRepository,
+      NotificationService notificationService) {
     this.taskRepository = taskRepository;
+    this.projectRepository = projectRepository;
+    this.employeeRepository = employeeRepository;
     this.notificationService = notificationService;
   }
 
@@ -132,7 +136,7 @@ public class TaskController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     TaskItem current = taskRepository.findById(id).orElse(null);
-    mongoTemplate.remove(new Query(Criteria.where("_id").is(id)), TaskItem.class);
+    taskRepository.deleteById(id);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Task removed",
