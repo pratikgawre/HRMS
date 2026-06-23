@@ -16,9 +16,13 @@ function MyTeam() {
   return <DefaultMyTeamView />;
 }
 
-function LeadershipMyTeamView({ role }) {
+function TeamLeadMyTeamView({ role }) {
   const navigate = useNavigate();
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
+  const currentTeamLeadIdentity = {
+    employeeId: currentEmployeeId,
+    employeeName: getSessionValue('kavyaEmployeeName') || getSessionValue('kavyaUserName') || '',
+  };
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -48,8 +52,7 @@ function LeadershipMyTeamView({ role }) {
         }
 
         setProjects(Array.isArray(projectRows) ? projectRows : []);
-        setTeamAssignments(Array.isArray(assignmentRows) ? assignmentRows : []);
-        setTasks(Array.isArray(taskRows) ? taskRows : []);
+        setTasks(Array.isArray(assignmentRows) ? assignmentRows : []);
       });
     };
 
@@ -73,9 +76,6 @@ function LeadershipMyTeamView({ role }) {
   const assignmentData = useMemo(
     () => buildTeamLeadAssignmentGroups(projects, [], currentEmployeeId),
     [currentEmployeeId, projects],
-  );
-    () => buildTeamLeadAssignmentGroups(projects, employees, currentTeamLeadIdentity),
-    [currentTeamLeadIdentity, employees, projects],
   );
 
   const taskAssignmentData = useMemo(
@@ -666,16 +666,6 @@ function isVisibleToTeamLead(employee, currentEmployeeId) {
   }
 
   return true;
-}
-
-function getInitialsFromName(name) {
-  return String(name || '')
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase() || 'TM';
 }
 
 function getMemberTaskStatus(memberTasks = [], fallback = '-') {
