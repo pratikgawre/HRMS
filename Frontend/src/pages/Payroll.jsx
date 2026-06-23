@@ -233,7 +233,20 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [activeSummary, setActiveSummary] = useState('total');
   const [searchTerm, setSearchTerm] = useState('');
+  const [payslipMonth, setPayslipMonth] = useState('');
+  const [payslipYear, setPayslipYear] = useState('');
   const tableSectionRef = useRef(null);
+  const previewRecord = selectedPayslip
+    || records.find((record) => record.id === focusRecordId)
+    || records.find((record) => isPaidStatus(record.status))
+    || records[0]
+    || null;
+  const payslipReady = Boolean(payslipMonth && payslipYear);
+  const selectedPayslipRecord = payslipReady
+    ? records.find((record) => record.month === payslipMonth && String(record.year) === String(payslipYear))
+      || records.find((record) => record.month === payslipMonth)
+      || null
+    : null;
 
   const summary = useMemo(() => {
     const totalPayroll = records.reduce((sum, record) => sum + getNetSalary(record), 0);
@@ -346,6 +359,73 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   return (
     <>
       <Hero title="Payroll Management" copy="Manage employee salary records, generate payslips, and track paid or unpaid payroll status." />
+
+      <Section title="Payslip Filter" action="Employee">
+        <div className="payslip-filter">
+          <label className="field">
+            <span>Month</span>
+            <select value={payslipMonth} onChange={(event) => setPayslipMonth(event.target.value)}>
+              <option value="">Select month</option>
+              {months.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>Year</span>
+            <select value={payslipYear} onChange={(event) => setPayslipYear(event.target.value)}>
+              <option value="">Select year</option>
+              {years.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <button
+            className="payroll-primary"
+            type="button"
+            onClick={() => {
+              if (!selectedPayslipRecord) {
+                setMessage('Salary record not found for the selected month and year.');
+                return;
+              }
+
+              if (!isPaidStatus(selectedPayslipRecord.status)) {
+                setMessage('Payslip is available only after the salary is marked as paid.');
+                return;
+              }
+
+              setMessage('');
+              setSelectedPayslip(selectedPayslipRecord);
+            }}
+            disabled={!payslipReady}
+          >
+            <i className="ri-download-cloud-2-line" aria-hidden="true" />
+            Download Payslip
+          </button>
+        </div>
+      </Section>
+
+      {payslipReady && selectedPayslipRecord && (
+        <div className="card-grid">
+          <DashboardCard
+            label="Payment Status"
+            value={isPaidStatus(selectedPayslipRecord.status) ? 'Paid' : 'Unpaid'}
+            delta={`${selectedPayslipRecord.employeeName} · ${selectedPayslipRecord.month} ${selectedPayslipRecord.year}`}
+            tone={isPaidStatus(selectedPayslipRecord.status) ? 'green' : 'orange'}
+            icon={isPaidStatus(selectedPayslipRecord.status) ? 'ri-checkbox-circle-line' : 'ri-time-line'}
+          />
+          <DashboardCard
+            label="Total Earnings"
+            value={formatCurrency(getEarnings(selectedPayslipRecord))}
+            delta="Gross earnings"
+            tone="blue"
+            icon="ri-wallet-3-line"
+          />
+          <DashboardCard
+            label="Total Deductions"
+            value={formatCurrency(getDeductions(selectedPayslipRecord))}
+            delta="Salary deductions"
+            tone="pink"
+            icon="ri-scissors-cut-line"
+          />
+        </div>
+      )}
 
       {message && (
         <div className="payroll-alert" role="status">
@@ -664,6 +744,7 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
   const safeRecords = Array.isArray(records) ? records : [];
   const safeSavedPayrollRecords = Array.isArray(savedPayrollRecords) ? savedPayrollRecords : [];
   const isHrPayroll = role === 'hr';
+  const canDownloadPayslip = !isHrPayroll;
   const previewMonth = isHrPayroll ? payslipMonth : month;
   const previewYear = isHrPayroll ? payslipYear : year;
 

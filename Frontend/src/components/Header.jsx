@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { clearSession } from '../utils/auth.js';
@@ -11,6 +11,7 @@ function Header({ role, onMenuClick }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notificationItems, setNotificationItems] = useState([]);
+  const notificationWrapRef = useRef(null);
   const today = new Intl.DateTimeFormat('en-IN', {
     weekday: 'short',
     day: '2-digit',
@@ -67,6 +68,26 @@ function Header({ role, onMenuClick }) {
       window.removeEventListener('kavyaNotificationsChanged', refreshNotifications);
     };
   }, [role, userId]);
+
+  useEffect(() => {
+    if (!showNotifications) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (!notificationWrapRef.current?.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [showNotifications]);
 
   const runSearch = () => {
     const normalized = searchQuery.trim().toLowerCase();
@@ -162,7 +183,7 @@ function Header({ role, onMenuClick }) {
           <i className="ri-calendar-line" aria-hidden="true" />
           <span>{today}</span>
         </div>
-        <div className="notification-wrap">
+        <div className="notification-wrap" ref={notificationWrapRef}>
           <button
             className="notification"
             type="button"
