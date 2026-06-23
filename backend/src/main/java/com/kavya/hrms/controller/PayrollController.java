@@ -6,13 +6,15 @@ import com.kavya.hrms.service.PayrollGenerationService;
 import com.kavya.hrms.service.PayrollValidationService;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,6 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class PayrollController {
   private static final String CURRENT_MONTH_LIMIT_MESSAGE =
       "Current month salary can only be marked as paid between the 1st and 15th.";
+  private static final String FUTURE_PERIOD_LIMIT_MESSAGE =
+      "Salary payments cannot be processed for future payroll periods.";
   private static final String PAYSLIP_LIMIT_MESSAGE =
       "Payslip is available only after the salary is marked as paid.";
   private static final String NOT_FOUND_MESSAGE = "Salary record not found";
@@ -57,8 +61,7 @@ public class PayrollController {
       @PathVariable String employeeId,
       @RequestParam String month,
       @RequestParam String year) {
-    return payrollRecordRepository.findByEmployeeIdAndMonthAndYear(employeeId, month, year).stream()
-        .findFirst()
+    return selectPreferredPayrollRecord(employeeId, month, year)
         .map(record -> ResponseEntity.<Object>ok(record))
         .orElseGet(() -> notFound("Salary record not found for the selected month and year."));
   }
@@ -80,8 +83,22 @@ public class PayrollController {
   }
 
   @PostMapping
-  public PayrollRecord save(@RequestBody PayrollRecord record) {
-    return payrollRecordRepository.save(record);
+  public ResponseEntity<Object> save(@RequestBody PayrollRecord record) {
+    if (record == null || isBlank(record.getEmployeeId()) || isBlank(record.getMonth()) || isBlank(record.getYear())) {
+      return badRequest("Employee, month, and year are required.");
+    }
+
+    return payrollRecordRepository.findByEmployeeIdAndMonthAndYear(record.getEmployeeId(), record.getMonth(), record.getYear())
+        .stream()
+        .findFirst()
+        .map(existing -> {
+          if (existing.getId() != null && !existing.getId().equals(record.getId())) {
+            return badRequest("Salary record already exists for the selected employee and period.");
+          }
+          record.setId(existing.getId());
+          return ResponseEntity.<Object>ok(payrollRecordRepository.save(record));
+        })
+        .orElseGet(() -> ResponseEntity.<Object>ok(payrollRecordRepository.save(record)));
   }
 
   @PatchMapping("/{payrollId}/mark-paid")
@@ -105,8 +122,7 @@ public class PayrollController {
       @RequestParam String employeeId,
       @RequestParam String month,
       @RequestParam String year) {
-    return payrollRecordRepository.findByEmployeeIdAndMonthAndYear(employeeId, month, year).stream()
-        .findFirst()
+    return selectPreferredPayrollRecord(employeeId, month, year)
         .map(record -> {
           if (!payrollValidationService.canGeneratePayslip(record)) {
             return forbidden(PAYSLIP_LIMIT_MESSAGE);
@@ -135,13 +151,34 @@ public class PayrollController {
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", message));
   }
 
+  private java.util.Optional<PayrollRecord> selectPreferredPayrollRecord(String employeeId, String month, String year) {
+    return payrollRecordRepository.findByEmployeeIdAndMonthAndYear(employeeId, month, year).stream()
+        .max(Comparator.comparingInt(this::paidRecordPriority));
+  }
+
+  private int paidRecordPriority(PayrollRecord record) {
+    if (record == null) {
+      return 0;
+    }
+
+    if (payrollValidationService.isPaidStatus(record.getStatus())) {
+      return 2;
+    }
+
+    return record.getNetSalary() > 0 ? 1 : 0;
+  }
+
   private ResponseEntity<Object> updatePaidStatus(PayrollRecord record) {
     if (record.getNetSalary() <= 0) {
       return badRequest("Zero salary records cannot be marked as paid.");
     }
 
     if (payrollValidationService.isPaidStatus(record.getStatus())) {
-      return badRequest("Salary record has already been marked as paid.");
+      return ResponseEntity.ok(record);
+    }
+
+    if (payrollValidationService.isFuturePayrollPeriod(record.getMonth(), record.getYear(), LocalDate.now())) {
+      return forbidden(FUTURE_PERIOD_LIMIT_MESSAGE);
     }
 
     if (payrollValidationService.isCurrentMonthUnpaidAfterCutoff(record, LocalDate.now())) {
@@ -151,5 +188,9 @@ public class PayrollController {
     record.setStatus("PAID");
     record.setPaidDate(Instant.now().toString());
     return ResponseEntity.<Object>ok(payrollRecordRepository.save(record));
+  }
+
+  private boolean isBlank(String value) {
+    return value == null || value.trim().isEmpty();
   }
 }

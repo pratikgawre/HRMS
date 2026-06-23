@@ -57,6 +57,23 @@ export function canGeneratePayslip(status) {
   return isPaidStatus(status);
 }
 
+export function isFuturePayrollYear(salaryYear, referenceDate = new Date()) {
+  const targetYear = Number.parseInt(salaryYear, 10);
+  return Number.isFinite(targetYear) && targetYear > referenceDate.getFullYear();
+}
+
+export function isFuturePayrollPeriod(salaryMonth, salaryYear, referenceDate = new Date()) {
+  const monthIndex = normalizePayrollMonthIndex(salaryMonth);
+  const targetYear = Number.parseInt(salaryYear, 10);
+  if (monthIndex < 0 || !Number.isFinite(targetYear)) {
+    return true;
+  }
+
+  const currentYear = referenceDate.getFullYear();
+  const currentMonthIndex = referenceDate.getMonth();
+  return targetYear > currentYear || (targetYear === currentYear && monthIndex > currentMonthIndex);
+}
+
 export function isMarkPaidDisabled(salaryMonth, salaryYear, status, referenceDate = new Date()) {
   if (isPaidStatus(status)) {
     return true;
@@ -68,12 +85,11 @@ export function isMarkPaidDisabled(salaryMonth, salaryYear, status, referenceDat
     return true;
   }
 
-  const currentMonthIndex = referenceDate.getMonth();
-  const currentYear = referenceDate.getFullYear();
-
-  if (targetYear === currentYear && monthIndex === currentMonthIndex) {
-    return referenceDate.getDate() > 15;
+  if (isFuturePayrollPeriod(salaryMonth, salaryYear, referenceDate)) {
+    return true;
   }
 
-  return false;
+  const currentMonthIndex = referenceDate.getMonth();
+  const currentYear = referenceDate.getFullYear();
+  return targetYear === currentYear && monthIndex === currentMonthIndex;
 }

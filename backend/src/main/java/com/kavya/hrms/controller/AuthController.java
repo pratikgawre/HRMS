@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,6 +27,7 @@ import com.kavya.hrms.repository.AuthSessionRepository;
 public class AuthController {
   private final AppUserRepository appUserRepository;
   private final AuthSessionRepository authSessionRepository;
+  private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
   public AuthController(AppUserRepository appUserRepository, AuthSessionRepository authSessionRepository) {
     this.appUserRepository = appUserRepository;
@@ -34,42 +36,47 @@ public class AuthController {
 
   @PostMapping("/login")
   public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-    return appUserRepository.findAllByEmailIgnoreCase(request.getEmail()).stream()
-      .findFirst()
-      .map(user -> {
-        if (!String.valueOf(user.getPassword()).equals(String.valueOf(request.getPassword()))) {
-          return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials"));
-        }
+    String email = normalizeEmail(request.getEmail());
+    String password = request == null ? "" : String.valueOf(request.getPassword());
 
-        String now = Instant.now().toString();
-        user.setLastLogin(now);
-        appUserRepository.save(user);
+    return appUserRepository.findAllByEmailIgnoreCase(email).stream()
+        .findFirst()
+        .map(user -> {
+          if (!passwordMatches(password, user)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials"));
+          }
 
-        String token = UUID.randomUUID().toString();
-        authSessionRepository.save(buildSession(user, token, now));
-        return ResponseEntity.ok(okResponse(user, token, now));
-      })
-      .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials")));
+          String now = Instant.now().toString();
+          user.setLastLogin(now);
+          appUserRepository.save(user);
+
+          String token = UUID.randomUUID().toString();
+          authSessionRepository.save(buildSession(user, token, now));
+          return ResponseEntity.ok(okResponse(user, token, now));
+        })
+        .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials")));
   }
 
   @GetMapping("/session")
-  public ResponseEntity<LoginResponse> currentSession(@RequestHeader(value = "Authorization", required = false) String authorization) {
+  public ResponseEntity<LoginResponse> currentSession(
+      @RequestHeader(value = "Authorization", required = false) String authorization) {
     String token = extractToken(authorization);
     if (token.isBlank()) {
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found"));
     }
 
     return authSessionRepository.findById(token)
-      .map(session -> {
-        session.setLastSeenAt(Instant.now().toString());
-        authSessionRepository.save(session);
-        return ResponseEntity.ok(okResponse(session));
-      })
-      .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found")));
+        .map(session -> {
+          session.setLastSeenAt(Instant.now().toString());
+          authSessionRepository.save(session);
+          return ResponseEntity.ok(okResponse(session));
+        })
+        .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found")));
   }
 
   @DeleteMapping("/session")
-  public ResponseEntity<Void> clearSession(@RequestHeader(value = "Authorization", required = false) String authorization) {
+  public ResponseEntity<Void> clearSession(
+      @RequestHeader(value = "Authorization", required = false) String authorization) {
     String token = extractToken(authorization);
     if (!token.isBlank()) {
       authSessionRepository.deleteById(token);
@@ -107,15 +114,45 @@ public class AuthController {
   }
 
   private String normalizeRole(String role) {
-    if (role == null) return "Employee";
-    switch (role.trim().toLowerCase().replaceAll("\\s+", "")) {
-      case "superadmin": case "admin": return "Super Admin";
-      case "hrmanager": case "hr": return "HR Manager";
-      case "projectmanager": return "Project Manager";
-      case "teamlead": return "Team Lead";
-      case "employee": return "Employee";
-      default: return role.trim();
+    if (role == null)
+      return "Employee";
+    String normalized = role.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+    switch (normalized) {
+      case "superadmin":
+      case "admin":
+        return "Super Admin";
+      case "hrmanager":
+      case "hr":
+        return "HR Manager";
+      case "projectmanager":
+      case "manager":
+      case "projectmanagerrole":
+        return "Project Manager";
+      case "teamlead":
+      case "teamleader":
+        return "Team Lead";
+      case "employee":
+      case "staff":
+        return "Employee";
+      default:
+        return role.trim();
     }
+  }
+
+  private boolean passwordMatches(String rawPassword, AppUser user) {
+    String entered = rawPassword == null ? "" : rawPassword;
+    String storedPassword = user.getPassword() == null ? "" : user.getPassword();
+    String storedHash = user.getPasswordHash() == null ? "" : user.getPasswordHash();
+
+    if (entered.equals(storedPassword)) {
+      return true;
+    }
+
+    if (!storedHash.isBlank() && passwordEncoder.matches(entered, storedHash)) {
+      return true;
+    }
+
+    return !storedPassword.isBlank() && passwordEncoder.matches(entered, storedPassword);
   }
 
   private LoginResponse failed(String message) {
@@ -130,7 +167,7 @@ public class AuthController {
     session.setToken(token);
     session.setUserId(user.getUserId());
     session.setEmail(user.getEmail());
-    session.setRole(user.getRole());
+    session.setRole(normalizeRole(user.getRole()));
     session.setEmployeeId(user.getEmployeeId());
     session.setEmployeeName(user.getEmployeeName());
     session.setStatus(user.getStatus());
@@ -138,6 +175,13 @@ public class AuthController {
     session.setCreatedAt(now);
     session.setLastSeenAt(now);
     return session;
+  }
+
+  private String normalizeEmail(String email) {
+    if (email == null) {
+      return "";
+    }
+    return email.trim().toLowerCase(Locale.ROOT);
   }
 
   private String extractToken(String authorization) {

@@ -5,7 +5,6 @@ import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
-import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import {
   buildEmployeeDirectory,
   buildTeamLeadAssignmentGroups,
@@ -27,11 +26,10 @@ function MyTeam() {
 
 function LeadershipMyTeamView({ role }) {
   const navigate = useNavigate();
-  const currentTeamLeadIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
   const currentEmployeeName = getSessionValue('kavyaEmployeeName');
-  const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
@@ -82,6 +80,10 @@ function LeadershipMyTeamView({ role }) {
   const assignmentData = useMemo(
     () => buildTeamLeadAssignmentGroups(projects, employees, currentEmployeeId),
     [currentEmployeeId, employees, projects],
+  );
+  const taskAssignmentData = useMemo(
+    () => buildTaskAssignmentGroups(tasks, currentEmployeeId),
+    [currentEmployeeId, tasks],
   );
 
   const teamAssignmentGroups = assignmentData.groups.length > 0 ? assignmentData.groups : taskAssignmentData.groups;
@@ -139,6 +141,20 @@ function LeadershipMyTeamView({ role }) {
       };
     })
   ), [effectiveEmployeeDirectory, memberProjectMap, tasks]);
+
+  const projectTaskMap = useMemo(() => {
+    const map = new Map();
+
+    (Array.isArray(tasks) ? tasks : []).forEach((task, index) => {
+      const projectKey = normalizeLookupValue(task?.projectId || task?.projectCode || task?.projectName || task?.project);
+      const groupKey = projectKey || `project-${index + 1}`;
+      const currentRows = map.get(groupKey) || [];
+
+      map.set(groupKey, [...currentRows, task]);
+    });
+
+    return map;
+  }, [tasks]);
 
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
   const totalAssignments = assignmentData.groups.reduce((sum, group) => sum + group.teamMemberCount, 0);
