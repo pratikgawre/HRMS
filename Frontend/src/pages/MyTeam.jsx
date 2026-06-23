@@ -81,6 +81,10 @@ function LeadershipMyTeamView({ role }) {
     () => buildTeamLeadAssignmentGroups(projects, employees, currentEmployeeId),
     [currentEmployeeId, employees, projects],
   );
+  const taskAssignmentData = useMemo(
+    () => buildTaskAssignmentGroups(tasks, currentEmployeeId),
+    [currentEmployeeId, tasks],
+  );
 
   const teamAssignmentGroups = assignmentData.groups.length > 0 ? assignmentData.groups : taskAssignmentData.groups;
   const effectiveEmployeeDirectory = assignmentData.employeeDirectory.size > 0
@@ -138,7 +142,6 @@ function LeadershipMyTeamView({ role }) {
     })
   ), [effectiveEmployeeDirectory, memberProjectMap, tasks]);
 
-  const projectTaskMap = taskAssignmentData.groups;
 
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
   const totalAssignments = assignmentData.groups.reduce((sum, group) => sum + group.teamMemberCount, 0);
@@ -502,3 +505,7 @@ function isVisibleToTeamLead(employee, currentEmployeeId) {
 }
 
 export default MyTeam;
+
+
+
+
