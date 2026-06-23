@@ -22,6 +22,10 @@ public class PayrollValidationService {
       return true;
     }
 
+    if (isFuturePayrollPeriod(monthIndex, year, today)) {
+      return true;
+    }
+
     if (year != today.getYear() || monthIndex != today.getMonthValue() - 1) {
       return false;
     }
@@ -34,7 +38,7 @@ public class PayrollValidationService {
   }
 
   public boolean canGeneratePayslip(PayrollRecord record) {
-    return record != null && canGeneratePayslip(record.getStatus());
+    return record != null && canGeneratePayslip(record.getStatus()) && record.getNetSalary() > 0;
   }
 
   public boolean isCurrentMonthUnpaidAfterCutoff(PayrollRecord record, LocalDate today) {
@@ -49,8 +53,28 @@ public class PayrollValidationService {
     }
 
     return year == today.getYear()
-        && monthIndex == today.getMonthValue() - 1
-        && today.getDayOfMonth() > 15;
+        && monthIndex == today.getMonthValue() - 1;
+  }
+
+  public boolean isFuturePayrollYear(String salaryYear, LocalDate today) {
+    Integer year = normalizeYear(salaryYear);
+    return year != null && year > today.getYear();
+  }
+
+  public boolean isFuturePayrollPeriod(String salaryMonth, String salaryYear, LocalDate today) {
+    Integer monthIndex = normalizeMonthIndex(salaryMonth);
+    Integer year = normalizeYear(salaryYear);
+    if (monthIndex == null || year == null) {
+      return true;
+    }
+
+    return isFuturePayrollPeriod(monthIndex, year, today);
+  }
+
+  private boolean isFuturePayrollPeriod(Integer monthIndex, Integer year, LocalDate today) {
+    int currentYear = today.getYear();
+    int currentMonthIndex = today.getMonthValue() - 1;
+    return year > currentYear || (year.equals(currentYear) && monthIndex > currentMonthIndex);
   }
 
   public boolean isPaidStatus(String status) {

@@ -1,6 +1,10 @@
 package com.kavya.hrms.controller;
 
+import com.kavya.hrms.model.Employee;
+import com.kavya.hrms.model.Project;
 import com.kavya.hrms.model.TaskItem;
+import com.kavya.hrms.repository.EmployeeRepository;
+import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.TaskRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
@@ -20,10 +24,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/tasks")
 public class TaskController {
   private final TaskRepository taskRepository;
+  private final ProjectRepository projectRepository;
+  private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
 
-  public TaskController(TaskRepository taskRepository, NotificationService notificationService) {
+  public TaskController(
+      TaskRepository taskRepository,
+      ProjectRepository projectRepository,
+      EmployeeRepository employeeRepository,
+      NotificationService notificationService) {
     this.taskRepository = taskRepository;
+    this.projectRepository = projectRepository;
+    this.employeeRepository = employeeRepository;
     this.notificationService = notificationService;
   }
 
@@ -62,6 +74,7 @@ public class TaskController {
       task.setCreatedDateTime(OffsetDateTime.now().toString());
     }
     TaskItem saved = taskRepository.save(task);
+    syncProjectAssignment(saved);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Task created",
@@ -105,6 +118,7 @@ public class TaskController {
     task.setId(id);
     hydrateTeamLeadFields(task);
     TaskItem saved = taskRepository.save(task);
+    syncProjectAssignment(saved);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Task updated",
@@ -153,5 +167,135 @@ public class TaskController {
     if ((task.getAssignedById() == null || task.getAssignedById().isBlank()) && task.getTeamLeadId() != null && !task.getTeamLeadId().isBlank()) {
       task.setAssignedById(task.getTeamLeadId());
     }
+  }
+
+  private void syncProjectAssignment(TaskItem task) {
+    if (task == null) {
+      return;
+    }
+
+    syncProjectDetails(task);
+    syncEmployeeDetails(task);
+  }
+
+  private void syncProjectDetails(TaskItem task) {
+    String projectId = firstNonBlank(task.getProjectId());
+    if (projectId.isEmpty()) {
+      return;
+    }
+
+    Project project = projectRepository.findById(projectId).orElse(null);
+    if (project == null) {
+      return;
+    }
+
+    if (task.getProjectName() == null || task.getProjectName().isBlank()) {
+      task.setProjectName(firstNonBlank(project.getName(), projectId));
+    }
+
+    if (task.getProjectCode() == null || task.getProjectCode().isBlank()) {
+      task.setProjectCode(projectId);
+    }
+
+    if (task.getTeamLeadId() == null || task.getTeamLeadId().isBlank()) {
+      task.setTeamLeadId(firstNonBlank(project.getTeamLeadId()));
+    }
+  }
+
+  private void syncEmployeeDetails(TaskItem task) {
+    Employee assignedTo = findEmployee(task.getAssignedToId(), task.getAssignedToName(), task.getAssignedTo(), task.getOwner());
+    if (assignedTo != null) {
+      String employeeId = firstNonBlank(assignedTo.getEmployeeId(), assignedTo.getEmployeeCode(), assignedTo.getId());
+      String employeeName = firstNonBlank(assignedTo.getDisplayName(), assignedTo.getName(), employeeId);
+
+      if (task.getAssignedToId() == null || task.getAssignedToId().isBlank()) {
+        task.setAssignedToId(employeeId);
+      }
+      if (task.getAssignedToName() == null || task.getAssignedToName().isBlank()) {
+        task.setAssignedToName(employeeName);
+      }
+      if (task.getAssignedTo() == null || task.getAssignedTo().isBlank()) {
+        task.setAssignedTo(employeeName);
+      }
+      if (task.getOwner() == null || task.getOwner().isBlank()) {
+        task.setOwner(employeeName);
+      }
+    }
+
+    Employee assignedBy = findEmployee(task.getAssignedById(), task.getAssignedByName(), task.getAssignedBy(), null);
+    if (assignedBy != null) {
+      String employeeId = firstNonBlank(assignedBy.getEmployeeId(), assignedBy.getEmployeeCode(), assignedBy.getId());
+      String employeeName = firstNonBlank(assignedBy.getDisplayName(), assignedBy.getName(), employeeId);
+      String employeeRole = firstNonBlank(assignedBy.getAccessRole(), assignedBy.getJobTitle(), assignedBy.getRole());
+
+      if (task.getAssignedById() == null || task.getAssignedById().isBlank()) {
+        task.setAssignedById(employeeId);
+      }
+      if (task.getAssignedByName() == null || task.getAssignedByName().isBlank()) {
+        task.setAssignedByName(employeeName);
+      }
+      if (task.getAssignedBy() == null || task.getAssignedBy().isBlank()) {
+        task.setAssignedBy(employeeName);
+      }
+      if (task.getAssignedByRole() == null || task.getAssignedByRole().isBlank()) {
+        task.setAssignedByRole(employeeRole);
+      }
+    }
+  }
+
+  private Employee findEmployee(String... candidates) {
+    for (Employee employee : employeeRepository.findAll()) {
+      if (employee == null) {
+        continue;
+      }
+
+      if (matchesEmployee(employee, candidates)) {
+        return employee;
+      }
+    }
+    return null;
+  }
+
+  private boolean matchesEmployee(Employee employee, String... candidates) {
+    if (employee == null || candidates == null) {
+      return false;
+    }
+
+    for (String candidate : candidates) {
+      String normalizedCandidate = normalize(candidate);
+      if (normalizedCandidate.isEmpty()) {
+        continue;
+      }
+
+      if (normalizedCandidate.equals(normalize(employee.getEmployeeId()))
+          || normalizedCandidate.equals(normalize(employee.getEmployeeCode()))
+          || normalizedCandidate.equals(normalize(employee.getId()))
+          || normalizedCandidate.equals(normalize(employee.getUserId()))
+          || normalizedCandidate.equals(normalize(employee.getDisplayName()))
+          || normalizedCandidate.equals(normalize(employee.getName()))
+          || normalizedCandidate.equals(normalize(employee.getEmail()))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private String firstNonBlank(String... values) {
+    if (values == null) {
+      return "";
+    }
+
+    for (String value : values) {
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+
+    return "";
+  }
+
+  private String normalize(String value) {
+    return value == null ? "" : value.trim().toLowerCase();
   }
 }
