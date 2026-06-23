@@ -4640,6 +4640,14 @@ button.attendance-summary-card.is-clickable:focus-visible {
   box-shadow: var(--shadow-soft);
 }
 
+.task-panel .table-actions button.section-action:hover {
+  color: var(--primary-dark);
+  border-color: rgba(15, 159, 154, 0.22);
+  background: rgba(255, 255, 255, 0.94);
+  transform: none;
+  box-shadow: none;
+}
+
 .table-actions .danger {
   color: var(--danger);
   border-color: rgba(217, 77, 99, 0.24);

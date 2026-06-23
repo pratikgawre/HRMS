@@ -32,6 +32,7 @@ function LeaveRequests() {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [queueFilter, setQueueFilter] = useState('all');
   const tableRef = useRef(null);
+  const isAdminOrHr = role === 'admin' || role === 'hr';
   const leaveSummary = useMemo(
     () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee)),
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
@@ -160,7 +161,7 @@ function LeaveRequests() {
 
   const columns = [
     ...leaveColumns,
-    ...(role === 'admin' || role === 'hr' ? [{
+    ...(isAdminOrHr ? [{
       key: 'ownerRole',
       label: 'Requested By',
       render: (row) => formatRequesterRole(row.ownerRole),
