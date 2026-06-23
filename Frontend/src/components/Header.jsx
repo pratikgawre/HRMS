@@ -69,26 +69,6 @@ function Header({ role, onMenuClick }) {
     };
   }, [role, userId]);
 
-  useEffect(() => {
-    if (!showNotifications) {
-      return undefined;
-    }
-
-    const handlePointerDown = (event) => {
-      if (!notificationWrapRef.current?.contains(event.target)) {
-        setShowNotifications(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('touchstart', handlePointerDown);
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('touchstart', handlePointerDown);
-    };
-  }, [showNotifications]);
-
   const runSearch = () => {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;
