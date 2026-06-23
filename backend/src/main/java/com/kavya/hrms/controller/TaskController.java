@@ -118,7 +118,6 @@ public class TaskController {
     task.setId(id);
     hydrateTeamLeadFields(task);
     TaskItem saved = taskRepository.save(task);
-    syncProjectAssignment(saved);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Task updated",

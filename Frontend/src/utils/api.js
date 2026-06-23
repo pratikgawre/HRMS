@@ -44,6 +44,28 @@ export async function apiRequest(path, options = {}) {
   return null;
 }
 
+function formatApiError(bodyText, status) {
+  const rawText = String(bodyText || '').trim();
+  if (!rawText) {
+    return `Request failed: ${status}`;
+  }
+
+  if (rawText.startsWith('{') || rawText.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(rawText);
+      const message = parsed?.message || parsed?.error || parsed?.detail || parsed?.title;
+      if (message) {
+        return String(message);
+      }
+      return `Request failed: ${status}`;
+    } catch {
+      return `Request failed: ${status}`;
+    }
+  }
+
+  return rawText.length > 220 ? `${rawText.slice(0, 217)}...` : rawText;
+}
+
 export async function safeApiRequest(path, fallback, options = {}) {
   try {
     return await apiRequest(path, options);

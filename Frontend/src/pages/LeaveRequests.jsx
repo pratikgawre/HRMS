@@ -20,8 +20,7 @@ function LeaveRequests() {
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
   const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
-  const isAdminOrHr = role === 'admin' || role === 'hr';
-  const [requests, setRequests] = useState(getInitialLeaveRequests);
+  const [requests, setRequests] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
   const [searchText, setSearchText] = useState('');
