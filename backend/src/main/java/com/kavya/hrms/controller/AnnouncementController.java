@@ -124,7 +124,39 @@ public class AnnouncementController {
         "System",
         userId);
   }
+  private String asString(Object value) {
+    return value == null ? "" : String.valueOf(value).trim();
+  }
 
+  private boolean equalsIgnoreCase(String left, String right) {
+    return asString(left).equalsIgnoreCase(asString(right));
+  }
+
+  private List<Announcement> readAnnouncementsFromDocuments() {
+    List<Document> documents = mongoTemplate.findAll(Document.class, "announcements");
+    List<Announcement> announcements = new ArrayList<>();
+    for (Document document : documents) {
+      announcements.add(fromDocument(document));
+    }
+    return announcements;
+  }
+
+  private List<Announcement> loadAnnouncementsSafely() {
+    try {
+      List<Announcement> announcements = announcementRepository.findAll();
+      if (announcements != null) {
+        return announcements;
+      }
+    } catch (RuntimeException ex) {
+      // Fall back to raw BSON documents if Mongo entity mapping fails.
+    }
+
+    try {
+      return readAnnouncementsFromDocuments();
+    } catch (RuntimeException ex) {
+      return List.of();
+    }
+  }
   private Announcement fromDocument(Document document) {
     Announcement announcement = new Announcement();
     if (document == null) {
@@ -142,26 +174,5 @@ public class AnnouncementController {
     announcement.setOwnerRole(asString(document.get("ownerRole")));
     announcement.setStatus(asString(document.get("status")));
     return announcement;
-  }
-
-  private List<Announcement> loadAnnouncementsSafely() {
-    try {
-      List<Document> documents = mongoTemplate.findAll(Document.class, "announcements");
-      List<Announcement> announcements = new ArrayList<>();
-      for (Document document : documents) {
-        announcements.add(fromDocument(document));
-      }
-      return announcements;
-    } catch (RuntimeException ex) {
-      return List.of();
-    }
-  }
-
-  private String asString(Object value) {
-    return value == null ? "" : String.valueOf(value).trim();
-  }
-
-  private boolean equalsIgnoreCase(String left, String right) {
-    return asString(left).equalsIgnoreCase(asString(right));
   }
 }
