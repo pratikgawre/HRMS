@@ -30,6 +30,7 @@ const fallbackEmployees = people.map((person) => ({
 function UserManagement() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isAdminModule = location.pathname.startsWith('/admin/');
   const [employees, setEmployees] = useState(() => getStoredEmployees(fallbackEmployees));
   const [users, setUsers] = useState(() => dedupeUsers(ensureSeedUsers()));
   const [search, setSearch] = useState('');
@@ -101,7 +102,10 @@ function UserManagement() {
     };
   }, []);
 
-  const displayedUsers = useMemo(() => dedupeUsers(normalizeUsers(users, employees)), [users, employees]);
+  const displayedUsers = useMemo(() => {
+    const rows = dedupeUsers(normalizeUsers(users, employees));
+    return isAdminModule ? rows : rows.filter((user) => !isHrExcludedUser(user));
+  }, [employees, isAdminModule, users]);
 
   const filteredUsers = useMemo(() => displayedUsers.filter((user) => {
     const matchesSearch = `${user.employeeName} ${user.email} ${user.role} ${user.department} ${user.employeeId}`.toLowerCase().includes(search.toLowerCase());
@@ -112,17 +116,17 @@ function UserManagement() {
   }), [displayedUsers, search, roleFilter, statusFilter]);
 
   const summary = useMemo(() => {
-    const active = users.filter((user) => user.status === 'Active').length;
-    const pending = users.filter((user) => user.status === 'Invite Pending').length;
-    const suspended = users.filter((user) => user.status === 'Suspended').length;
+    const active = displayedUsers.filter((user) => user.status === 'Active').length;
+    const pending = displayedUsers.filter((user) => user.status === 'Invite Pending').length;
+    const suspended = displayedUsers.filter((user) => user.status === 'Suspended').length;
 
     return [
-      { label: 'Total Users', value: String(users.length).padStart(2, '0'), delta: 'Access accounts', tone: 'blue', icon: 'ri-group-line', onClick: () => navigateUserGroup() },
+      { label: 'Total Users', value: String(displayedUsers.length).padStart(2, '0'), delta: 'Access accounts', tone: 'blue', icon: 'ri-group-line', onClick: () => navigateUserGroup() },
       { label: 'Active Access', value: String(active).padStart(2, '0'), delta: 'Can sign in now', tone: 'green', icon: 'ri-shield-check-line', onClick: () => navigateUserGroup({ status: 'Active' }) },
       { label: 'Invites Pending', value: String(pending).padStart(2, '0'), delta: 'Awaiting activation', tone: 'pink', icon: 'ri-mail-send-line', onClick: () => navigateUserGroup({ status: 'Invite Pending' }) },
       { label: 'Suspended', value: String(suspended).padStart(2, '0'), delta: 'Access blocked', tone: 'orange', icon: 'ri-lock-line', onClick: () => navigateUserGroup({ status: 'Suspended' }) },
     ];
-  }, [users]);
+  }, [displayedUsers]);
 
   const navigateUserGroup = (filters = {}) => {
     const params = new URLSearchParams();
@@ -401,7 +405,7 @@ function UserModal({ form, setForm, employees, users, isEditing, title, onClose,
           <label className="field"><span>Email</span><input readOnly required type="email" value={form.email} /></label>
           <label className="field"><span>Department</span><input readOnly required value={form.department} /></label>
           <label className="field"><span>Designation</span><input readOnly value={form.designation} /></label>
-          <label className="field"><span>Access Role</span><select value={form.role} onChange={(event) => update('role', event.target.value)}>{ACCESS_ROLE_OPTIONS.map((role) => <option key={role}>{role}</option>)}</select></label>
+          <label className="field"><span>Access Role</span><select value={form.role} onChange={(event) => update('role', event.target.value)}>{ACCESS_ROLE_OPTIONS.filter((role) => role !== 'Super Admin').map((role) => <option key={role}>{role}</option>)}</select></label>
           <label className="field"><span>Status</span><select value={form.status} onChange={(event) => update('status', event.target.value)}>{USER_STATUS_OPTIONS.map((status) => <option key={status}>{status}</option>)}</select></label>
 
           <div className="salary-form-actions">
@@ -510,6 +514,16 @@ function formatLastLogin(value) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function isHrExcludedUser(user) {
+  const employeeId = String(user?.employeeId || '').trim().toLowerCase();
+  const email = String(user?.email || '').trim().toLowerCase();
+  const employeeName = String(user?.employeeName || '').trim().toLowerCase();
+
+  return employeeId === 'admin-001'
+    || email === 'admin@gmail.com'
+    || employeeName === 'admin kavya';
 }
 
 function getPermissionText(role) {

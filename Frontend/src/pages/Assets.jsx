@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
@@ -13,7 +14,10 @@ import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { useLocation } from 'react-router-dom';
 
 function Assets() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
+  const isHrModule = location.pathname.startsWith('/hr/');
   if (role === 'employee') {
     return <EmployeeAssetsView />;
   }
@@ -21,10 +25,11 @@ function Assets() {
   const isProjectManager = role === 'projectManager';
   const canRaiseRepair = role === 'employee';
   const canRaiseReplacement = role === 'employee' || role === 'projectManager';
-  const location = useLocation();
   const [assets, setAssets] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [searchText, setSearchText] = useState('');
+  const [assetView, setAssetView] = useState('all');
+  const [selectedAsset, setSelectedAsset] = useState(null);
   const [assignedEmployeeQuery, setAssignedEmployeeQuery] = useState('');
   const [isEmployeePickerOpen, setIsEmployeePickerOpen] = useState(false);
   const [assetForm, setAssetForm] = useState({
@@ -63,17 +68,17 @@ function Assets() {
   }, []);
 
   useEffect(() => {
-    const hashId = location.hash.replace('#', '');
-    if (!hashId) {
+    const sectionId = new URLSearchParams(location.search).get('section');
+    if (!sectionId) {
       return;
     }
 
     const timer = window.setTimeout(() => {
-      document.getElementById(hashId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [location.hash]);
+  }, [location.search]);
 
   const summary = useMemo(() => ({
     total: assets.length,
@@ -114,6 +119,19 @@ function Assets() {
 
   const activeSummary = isProjectManager ? scopedSummary : summary;
 
+  const handleSummaryCardClick = (view, matchFn) => {
+    const matchingAssets = scopedAssets.filter(matchFn);
+    if (matchingAssets.length === 1) {
+      setSelectedAsset(matchingAssets[0]);
+      navigate('/hr/assets?section=manage-assets');
+      return;
+    }
+
+    setSelectedAsset(null);
+    setAssetView(view);
+    navigate('/hr/assets?section=manage-assets');
+  };
+
   const stats = useMemo(() => ([
     {
       label: 'Total Assets',
@@ -121,6 +139,7 @@ function Assets() {
       delta: 'Tracked items',
       tone: 'blue',
       icon: 'ri-briefcase-4-line',
+      onClick: isHrModule ? () => handleSummaryCardClick('all', () => true) : undefined,
     },
     {
       label: 'Assigned',
@@ -128,6 +147,7 @@ function Assets() {
       delta: 'In use',
       tone: 'green',
       icon: 'ri-user-follow-line',
+      onClick: isHrModule ? () => handleSummaryCardClick('assigned', (asset) => asset.status === 'Assigned') : undefined,
     },
     {
       label: 'Needs Attention',
@@ -135,6 +155,7 @@ function Assets() {
       delta: 'Replacement or repair',
       tone: 'orange',
       icon: 'ri-alert-line',
+      onClick: isHrModule ? () => handleSummaryCardClick('needs-attention', (asset) => ['Replacement Requested', 'Repair Needed', 'Pending Return'].includes(asset.status)) : undefined,
     },
     {
       label: 'Available',
@@ -142,8 +163,9 @@ function Assets() {
       delta: 'Ready to assign',
       tone: 'pink',
       icon: 'ri-checkbox-circle-line',
+      onClick: isHrModule ? () => handleSummaryCardClick('available', (asset) => asset.status === 'Available') : undefined,
     },
-  ]), [activeSummary]);
+  ]), [activeSummary, isHrModule]);
 
   const moduleCards = useMemo(() => ([
     {
@@ -427,17 +449,27 @@ function Assets() {
 
   const filteredAssets = useMemo(() => {
     const query = searchText.trim().toLowerCase();
-    if (!query) {
-      return scopedAssets;
+    let rows = scopedAssets;
+
+    if (assetView === 'assigned') {
+      rows = rows.filter((asset) => asset.status === 'Assigned');
+    } else if (assetView === 'needs-attention') {
+      rows = rows.filter((asset) => ['Replacement Requested', 'Repair Needed', 'Pending Return'].includes(asset.status));
+    } else if (assetView === 'available') {
+      rows = rows.filter((asset) => asset.status === 'Available');
     }
 
-    return scopedAssets.filter((asset) => {
+    if (!query) {
+      return rows;
+    }
+
+    return rows.filter((asset) => {
       const employeeId = String(asset.assignedToEmployeeId || '').toLowerCase();
       const assignedTo = String(asset.assignedTo || '').toLowerCase();
       const assetName = String(asset.assetName || '').toLowerCase();
       return assetName.includes(query) || assignedTo.includes(query) || employeeId.includes(query);
     });
-  }, [scopedAssets, searchText]);
+  }, [assetView, scopedAssets, searchText]);
 
   const assignedAssets = filteredAssets.filter((asset) => asset.status === 'Assigned');
   const replacementRequests = filteredAssets.filter((asset) => asset.status === 'Replacement Requested');
@@ -1053,7 +1085,7 @@ function EmployeeAssetsView() {
       {selectedAsset && (
         <AssetDetailsModal
           asset={selectedAsset}
-          requests={selectedAssetRequests}
+          requests={[]}
           onClose={() => setSelectedAsset(null)}
         />
       )}
