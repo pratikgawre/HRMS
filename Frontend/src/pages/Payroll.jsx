@@ -747,6 +747,8 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
   const canDownloadPayslip = !isHrPayroll;
   const previewMonth = isHrPayroll ? payslipMonth : month;
   const previewYear = isHrPayroll ? payslipYear : year;
+  const canDownloadPayslip = isHrPayroll || isPayrollPeriodAvailable(previewMonth, previewYear);
+  const payslipUnavailableMessage = getPayrollAvailabilityText(previewMonth, previewYear);
 
   const payrollRecordsForSelection = useMemo(() => {
     const combined = [
@@ -915,7 +917,7 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
               {years.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          {isHrPayroll || canDownloadPayslip ? (
+          {canDownloadPayslip ? (
             <button
               className="payroll-primary"
               type="button"
