@@ -194,14 +194,14 @@ function SupportTickets() {
 
             <label className="field">
               <span>Category</span>
-              <select value={form.category} onChange={(event) => updateField('category', event.target.value)}>
+              <select className="support-select" value={form.category} onChange={(event) => updateField('category', event.target.value)}>
                 {categories.map((category) => <option key={category} value={category}>{category}</option>)}
               </select>
             </label>
 
             <label className="field">
               <span>Priority</span>
-              <select value={form.priority} onChange={(event) => updateField('priority', event.target.value)}>
+              <select className="support-select" value={form.priority} onChange={(event) => updateField('priority', event.target.value)}>
                 {priorities.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
               </select>
             </label>
@@ -270,7 +270,11 @@ function SupportTickets() {
                       </td>
                       <td style={{ padding: '12px' }}>
                         {canUpdateTicketStatus ? (
-                          <select value={ticket.status} onChange={(e) => handleStatusUpdate(ticket.id || ticket.ticketId, ticket.mongoId || ticket._id || ticket.id, e.target.value)}>
+                          <select
+                            className="support-select support-status-select"
+                            value={ticket.status}
+                            onChange={(e) => handleStatusUpdate(ticket.id || ticket.ticketId, ticket.mongoId || ticket._id || ticket.id, e.target.value)}
+                          >
                             {statusStages.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
                           </select>
                         ) : (
