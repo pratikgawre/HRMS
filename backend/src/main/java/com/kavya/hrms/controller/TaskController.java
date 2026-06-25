@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/tasks")
+@SuppressWarnings("null")
 public class TaskController {
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
@@ -119,7 +120,6 @@ public class TaskController {
     task.setId(id);
     hydrateTeamLeadFields(task);
     TaskItem saved = taskRepository.save(task);
-    syncProjectAssignment(saved);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Task updated",

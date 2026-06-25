@@ -19,6 +19,7 @@ import com.kavya.hrms.repository.SupportTicketRepository;
 
 @RestController
 @RequestMapping("/api/support")
+@SuppressWarnings("null")
 public class SupportController {
   private final SupportTicketRepository repository;
 

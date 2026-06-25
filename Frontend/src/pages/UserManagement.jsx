@@ -14,10 +14,13 @@ import {
   dedupeUsers,
   getInitials,
   getUsers,
+  saveUsers,
   setUsersCache,
   updateUserAccess,
 } from '../utils/user-management.js';
 import { ensureSeedUsers } from '../utils/auth.js';
+
+const USER_DELETE_UNDO_MS = 6000;
 
 const fallbackEmployees = people.map((person) => ({
   ...person,
@@ -38,6 +41,8 @@ function UserManagement() {
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [editingUser, setEditingUser] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [undoUser, setUndoUser] = useState(null);
   const [form, setForm] = useState(getEmptyUserForm());
   const [message, setMessage] = useState('');
 
@@ -101,6 +106,20 @@ function UserManagement() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!undoUser) {
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setUndoUser(null);
+    }, USER_DELETE_UNDO_MS);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [undoUser]);
 
   const displayedUsers = useMemo(() => {
     const rows = dedupeUsers(normalizeUsers(users, employees));
@@ -177,7 +196,7 @@ function UserManagement() {
             <i className="ri-edit-line" aria-hidden="true" />
             Edit
           </button>
-          <button type="button" onClick={() => deleteUser(user)}>
+          <button type="button" onClick={() => openDeleteConfirm(user)}>
             <i className="ri-delete-bin-line" aria-hidden="true" />
             Delete
           </button>
@@ -242,16 +261,36 @@ function UserManagement() {
     }
   };
 
-  const deleteUser = (user) => {
-    const shouldDelete = window.confirm('Do you really want to delete this user?');
+  const openDeleteConfirm = (user) => {
+    setDeleteTarget(user);
+  };
 
-    if (!shouldDelete) {
+  const closeDeleteConfirm = () => {
+    setDeleteTarget(null);
+  };
+
+  const deleteUser = () => {
+    if (!deleteTarget) {
       return;
     }
 
-    const nextUsers = deleteUserAccess(user.userId);
+    const nextUsers = deleteUserAccess(deleteTarget.userId);
     setUsers(dedupeUsers(nextUsers));
-    setMessage(`${user.employeeName} access deleted successfully.`);
+    setUndoUser(deleteTarget);
+    setMessage(`${deleteTarget.employeeName} access deleted. You can undo this action for a short time.`);
+    setDeleteTarget(null);
+  };
+
+  const undoDeleteUser = () => {
+    if (!undoUser) {
+      return;
+    }
+
+    const nextUsers = dedupeUsers([undoUser, ...getUsers()]);
+    saveUsers(nextUsers);
+    setUsers(nextUsers);
+    setUndoUser(null);
+    setMessage(`${undoUser.employeeName} access restored successfully.`);
   };
 
   return (
@@ -291,6 +330,43 @@ function UserManagement() {
 
         <DataTable columns={columns} rows={filteredUsers} emptyMessage="No access users found. Invite an existing employee to create access." />
       </Section>
+
+      {deleteTarget && (
+        <div className="user-delete-backdrop" role="presentation" onClick={closeDeleteConfirm}>
+          <section
+            className="user-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete user confirmation"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="user-delete-icon" aria-hidden="true">
+              <i className="ri-delete-bin-line" />
+            </div>
+            <div className="user-delete-copy">
+              <h3>Delete user?</h3>
+              <p>{deleteTarget.employeeName} will be removed from User Management access permanently.</p>
+            </div>
+            <div className="user-delete-actions">
+              <button type="button" className="user-delete-cancel" onClick={closeDeleteConfirm}>
+                No, Keep It
+              </button>
+              <button type="button" className="user-delete-confirm" onClick={deleteUser}>
+                Yes, Delete
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {undoUser && (
+        <div className="user-undo-toast" role="status" aria-live="polite">
+          <span>{undoUser.employeeName} was deleted.</span>
+          <button type="button" onClick={undoDeleteUser}>
+            Undo
+          </button>
+        </div>
+      )}
 
       {isModalOpen && (
         <UserModal

@@ -87,6 +87,26 @@ function Header({ role, onMenuClick }) {
     };
   }, [role, userId]);
 
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (!showNotifications) {
+        return;
+      }
+
+      if (notificationWrapRef.current && !notificationWrapRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [showNotifications]);
+
   const runSearch = () => {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;

@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/employees")
+@SuppressWarnings("null")
 public class EmployeeController {
   private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
