@@ -52,16 +52,20 @@ public class AssetAssignmentController {
 
   @PatchMapping("/{id}/return")
   public ResponseEntity<AssetAssignment> returnAsset(@PathVariable String id, @RequestBody ReturnAssetRequest request) {
+    ReturnAssetRequest safeRequest = request == null ? new ReturnAssetRequest() : request;
     return repository.findById(id)
-      .map((assignment) -> {
-        assignment.setReturnDate(request.getReturnDate() == null || request.getReturnDate().isBlank()
-          ? ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"))
-          : request.getReturnDate());
-        assignment.setCondition(request.getCondition());
-        assignment.setStatus("Returned");
-        return ResponseEntity.ok(repository.save(assignment));
-      })
-      .orElse(ResponseEntity.notFound().build());
+        .map((assignment) -> {
+          String returnDate = safeRequest.getReturnDate();
+          if (returnDate == null || returnDate.isBlank()) {
+            returnDate = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"));
+          }
+          assignment.setReturnDate(returnDate);
+          String condition = safeRequest.getCondition();
+          assignment.setCondition(condition == null ? "" : condition);
+          assignment.setStatus("Returned");
+          return ResponseEntity.ok(repository.save(assignment));
+        })
+        .orElse(ResponseEntity.notFound().build());
   }
 
   @DeleteMapping("/{id}")
@@ -73,9 +77,20 @@ public class AssetAssignmentController {
     private String returnDate;
     private String condition;
 
-    public String getReturnDate() { return returnDate; }
-    public void setReturnDate(String returnDate) { this.returnDate = returnDate; }
-    public String getCondition() { return condition; }
-    public void setCondition(String condition) { this.condition = condition; }
+    public String getReturnDate() {
+      return returnDate;
+    }
+
+    public void setReturnDate(String returnDate) {
+      this.returnDate = returnDate;
+    }
+
+    public String getCondition() {
+      return condition;
+    }
+
+    public void setCondition(String condition) {
+      this.condition = condition;
+    }
   }
 }

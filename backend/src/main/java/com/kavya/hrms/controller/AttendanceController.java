@@ -49,6 +49,7 @@ public class AttendanceController {
   }
 
   @PostMapping
+  @SuppressWarnings("null")
   public AttendanceRecord save(
       @RequestBody AttendanceRecord record,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -60,6 +61,7 @@ public class AttendanceController {
   }
 
   @PostMapping("/bulk")
+  @SuppressWarnings("null")
   public List<AttendanceRecord> bulkSave(
       @RequestBody List<AttendanceRecord> records,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -74,7 +76,8 @@ public class AttendanceController {
     return saved;
   }
 
-  private void notifyAttendanceChange(List<AttendanceRecord> records, String title, String accessRole, String userId, String verb) {
+  private void notifyAttendanceChange(List<AttendanceRecord> records, String title, String accessRole, String userId,
+      String verb) {
     Set<String> employeeIds = records.stream()
         .map(AttendanceRecord::getEmployeeId)
         .filter(value -> value != null && !value.isBlank())

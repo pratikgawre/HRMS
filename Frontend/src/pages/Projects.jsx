@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { people } from '../data/dummyData.js';
@@ -83,11 +84,12 @@ function Projects() {
   const [savePopup, setSavePopup] = useState(null);
 
   function showProjectToast(text, tone = 'success') {
-    if (!isAdmin) {
-      return;
-    }
-
     setSavePopup({ text, tone });
+
+    // Auto-dismiss toast after a short duration
+    window.setTimeout(() => {
+      setSavePopup(null);
+    }, 4000);
   }
 
   function closeProjectToast() {
@@ -383,7 +385,6 @@ function Projects() {
     setSelectedTeamMembers(Array.isArray(project.teamMembers) ? project.teamMembers : []);
     setIsTeamDraftDirty(false);
     setMessage('');
-    showProjectToast(`Editing ${project.name}.`, 'success');
     setActiveTab('create');
   }
 
@@ -595,21 +596,7 @@ function Projects() {
           </div>
         </div>
 
-      {savePopup && (
-        <div className={`project-toast is-${savePopup.tone || 'success'}`} role="status" aria-live="polite">
-          <span className="project-toast__icon" aria-hidden="true">
-            <i className={savePopup.tone === 'error' ? 'ri-error-warning-line' : 'ri-checkbox-circle-fill'} />
-          </span>
-          <div className="project-toast__copy">
-            <span>{savePopup.tone === 'error' ? 'Warning' : 'Success'}</span>
-            <strong>{savePopup.text}</strong>
-          </div>
-          <button type="button" className="project-toast__close" onClick={closeProjectToast} aria-label="Dismiss notification">
-            <i className="ri-close-line" aria-hidden="true" />
-          </button>
-          <span className="project-toast__accent" aria-hidden="true" />
-        </div>
-      )}
+      {savePopup && <ProjectToast popup={savePopup} onClose={closeProjectToast} />}
 
         <div className="project-tab-strip" role="tablist" aria-label="Project modules">
           {PROJECT_TABS.map((tab) => {
@@ -918,7 +905,11 @@ function Projects() {
                 </div>
                 <label className="full-width">
                   <span>Status</span>
-                  <select className="profile-select" value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)}>
+                  <select
+                    className="profile-select project-status-select"
+                    value={statusDraft}
+                    onChange={(event) => setStatusDraft(event.target.value)}
+                  >
                     <option value="Planning">Planning</option>
                     <option value="Pending">Pending</option>
                     <option value="Active">Active</option>
@@ -1020,6 +1011,34 @@ function Projects() {
       )}
     </>
   );
+}
+
+function ProjectToast({ popup, onClose }) {
+  if (!popup) return null;
+  const toast = (
+    <div className={`project-toast is-${popup.tone || 'success'}`} role="status" aria-live="polite">
+      <span className="project-toast__icon" aria-hidden="true">
+        <i className={popup.tone === 'error' ? 'ri-error-warning-line' : 'ri-checkbox-circle-fill'} />
+      </span>
+      <div className="project-toast__copy">
+        <span>{popup.tone === 'error' ? 'Warning' : 'Success'}</span>
+        <strong>{popup.text}</strong>
+      </div>
+      <button type="button" className="project-toast__close" onClick={onClose} aria-label="Dismiss notification">
+        <i className="ri-close-line" aria-hidden="true" />
+      </button>
+      <span className="project-toast__accent" aria-hidden="true" />
+    </div>
+  );
+
+  let portalRoot = document.querySelector('.project-toast-portal');
+  if (!portalRoot) {
+    portalRoot = document.createElement('div');
+    portalRoot.className = 'project-toast-portal';
+    document.body.appendChild(portalRoot);
+  }
+
+  return createPortal(toast, portalRoot);
 }
 
 export default Projects;

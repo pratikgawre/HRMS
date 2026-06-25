@@ -5194,13 +5194,34 @@ button.attendance-summary-card.is-clickable:focus-visible {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.85rem;
-  margin: 0 0 1rem;
+  margin: 0;
+  position: fixed !important;
+  top: 1rem !important;
+  right: 1rem !important;
+  z-index: 99999 !important;
+  width: auto;
+  max-width: 360px;
   padding: 0.9rem 1rem;
   border: 1px solid rgba(201, 221, 221, 0.92);
   border-radius: calc(var(--radius) + 4px);
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 18px 42px rgba(24, 35, 47, 0.12);
   animation: settings-toast-in 0.18s ease-out;
+}
+
+/* Portal wrapper ensures toast is placed at viewport top-right regardless of page transforms */
+.project-toast-portal {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 99998;
+  pointer-events: none;
+  display: grid;
+  padding: 1rem;
+}
+
+.project-toast-portal .project-toast {
+  pointer-events: auto;
 }
 
 .project-toast__icon {
@@ -5396,6 +5417,11 @@ button.attendance-summary-card.is-clickable:focus-visible {
 .project-action-panel label textarea {
   width: 100%;
   min-width: 0;
+}
+
+.project-status-select {
+  width: min(100%, 160px);
+  max-width: 160px;
 }
 
 .project-editor-head,
@@ -6179,6 +6205,12 @@ img.profile-avatar {
   grid-column: 1 / -1;
   flex-wrap: wrap;
   gap: 0.7rem;
+}
+
+.announcement-status-select {
+  width: 100%;
+  max-width: 150px;
+  min-width: 120px;
 }
 
 .announcement-submit,

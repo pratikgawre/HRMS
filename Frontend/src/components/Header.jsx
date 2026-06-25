@@ -41,6 +41,24 @@ function Header({ role, onMenuClick }) {
 
   const searchRoutes = getSearchRoutes(role);
 
+  // Close notification panel when clicking outside
+  useEffect(() => {
+    if (!showNotifications) {
+      return;
+    }
+
+    const handleClickOutside = (event) => {
+      if (notificationWrapRef.current && !notificationWrapRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotifications]);
+
   useEffect(() => {
     let active = true;
 

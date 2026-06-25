@@ -48,9 +48,8 @@ public class AssetController {
 
   @GetMapping("/my-assets")
   public List<Asset> myAssets(
-    @RequestParam(required = false) String employeeId,
-    @RequestHeader(value = "X-Kavya-Employee-Id", required = false) String employeeHeader
-  ) {
+      @RequestParam(required = false) String employeeId,
+      @RequestHeader(value = "X-Kavya-Employee-Id", required = false) String employeeHeader) {
     String resolvedEmployeeId = normalize(employeeId != null && !employeeId.isBlank() ? employeeId : employeeHeader);
     LOGGER.info(() -> "[AssetController] my-assets requested for employeeId=" + resolvedEmployeeId);
 
@@ -62,26 +61,29 @@ public class AssetController {
     String resolvedEmployeeName = resolveEmployeeName(resolvedEmployeeId);
     List<Asset> allAssets = assetRepository.findAll();
     List<AssetAssignment> matchingAssignments = assetAssignmentRepository.findAll().stream()
-      .filter((assignment) -> isAssignmentForEmployee(assignment, resolvedEmployeeId, resolvedEmployeeName))
-      .toList();
+        .filter((assignment) -> isAssignmentForEmployee(assignment, resolvedEmployeeId, resolvedEmployeeName))
+        .toList();
 
     List<Asset> response = allAssets.stream()
-      .filter((asset) -> isAssignedToEmployee(asset, resolvedEmployeeId, resolvedEmployeeName) || hasMatchingAssignment(asset, matchingAssignments))
-      .map((asset) -> mergeAssignment(asset, matchingAssignments))
-      .toList();
+        .filter((asset) -> isAssignedToEmployee(asset, resolvedEmployeeId, resolvedEmployeeName)
+            || hasMatchingAssignment(asset, matchingAssignments))
+        .map((asset) -> mergeAssignment(asset, matchingAssignments))
+        .toList();
 
     List<Asset> assignmentOnlyAssets = matchingAssignments.stream()
-      .filter((assignment) -> !containsAsset(response, assignment))
-      .map(this::toAsset)
-      .toList();
+        .filter((assignment) -> !containsAsset(response, assignment))
+        .map(this::toAsset)
+        .toList();
 
-    List<Asset> finalResponse = java.util.stream.Stream.concat(response.stream(), assignmentOnlyAssets.stream()).toList();
+    List<Asset> finalResponse = java.util.stream.Stream.concat(response.stream(), assignmentOnlyAssets.stream())
+        .toList();
 
     LOGGER.info(() -> "[AssetController] my-assets returning=" + finalResponse.size());
     return finalResponse;
   }
 
   @PostMapping
+  @SuppressWarnings("null")
   public Asset create(
       @RequestBody Asset asset,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -104,9 +106,11 @@ public class AssetController {
       @RequestBody List<Asset> assets,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    List<Asset> safeAssets = assets == null ? List.of() : assets;
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
-    List<Asset> saved = assetRepository.saveAll(assets);
+    @SuppressWarnings("null")
+    List<Asset> saved = assetRepository.saveAll(safeAssets);
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -122,6 +126,7 @@ public class AssetController {
   }
 
   @PutMapping("/{id}")
+  @SuppressWarnings("null")
   public Asset update(
       @PathVariable String id,
       @RequestBody Asset asset,
@@ -142,6 +147,7 @@ public class AssetController {
   }
 
   @DeleteMapping("/{id}")
+  @SuppressWarnings("null")
   public void delete(
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -171,10 +177,11 @@ public class AssetController {
 
   private String resolveEmployeeName(String employeeId) {
     return employeeRepository.findAll().stream()
-      .filter(employee -> employeeId.equals(employee.getEmployeeCode()) || employeeId.equals(employee.getEmployeeId()) || employeeId.equals(employee.getId()))
-      .map(employee -> Optional.ofNullable(employee.getDisplayName()).orElse(employee.getName()))
-      .findFirst()
-      .orElse(employeeId);
+        .filter(employee -> employeeId.equals(employee.getEmployeeCode()) || employeeId.equals(employee.getEmployeeId())
+            || employeeId.equals(employee.getId()))
+        .map(employee -> Optional.ofNullable(employee.getDisplayName()).orElse(employee.getName()))
+        .findFirst()
+        .orElse(employeeId);
   }
 
   private boolean isAssignedToEmployee(Asset asset, String employeeId, String employeeName) {
@@ -211,9 +218,9 @@ public class AssetController {
     String assetId = normalize(asset.getId());
     String assetCode = normalize(asset.getAssetCode());
     AssetAssignment matched = assignments.stream()
-      .filter((assignment) -> matchesAsset(assetId, assetCode, assignment))
-      .findFirst()
-      .orElse(null);
+        .filter((assignment) -> matchesAsset(assetId, assetCode, assignment))
+        .findFirst()
+        .orElse(null);
 
     if (matched == null) {
       return asset;
@@ -260,10 +267,12 @@ public class AssetController {
   private Asset toAsset(AssetAssignment assignment) {
     Asset asset = new Asset();
     asset.setId(!normalize(assignment.getAssetId()).isBlank() ? assignment.getAssetId() : assignment.getId());
-    asset.setAssetCode(!normalize(assignment.getAssetCode()).isBlank() ? assignment.getAssetCode() : assignment.getAssetId());
+    asset.setAssetCode(
+        !normalize(assignment.getAssetCode()).isBlank() ? assignment.getAssetCode() : assignment.getAssetId());
     asset.setAssetName(!normalize(assignment.getAssetName()).isBlank() ? assignment.getAssetName() : "Asset");
     asset.setStatus(!normalize(assignment.getStatus()).isBlank() ? assignment.getStatus() : "Assigned");
-    asset.setAssignedTo(!normalize(assignment.getEmployeeName()).isBlank() ? assignment.getEmployeeName() : assignment.getEmployeeId());
+    asset.setAssignedTo(
+        !normalize(assignment.getEmployeeName()).isBlank() ? assignment.getEmployeeName() : assignment.getEmployeeId());
     asset.setCondition(!normalize(assignment.getCondition()).isBlank() ? assignment.getCondition() : "Good");
     return asset;
   }

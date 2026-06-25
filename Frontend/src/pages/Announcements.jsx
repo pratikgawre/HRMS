@@ -473,7 +473,12 @@ function AnnouncementModal({ title, form, errors, updateField, onSubmit, onClose
 
           <label className="field">
             <span>Status</span>
-            <select value={form.status} onChange={(event) => updateField("status", event.target.value)}>
+            <select
+              className="announcement-status-select"
+              style={{ width: 'min(100%, 140px)', maxWidth: '140px', minWidth: '110px' }}
+              value={form.status}
+              onChange={(event) => updateField("status", event.target.value)}
+            >
               {statuses.map((status) => (
                 <option key={status} value={status}>
                   {status}

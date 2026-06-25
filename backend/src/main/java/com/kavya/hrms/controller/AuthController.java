@@ -2,6 +2,7 @@ package com.kavya.hrms.controller;
 
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -36,8 +37,9 @@ public class AuthController {
 
   @PostMapping("/login")
   public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
+    Objects.requireNonNull(request, "request");
     String email = normalizeEmail(request.getEmail());
-    String password = request == null ? "" : String.valueOf(request.getPassword());
+    String password = request.getPassword() == null ? "" : request.getPassword();
 
     return appUserRepository.findAllByEmailIgnoreCase(email).stream()
         .findFirst()
@@ -51,7 +53,8 @@ public class AuthController {
           appUserRepository.save(user);
 
           String token = UUID.randomUUID().toString();
-          authSessionRepository.save(buildSession(user, token, now));
+          AuthSession session = buildSession(user, token, now);
+          authSessionRepository.save(Objects.requireNonNull(session, "session"));
           return ResponseEntity.ok(okResponse(user, token, now));
         })
         .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials")));
@@ -114,29 +117,18 @@ public class AuthController {
   }
 
   private String normalizeRole(String role) {
-    if (role == null)
+    if (role == null) {
       return "Employee";
-    String normalized = role.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
-    switch (normalized) {
-      case "superadmin":
-      case "admin":
-        return "Super Admin";
-      case "hrmanager":
-      case "hr":
-        return "HR Manager";
-      case "projectmanager":
-      case "manager":
-      case "projectmanagerrole":
-        return "Project Manager";
-      case "teamlead":
-      case "teamleader":
-        return "Team Lead";
-      case "employee":
-      case "staff":
-        return "Employee";
-      default:
-        return role.trim();
     }
+    String normalized = role.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+    return switch (normalized) {
+      case "superadmin", "admin" -> "Super Admin";
+      case "hrmanager", "hr" -> "HR Manager";
+      case "projectmanager", "manager", "projectmanagerrole" -> "Project Manager";
+      case "teamlead", "teamleader" -> "Team Lead";
+      case "employee", "staff" -> "Employee";
+      default -> role.trim();
+    };
   }
 
   private boolean passwordMatches(String rawPassword, AppUser user) {

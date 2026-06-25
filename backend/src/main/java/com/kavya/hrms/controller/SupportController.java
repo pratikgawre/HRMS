@@ -50,18 +50,25 @@ public class SupportController {
   }
 
   @PatchMapping("/{id}/status")
+  @SuppressWarnings("null")
   public ResponseEntity<SupportTicket> updateStatus(@PathVariable String id, @RequestBody StatusUpdateRequest request) {
     return repository.findById(id)
-      .map((ticket) -> {
-        ticket.setStatus(request.getStatus());
-        return ResponseEntity.ok(repository.save(ticket));
-      })
-      .orElse(ResponseEntity.notFound().build());
+        .map((ticket) -> {
+          ticket.setStatus(request.getStatus());
+          return ResponseEntity.ok(repository.save(ticket));
+        })
+        .orElse(ResponseEntity.notFound().build());
   }
 
   public static class StatusUpdateRequest {
     private String status;
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+
+    public String getStatus() {
+      return status;
+    }
+
+    public void setStatus(String status) {
+      this.status = status;
+    }
   }
 }
