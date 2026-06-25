@@ -174,7 +174,7 @@ function LeaveRequests() {
       key: 'actions',
       label: 'Actions',
       render: (row) => (
-        <div className="table-actions">
+        <div className="table-actions" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
           <button
             type="button"
             onClick={() => updateLeaveStatus(row.id, isAdminOrHr ? 'Approved' : 'Recommended')}
@@ -182,7 +182,12 @@ function LeaveRequests() {
             <i className="ri-checkbox-circle-line" aria-hidden="true" />
             {isAdminOrHr ? 'Approve' : 'Recommend'}
           </button>
-          {isAdminOrHr && row.status === 'Pending' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
+          {isAdminOrHr && (
+            <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}>
+              <i className="ri-close-circle-line" aria-hidden="true" />
+              Reject
+            </button>
+          )}
         </div>
       ),
     }] : []),
