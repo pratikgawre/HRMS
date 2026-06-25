@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/payroll")
+@SuppressWarnings("null")
 public class PayrollController {
   private static final String CURRENT_MONTH_LIMIT_MESSAGE =
       "Current month salary can only be marked as paid between the 1st and 15th.";
@@ -76,7 +77,8 @@ public class PayrollController {
       @RequestParam String month,
       @RequestParam String year) {
     try {
-      return ResponseEntity.ok(payrollGenerationService.generateAndStorePayrollRecords(month, year));
+      return ResponseEntity.<Object>ok(
+          payrollGenerationService.generateAndStorePayrollRecords(month, year));
     } catch (IllegalArgumentException ex) {
       return badRequest(ex.getMessage());
     }
@@ -174,7 +176,7 @@ public class PayrollController {
     }
 
     if (payrollValidationService.isPaidStatus(record.getStatus())) {
-      return ResponseEntity.ok(record);
+      return ResponseEntity.<Object>ok(record);
     }
 
     if (payrollValidationService.isFuturePayrollPeriod(record.getMonth(), record.getYear(), LocalDate.now())) {

@@ -1,6 +1,7 @@
 package com.kavya.hrms.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -19,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
 @ExtendWith(MockitoExtension.class)
+@SuppressWarnings("null")
 class AuthControllerTest {
     @Mock
     private AppUserRepository appUserRepository;
@@ -49,9 +51,11 @@ class AuthControllerTest {
         request.setPassword("admin123");
 
         ResponseEntity<LoginResponse> response = authController.login(request);
+        LoginResponse body = response.getBody();
 
         assertEquals(200, response.getStatusCode().value());
-        assertTrue(response.getBody() != null && response.getBody().isOk());
-        assertEquals("Super Admin", response.getBody().getRole());
+        assertNotNull(body);
+        assertTrue(body.isOk());
+        assertEquals("Super Admin", body.getRole());
     }
 }

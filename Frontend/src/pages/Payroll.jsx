@@ -209,6 +209,7 @@ function Payroll() {
         setSelectedYear={setSelectedYear}
         setStatusOverrides={setStatusOverrides}
         focusRecordId={notificationTarget?.recordId || ''}
+        role={role}
       />
     );
   }
@@ -228,7 +229,7 @@ function Payroll() {
   );
 }
 
-function PayrollManagement({ records, savedPayrollRecords, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear, setStatusOverrides, focusRecordId = '' }) {
+function PayrollManagement({ records, savedPayrollRecords, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear, setStatusOverrides, focusRecordId = '', role = 'employee' }) {
   const [message, setMessage] = useState('');
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [activeSummary, setActiveSummary] = useState('total');
@@ -360,6 +361,8 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
     <>
       <Hero title="Payroll Management" copy="Manage employee salary records, generate payslips, and track paid or unpaid payroll status." />
 
+      {role === 'hr' && (
+        <>
       <Section title="Payslip Filter" action="Employee">
         <div className="payslip-filter">
           <label className="field">
@@ -425,6 +428,8 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
             icon="ri-scissors-cut-line"
           />
         </div>
+      )}
+        </>
       )}
 
       {message && (

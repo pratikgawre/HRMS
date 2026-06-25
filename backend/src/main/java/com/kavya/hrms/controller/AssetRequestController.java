@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/asset-requests")
+@SuppressWarnings("null")
 public class AssetRequestController {
   private final AssetRequestRepository repository;
 

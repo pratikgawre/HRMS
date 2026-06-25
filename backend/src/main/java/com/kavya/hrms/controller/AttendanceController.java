@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/attendance")
+@SuppressWarnings("null")
 public class AttendanceController {
   private final AttendanceRecordRepository attendanceRecordRepository;
   private final AppUserRepository appUserRepository;

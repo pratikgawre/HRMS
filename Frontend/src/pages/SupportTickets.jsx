@@ -30,6 +30,7 @@ const ticketColumns = [
 function SupportTickets() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const isEmployeeView = role === 'employee';
+  const isHrSupportView = role === 'hr';
   const canUpdateTicketStatus = role === 'admin' || role === 'hr' || role === 'teamLead';
   const currentEmployee = getCurrentEmployeeIdentity();
   const [tickets, setTickets] = useState([]);
@@ -83,6 +84,10 @@ function SupportTickets() {
       ? ticketColumns.filter((column) => column.key !== 'employeeName')
       : ticketColumns
   ), [isEmployeeView]);
+
+  const nonEmployeeTableColumns = isHrSupportView
+    ? ['createdDate', 'id', 'employeeName', 'title', 'category', 'priority', 'status']
+    : ['id', 'employeeName', 'title', 'category', 'priority', 'status', 'createdDate'];
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -244,13 +249,11 @@ function SupportTickets() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Ticket ID</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Employee</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Title</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Category</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Priority</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Status</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Created Date</th>
+                  {nonEmployeeTableColumns.map((column) => (
+                    <th key={column} style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>
+                      {getSupportColumnLabel(column)}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -261,29 +264,15 @@ function SupportTickets() {
                 ) : (
                   visibleTickets.map((ticket) => (
                     <tr key={ticket.mongoId || ticket.id || ticket.ticketId} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                      <td style={{ padding: '12px' }}>{ticket.id || ticket.ticketId}</td>
-                      <td style={{ padding: '12px' }}>{ticket.employeeName}</td>
-                      <td style={{ padding: '12px' }}>{ticket.title}</td>
-                      <td style={{ padding: '12px' }}>{ticket.category}</td>
-                      <td style={{ padding: '12px' }}>
-                        <span className={`status status-${String(ticket.priority || '').toLowerCase()}`}>{ticket.priority}</span>
-                      </td>
-                      <td style={{ padding: '12px' }}>
-                        {canUpdateTicketStatus ? (
-                          <select
-                            className="support-select support-status-select"
-                            value={ticket.status}
-                            onChange={(e) => handleStatusUpdate(ticket.id || ticket.ticketId, ticket.mongoId || ticket._id || ticket.id, e.target.value)}
-                          >
-                            {statusStages.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
-                          </select>
-                        ) : (
-                          <span className={`status status-${String(ticket.status || '').toLowerCase().replace(/\s+/g, '-')}`}>
-                            {ticket.status}
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ padding: '12px' }}>{ticket.createdDate}</td>
+                      {nonEmployeeTableColumns.map((column) => (
+                        <td key={column} style={{ padding: '12px' }}>
+                          {renderSupportTableCell(column, ticket, {
+                            canUpdateTicketStatus,
+                            handleStatusUpdate,
+                            isHrSupportView,
+                          })}
+                        </td>
+                      ))}
                     </tr>
                   ))
                 )}
@@ -303,6 +292,62 @@ function normalizeTicket(ticket) {
     mongoId: ticket.mongoId || ticket._id || ticket.id,
     createdDate: ticket.createdDate || '',
   };
+}
+
+function getSupportColumnLabel(column) {
+  switch (column) {
+    case 'createdDate':
+      return 'Created Date';
+    case 'id':
+      return 'Ticket ID';
+    case 'employeeName':
+      return 'Employee';
+    case 'title':
+      return 'Title';
+    case 'category':
+      return 'Category';
+    case 'priority':
+      return 'Priority';
+    case 'status':
+      return 'Status';
+    default:
+      return column;
+  }
+}
+
+function renderSupportTableCell(column, ticket, context) {
+  const { canUpdateTicketStatus, handleStatusUpdate, isHrSupportView } = context;
+
+  switch (column) {
+    case 'createdDate':
+      return ticket.createdDate;
+    case 'id':
+      return ticket.id || ticket.ticketId;
+    case 'employeeName':
+      return ticket.employeeName;
+    case 'title':
+      return ticket.title;
+    case 'category':
+      return ticket.category;
+    case 'priority':
+      return <span className={`status status-${String(ticket.priority || '').toLowerCase()}`}>{ticket.priority}</span>;
+    case 'status':
+      return canUpdateTicketStatus ? (
+        <select
+          className={isHrSupportView ? 'hr-support-status-select' : ''}
+          value={ticket.status}
+          onChange={(e) => handleStatusUpdate(ticket.id || ticket.ticketId, ticket.mongoId || ticket._id || ticket.id, e.target.value)}
+        >
+          {statusStages.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+        </select>
+      ) : (
+        <span className={`status status-${String(ticket.status || '').toLowerCase().replace(/\s+/g, '-')}`}>
+          {ticket.status}
+        </span>
+      );
+    default:
+      return '-';
+  }
 }
 
 function fileToDataUrl(file) {

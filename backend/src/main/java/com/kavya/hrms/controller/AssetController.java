@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/assets")
+@SuppressWarnings("null")
 public class AssetController {
   private static final Logger LOGGER = Logger.getLogger(AssetController.class.getName());
   private final AssetRepository assetRepository;

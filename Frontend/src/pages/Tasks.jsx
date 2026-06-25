@@ -52,6 +52,7 @@ function Tasks() {
   }
   const isTeamLead = role === 'teamLead';
   const canAssignTasks = taskAssignableRoles.includes(role);
+  const showTaskActionColumns = role !== 'hr';
   const [taskRows, setTaskRows] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -270,32 +271,38 @@ function Tasks() {
         </span>
       ),
     },
-    {
-      key: 'edit',
-      label: 'Edit',
-      render: (row) => (
-        <div className="table-actions table-actions-inline">
-          <button type="button" className="section-action" onClick={() => openTaskEditModal(row)}>
-            Edit
-          </button>
-        </div>
-      ),
-    },
-    {
-      key: 'delete',
-      label: 'Delete',
-      render: (row) => (
-        <div className="table-actions table-actions-inline">
-          <button
-            type="button"
-            className="section-action danger"
-            onClick={() => deleteTaskAssignment(row)}
-          >
-            Delete
-          </button>
-        </div>
-      ),
-    },
+    ...(
+      showTaskActionColumns
+        ? [
+          {
+            key: 'edit',
+            label: 'Edit',
+            render: (row) => (
+              <div className="table-actions table-actions-inline">
+                <button type="button" className="section-action" onClick={() => openTaskEditModal(row)}>
+                  Edit
+                </button>
+              </div>
+            ),
+          },
+          {
+            key: 'delete',
+            label: 'Delete',
+            render: (row) => (
+              <div className="table-actions table-actions-inline">
+                <button
+                  type="button"
+                  className="section-action danger"
+                  onClick={() => deleteTaskAssignment(row)}
+                >
+                  Delete
+                </button>
+              </div>
+            ),
+          },
+        ]
+        : []
+    ),
   ];
 
   const taskAssignmentColumns = [
@@ -913,7 +920,7 @@ function EmployeeTasksView() {
   );
 }
 
-function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
+function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
   const teamLeadMode = Boolean(isTeamLead);
   const isEditMode = mode === 'edit';
 
@@ -922,7 +929,7 @@ function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, s
       return {
         ...current,
         projectId: nextProjectId,
-        title: isEditing ? current.title : '',
+        title: isEditMode ? current.title : '',
         assignedToId: '',
       };
     });

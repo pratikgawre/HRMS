@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/announcements")
+@SuppressWarnings("null")
 public class AnnouncementController {
   private final AnnouncementRepository announcementRepository;
   private final NotificationService notificationService;
