@@ -20,7 +20,7 @@ function LeaveRequests() {
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
   const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
-  const [requests, setRequests] = useState(() => []());
+  const [requests, setRequests] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
   const [searchText, setSearchText] = useState('');
@@ -174,7 +174,7 @@ function LeaveRequests() {
       key: 'actions',
       label: 'Actions',
       render: (row) => (
-        <div className="table-actions">
+        <div className="table-actions" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
           <button
             type="button"
             onClick={() => updateLeaveStatus(row.id, isAdminOrHr ? 'Approved' : 'Recommended')}
@@ -182,7 +182,12 @@ function LeaveRequests() {
             <i className="ri-checkbox-circle-line" aria-hidden="true" />
             {isAdminOrHr ? 'Approve' : 'Recommend'}
           </button>
-          {isAdminOrHr && row.status === 'Pending' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
+          {isAdminOrHr && (
+            <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}>
+              <i className="ri-close-circle-line" aria-hidden="true" />
+              Reject
+            </button>
+          )}
         </div>
       ),
     }] : []),

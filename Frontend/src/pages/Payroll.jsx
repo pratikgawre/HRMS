@@ -744,7 +744,6 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
   const safeRecords = Array.isArray(records) ? records : [];
   const safeSavedPayrollRecords = Array.isArray(savedPayrollRecords) ? savedPayrollRecords : [];
   const isHrPayroll = role === 'hr';
-  const canDownloadPayslip = !isHrPayroll;
   const previewMonth = isHrPayroll ? payslipMonth : month;
   const previewYear = isHrPayroll ? payslipYear : year;
   const canDownloadPayslip = isHrPayroll || isPayrollPeriodAvailable(previewMonth, previewYear);
