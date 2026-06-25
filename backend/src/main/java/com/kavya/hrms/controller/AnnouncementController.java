@@ -56,7 +56,8 @@ public class AnnouncementController {
       @RequestBody Announcement announcement,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Announcement saved = announcementRepository.save(announcement);
+    Announcement saved = announcementRepository
+        .save(Objects.requireNonNull(announcement, "announcement must not be null"));
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "New announcement posted",
@@ -70,6 +71,7 @@ public class AnnouncementController {
   }
 
   @PostMapping("/bulk")
+  @SuppressWarnings("null")
   public List<Announcement> bulkSave(@RequestBody List<Announcement> announcements) {
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
@@ -113,12 +115,20 @@ public class AnnouncementController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Announcement current = announcementRepository.findById(id).orElse(null);
-    announcementRepository.deleteById(id);
+    String nonNullId = id;
+    Announcement current = announcementRepository.findById(nonNullId).orElse(null);
+    announcementRepository.deleteById(nonNullId);
+    String title = "An announcement";
+    if (current != null) {
+      String currentTitle = current.getTitle();
+      if (currentTitle != null && !currentTitle.isBlank()) {
+        title = currentTitle;
+      }
+    }
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "Announcement removed",
-        (current != null ? current.getTitle() : "An announcement") + " was removed.",
+        title + " was removed.",
         "announcement",
         id,
         accessRole,

@@ -1,24 +1,25 @@
 package com.kavya.hrms.config;
 
-import com.kavya.hrms.websocket.SettingsWebSocketHandler;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
+import com.kavya.hrms.websocket.SettingsWebSocketHandler;
+
 @Configuration
 @EnableWebSocket
 @SuppressWarnings("null")
 public class WebSocketConfig implements WebSocketConfigurer {
-  private final SettingsWebSocketHandler settingsWebSocketHandler;
+  private final @NonNull SettingsWebSocketHandler settingsWebSocketHandler;
 
-  public WebSocketConfig(SettingsWebSocketHandler settingsWebSocketHandler) {
+  public WebSocketConfig(@NonNull SettingsWebSocketHandler settingsWebSocketHandler) {
     this.settingsWebSocketHandler = settingsWebSocketHandler;
   }
 
   @Override
-  public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry registry) {
+  public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
     registry.addHandler(settingsWebSocketHandler, "/ws/settings")
         .setAllowedOrigins("http://127.0.0.1:5173", "http://localhost:5173");
   }

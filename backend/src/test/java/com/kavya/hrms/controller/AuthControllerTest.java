@@ -2,13 +2,12 @@ package com.kavya.hrms.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.kavya.hrms.dto.LoginRequest;
 import com.kavya.hrms.dto.LoginResponse;
 import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.model.AuthSession;
 import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.AuthSessionRepository;
 import java.util.List;
@@ -43,19 +42,25 @@ class AuthControllerTest {
         user.setStatus("Active");
 
         when(appUserRepository.findAllByEmailIgnoreCase("admin@example.com")).thenReturn(List.of(user));
-        when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(authSessionRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(appUserRepository.save(user)).thenReturn(user);
+
+        AuthSession authSession = new AuthSession();
+        when(authSessionRepository.save(authSession)).thenReturn(authSession);
 
         LoginRequest request = new LoginRequest();
         request.setEmail("Admin@Example.com");
         request.setPassword("admin123");
 
         ResponseEntity<LoginResponse> response = authController.login(request);
-        LoginResponse body = response.getBody();
+        assertNotNull(response, "Response should not be null");
+
+        LoginResponse loginResponse = response.getBody();
+        if (loginResponse == null) {
+            throw new AssertionError("Response body should not be null");
+        }
 
         assertEquals(200, response.getStatusCode().value());
-        assertNotNull(body);
-        assertTrue(body.isOk());
-        assertEquals("Super Admin", body.getRole());
+        assertEquals(true, loginResponse.isOk(), "Expected login response to be successful");
+        assertEquals("Super Admin", loginResponse.getRole());
     }
 }
