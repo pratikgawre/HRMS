@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/leaves")
+@SuppressWarnings("null")
 public class LeaveController {
   private final LeaveRequestRepository leaveRequestRepository;
   private final AppUserRepository appUserRepository;

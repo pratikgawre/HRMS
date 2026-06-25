@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/asset-assignments")
+@SuppressWarnings("null")
 public class AssetAssignmentController {
   private final AssetAssignmentRepository repository;
 

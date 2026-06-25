@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/tasks")
+@SuppressWarnings("null")
 public class TaskController {
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;

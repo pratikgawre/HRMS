@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/projects")
+@SuppressWarnings("null")
 public class ProjectController {
   private final ProjectRepository projectRepository;
   private final NotificationService notificationService;
