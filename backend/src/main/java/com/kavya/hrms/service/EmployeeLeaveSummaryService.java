@@ -1,5 +1,13 @@
 package com.kavya.hrms.service;
 
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
 import com.kavya.hrms.dto.EmployeeLeaveSummaryResponse;
 import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.LeaveRequest;
@@ -32,7 +40,7 @@ public class EmployeeLeaveSummaryService {
 
   public EmployeeLeaveSummaryResponse getCurrentEmployeeSummary(@Nullable String userId, @Nullable String employeeId) {
     String resolvedEmployeeId = resolveEmployeeId(userId, employeeId)
-      .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Employee identity not found"));
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Employee identity not found"));
 
     Optional<AppUser> user = appUserRepository.findByEmployeeId(resolvedEmployeeId);
     String employeeName = user.map(foundUser -> foundUser == null ? null : foundUser.getEmployeeName()).orElse("");

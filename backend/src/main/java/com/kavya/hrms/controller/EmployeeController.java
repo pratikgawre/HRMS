@@ -34,7 +34,6 @@ public class EmployeeController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public Employee create(
       @RequestBody Employee employee,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -53,7 +52,6 @@ public class EmployeeController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<Employee> bulkSave(
       @RequestBody List<Employee> employees,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -95,7 +93,6 @@ public class EmployeeController {
   }
 
   @DeleteMapping("/{employeeId}")
-  @SuppressWarnings("null")
   public void delete(
       @PathVariable String employeeId,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -116,7 +113,8 @@ public class EmployeeController {
 
   private String buildEmployeeMessage(Employee employee, String action) {
     String name = employee != null && employee.getDisplayName() != null ? employee.getDisplayName() : "Employee";
-    String department = employee != null && employee.getDepartment() != null ? employee.getDepartment() : "unknown department";
+    String department = employee != null && employee.getDepartment() != null ? employee.getDepartment()
+        : "unknown department";
     return name + " was " + action + " in " + department + ".";
   }
 }

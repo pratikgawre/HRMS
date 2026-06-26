@@ -1,21 +1,23 @@
 package com.kavya.hrms.controller;
 
-import com.kavya.hrms.model.Project;
-import com.kavya.hrms.repository.ProjectRepository;
-import com.kavya.hrms.service.NotificationAudience;
-import com.kavya.hrms.service.NotificationService;
 import java.util.List;
 import java.util.Objects;
 import java.util.Locale;
+
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.kavya.hrms.model.Project;
+import com.kavya.hrms.repository.ProjectRepository;
+import com.kavya.hrms.service.NotificationAudience;
+import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/projects")
@@ -35,7 +37,7 @@ public class ProjectController {
   }
 
   @GetMapping("/team-lead/{teamLeadId}")
-  public List<Project> listByTeamLead(@PathVariable String teamLeadId) {
+  public List<Project> listByTeamLead(@PathVariable("teamLeadId") String teamLeadId) {
     String normalizedLeadId = normalize(teamLeadId);
     if (normalizedLeadId.isEmpty()) {
       return List.of();
@@ -55,7 +57,6 @@ public class ProjectController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public Project create(
       @RequestBody Project project,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -78,7 +79,8 @@ public class ProjectController {
       @RequestBody List<Project> projects,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    List<Project> safeProjects = projects == null ? List.of() : projects;
+    List<Project> safeProjects = projects == null ? List.of()
+        : projects.stream().filter(project -> project != null).toList();
     long existingCount = projectRepository.count();
     projectRepository.deleteAll();
     List<Project> saved = projectRepository.saveAll(new java.util.ArrayList<>(Objects.requireNonNull(projects)));
@@ -98,7 +100,7 @@ public class ProjectController {
 
   @PutMapping("/{id}")
   public Project update(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestBody Project project,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
@@ -117,9 +119,8 @@ public class ProjectController {
   }
 
   @DeleteMapping("/{id}")
-  @SuppressWarnings("null")
   public void delete(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     String projectId = Objects.requireNonNull(id, "id must not be null");

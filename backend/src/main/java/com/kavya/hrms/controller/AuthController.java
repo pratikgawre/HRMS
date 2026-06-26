@@ -27,7 +27,6 @@ import com.kavya.hrms.repository.AuthSessionRepository;
 
 @RestController
 @RequestMapping("/api/auth")
-@SuppressWarnings("null")
 public class AuthController {
   private final AppUserRepository appUserRepository;
   private final AuthSessionRepository authSessionRepository;

@@ -29,7 +29,6 @@ public class UserController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
     return appUserRepository.saveAll(new ArrayList<>(dedupeUsers(users)));
   }

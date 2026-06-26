@@ -22,7 +22,6 @@ import org.mockito.stubbing.Answer;
 import org.springframework.http.ResponseEntity;
 
 @ExtendWith(MockitoExtension.class)
-@SuppressWarnings("null")
 class AuthControllerTest {
     @Mock
     private AppUserRepository appUserRepository;

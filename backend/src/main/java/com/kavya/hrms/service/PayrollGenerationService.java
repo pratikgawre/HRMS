@@ -1,13 +1,5 @@
 package com.kavya.hrms.service;
 
-import com.kavya.hrms.model.AttendanceRecord;
-import com.kavya.hrms.model.Employee;
-import com.kavya.hrms.model.LeaveRequest;
-import com.kavya.hrms.model.PayrollRecord;
-import com.kavya.hrms.repository.AttendanceRecordRepository;
-import com.kavya.hrms.repository.EmployeeRepository;
-import com.kavya.hrms.repository.LeaveRequestRepository;
-import com.kavya.hrms.repository.PayrollRecordRepository;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
@@ -18,7 +10,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+
 import org.springframework.stereotype.Service;
+
+import com.kavya.hrms.model.AttendanceRecord;
+import com.kavya.hrms.model.Employee;
+import com.kavya.hrms.model.LeaveRequest;
+import com.kavya.hrms.model.PayrollRecord;
+import com.kavya.hrms.repository.AttendanceRecordRepository;
+import com.kavya.hrms.repository.EmployeeRepository;
+import com.kavya.hrms.repository.LeaveRequestRepository;
+import com.kavya.hrms.repository.PayrollRecordRepository;
 
 @Service
 public class PayrollGenerationService {
@@ -64,7 +66,12 @@ public class PayrollGenerationService {
 
     List<PayrollRecord> generatedRecords = new ArrayList<>();
     for (Employee employee : employees) {
-      PayrollRecord record = buildPayrollRecord(employee, attendanceRecords, leaveRequests, monthIndex, targetYear, existingRecords.get(resolveEmployeeId(employee)));
+      if (employee == null) {
+        continue;
+      }
+
+      PayrollRecord record = buildPayrollRecord(employee, attendanceRecords, leaveRequests, monthIndex, targetYear,
+          existingRecords.get(resolveEmployeeId(employee)));
       if (record != null) {
         generatedRecords.add(record);
       }
@@ -97,11 +104,13 @@ public class PayrollGenerationService {
     AttendanceSummary summary = summarizeAttendance(attendanceRecords, employeeId, monthIndex, year);
     double packageAmount = parseCurrencyNumber(employee.getPackageAmount());
     double monthlyGross = getMonthlyGrossFromPackage(packageAmount);
-    double approvedLeaveDays = getApprovedLeaveDaysForPeriod(leaveRequests, employeeId, monthIndex, year, summary.attendanceDateKeys);
+    double approvedLeaveDays = getApprovedLeaveDaysForPeriod(leaveRequests, employeeId, monthIndex, year,
+        summary.attendanceDateKeys);
     double paidLeaveDays = summary.leaveDays + approvedLeaveDays;
     int daysInMonth = YearMonth.of(year, monthIndex + 1).lengthOfMonth();
     double perDaySalary = monthlyGross / Math.max(daysInMonth, 1);
-    boolean hasAttendance = summary.presentDays > 0 || summary.halfDays > 0 || summary.leaveDays > 0 || approvedLeaveDays > 0;
+    boolean hasAttendance = summary.presentDays > 0 || summary.halfDays > 0 || summary.leaveDays > 0
+        || approvedLeaveDays > 0;
     double absentDeduction = hasAttendance ? roundMoney(summary.absentDays * perDaySalary) : 0;
     double halfDayDeduction = hasAttendance ? roundMoney(summary.halfDays * perDaySalary * 0.5) : 0;
     double providentFund = hasAttendance ? getProvidentFund(monthlyGross, employee) : 0;
@@ -109,7 +118,8 @@ public class PayrollGenerationService {
     double professionalTax = hasAttendance ? getProfessionalTax(monthlyGross) : 0;
     double otherDeduction = 0;
     double totalEarnings = hasAttendance ? monthlyGross : 0;
-    double totalDeductions = absentDeduction + halfDayDeduction + providentFund + gratuity + professionalTax + otherDeduction;
+    double totalDeductions = absentDeduction + halfDayDeduction + providentFund + gratuity + professionalTax
+        + otherDeduction;
     double netSalary = roundMoney(totalEarnings - totalDeductions);
     String monthName = MONTHS[monthIndex];
     String id = getPayrollRecordId(employeeId, monthName, String.valueOf(year));
@@ -117,7 +127,8 @@ public class PayrollGenerationService {
     PayrollRecord record = new PayrollRecord();
     record.setId(id);
     record.setEmployeeId(employeeId);
-    record.setEmployeeName(firstNonBlank(employee.getDisplayName(), employee.getName(), buildEmployeeName(employee), "Employee"));
+    record.setEmployeeName(
+        firstNonBlank(employee.getDisplayName(), employee.getName(), buildEmployeeName(employee), "Employee"));
     record.setRole(firstNonBlank(employee.getJobTitle(), employee.getRole(), "Employee"));
     record.setOwnerRole(firstNonBlank(employee.getAccessRole(), "employee"));
     record.setDepartment(firstNonBlank(employee.getDepartment(), "-"));
@@ -137,19 +148,23 @@ public class PayrollGenerationService {
     record.setNetSalary(netSalary);
     record.setPackageAmount(roundMoney(packageAmount));
     record.setDaysInMonth(daysInMonth);
-    record.setPayableDays(hasAttendance ? roundMoney(summary.presentDays + (summary.halfDays * 0.5) + paidLeaveDays) : 0);
+    record
+        .setPayableDays(hasAttendance ? roundMoney(summary.presentDays + (summary.halfDays * 0.5) + paidLeaveDays) : 0);
     record.setLopDays(hasAttendance ? roundMoney(summary.absentDays + (summary.halfDays * 0.5)) : daysInMonth);
     record.setAccountNo(firstNonBlank(employee.getAccountNo(), "-"));
     record.setUanNo(firstNonBlank(employee.getPfUanNo(), "-"));
     record.setAadhaarNo(firstNonBlank(employee.getAadhaarCardNo(), "-"));
     record.setPanNo(firstNonBlank(employee.getPanCardNo(), "-"));
-    record.setLocation(firstNonBlank(employee.getWorkingLocation(), employee.getPresentCityDistrict(), employee.getPermanentCityDistrict(), "-"));
-    record.setStatus(netSalary > 0 && existingRecord != null && payrollValidationService.isPaidStatus(existingRecord.getStatus())
-        ? existingRecord.getStatus()
-        : "Unpaid");
-    record.setPaidDate(netSalary > 0 && existingRecord != null && payrollValidationService.isPaidStatus(existingRecord.getStatus())
-        ? existingRecord.getPaidDate()
-        : null);
+    record.setLocation(firstNonBlank(employee.getWorkingLocation(), employee.getPresentCityDistrict(),
+        employee.getPermanentCityDistrict(), "-"));
+    record.setStatus(
+        netSalary > 0 && existingRecord != null && payrollValidationService.isPaidStatus(existingRecord.getStatus())
+            ? existingRecord.getStatus()
+            : "Unpaid");
+    record.setPaidDate(
+        netSalary > 0 && existingRecord != null && payrollValidationService.isPaidStatus(existingRecord.getStatus())
+            ? existingRecord.getPaidDate()
+            : null);
     record.setAttendanceSummary(summary.presentDays + " present, "
         + paidLeaveDays + " approved leave, "
         + summary.halfDays + " half day, "
@@ -161,7 +176,8 @@ public class PayrollGenerationService {
     return record;
   }
 
-  private AttendanceSummary summarizeAttendance(List<AttendanceRecord> attendanceRecords, String employeeId, int monthIndex, int year) {
+  private AttendanceSummary summarizeAttendance(List<AttendanceRecord> attendanceRecords, String employeeId,
+      int monthIndex, int year) {
     AttendanceSummary summary = new AttendanceSummary();
 
     for (AttendanceRecord record : attendanceRecords) {
@@ -174,7 +190,8 @@ public class PayrollGenerationService {
         continue;
       }
 
-      String status = String.valueOf(record.getStatus() == null ? "" : record.getStatus()).trim().toLowerCase(Locale.ENGLISH);
+      String status = String.valueOf(record.getStatus() == null ? "" : record.getStatus()).trim()
+          .toLowerCase(Locale.ENGLISH);
       if (status.equals("absent")) {
         summary.absentDays += 1;
       } else if (status.equals("half day")) {
@@ -226,7 +243,8 @@ public class PayrollGenerationService {
       int coveredDays = 0;
       LocalDate cursor = rangeStart;
       while (!cursor.isAfter(rangeEnd)) {
-        if (cursor.getYear() == year && cursor.getMonthValue() - 1 == monthIndex && !attendanceDateKeys.contains(getAttendanceDateKey(cursor))) {
+        if (cursor.getYear() == year && cursor.getMonthValue() - 1 == monthIndex
+            && !attendanceDateKeys.contains(getAttendanceDateKey(cursor))) {
           coveredDays += 1;
         }
         cursor = cursor.plusDays(1);
@@ -281,7 +299,7 @@ public class PayrollGenerationService {
     }
 
     String normalized = text.replaceAll(",", "");
-    String[] patterns = {"d MMM uuuu", "d MMM yyyy", "d MMM"};
+    String[] patterns = { "d MMM uuuu", "d MMM yyyy", "d MMM" };
     for (String pattern : patterns) {
       try {
         if ("d MMM".equals(pattern)) {
@@ -429,4 +447,3 @@ public class PayrollGenerationService {
     private final Set<String> attendanceDateKeys = new HashSet<>();
   }
 }
-

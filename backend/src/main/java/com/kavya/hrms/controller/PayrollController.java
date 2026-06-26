@@ -83,7 +83,6 @@ public class PayrollController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public ResponseEntity<Object> save(@RequestBody PayrollRecord record) {
     if (record == null || isBlank(record.getEmployeeId()) || isBlank(record.getMonth()) || isBlank(record.getYear())) {
       return badRequest("Employee, month, and year are required.");
@@ -140,7 +139,6 @@ public class PayrollController {
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
     List<PayrollRecord> safeRecords = records == null ? List.of() : records;
-    @SuppressWarnings("null")
     List<PayrollRecord> saved = payrollRecordRepository.saveAll(safeRecords);
     return saved;
   }

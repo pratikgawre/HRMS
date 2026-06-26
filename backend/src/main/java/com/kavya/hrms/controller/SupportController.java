@@ -52,7 +52,6 @@ public class SupportController {
   }
 
   @PatchMapping("/{id}/status")
-  @SuppressWarnings("null")
   public ResponseEntity<SupportTicket> updateStatus(@PathVariable String id, @RequestBody StatusUpdateRequest request) {
     String ticketId = Objects.requireNonNull(id, "id must not be null");
     return repository.findById(ticketId)

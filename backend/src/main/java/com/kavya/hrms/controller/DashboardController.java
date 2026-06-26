@@ -16,10 +16,11 @@ import com.kavya.hrms.repository.TaskRepository;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.Map;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,18 +60,19 @@ public class DashboardController {
   public AdminDashboardSummary adminSummary() {
     AdminDashboardSummary response = new AdminDashboardSummary();
     response.setTotalEmployees(employeeRepository.count());
-    response.setPendingLeaves(leaveRequestRepository.findAll().stream().filter(r -> "Pending".equalsIgnoreCase(r.getStatus())).count());
+    response.setPendingLeaves(
+        leaveRequestRepository.findAll().stream().filter(r -> "Pending".equalsIgnoreCase(r.getStatus())).count());
     response.setOpenRoles(announcementRepository.findByCategoryIgnoreCase("Vacancy").size());
 
     String latestDay = attendanceRecordRepository.findAll().stream()
-      .map(r -> r.getDateLabel() == null ? "" : r.getDateLabel())
-      .max(Comparator.naturalOrder())
-      .orElse("");
+        .map(r -> r.getDateLabel() == null ? "" : r.getDateLabel())
+        .max(Comparator.naturalOrder())
+        .orElse("");
 
     long presentToday = attendanceRecordRepository.findAll().stream()
-      .filter(r -> latestDay.equals(r.getDateLabel()))
-      .filter(r -> "Present".equalsIgnoreCase(r.getStatus()))
-      .count();
+        .filter(r -> latestDay.equals(r.getDateLabel()))
+        .filter(r -> "Present".equalsIgnoreCase(r.getStatus()))
+        .count();
     response.setPresentToday(presentToday);
     return response;
   }
@@ -152,9 +154,16 @@ public class DashboardController {
   }
 
   private String resolveEmployeeName(String employeeId) {
+    if (employeeId == null || employeeId.isBlank()) {
+      return "";
+    }
+
     return employeeRepository.findAll().stream()
-        .filter(employee -> employeeId.equals(employee.getEmployeeCode()) || employeeId.equals(employee.getEmployeeId()) || employeeId.equals(employee.getId()))
-        .map(employee -> Optional.ofNullable(employee.getDisplayName()).orElse(employee.getName()))
+        .filter(employee -> employee != null)
+        .filter(employee -> employeeId.equals(employee.getEmployeeCode()) || employeeId.equals(employee.getEmployeeId())
+            || employeeId.equals(employee.getId()))
+        .map(employee -> Optional.ofNullable(employee.getDisplayName())
+            .orElseGet(() -> Optional.ofNullable(employee.getName()).orElse(employeeId)))
         .findFirst()
         .orElse(employeeId);
   }
@@ -165,11 +174,13 @@ public class DashboardController {
         .collect(Collectors.toList());
 
     int used = requests.stream()
+        .filter(request -> request != null)
         .filter(request -> "Approved".equalsIgnoreCase(request.getStatus()))
-        .mapToInt(request -> request.getDays() != null ? request.getDays() : 0)
+        .mapToInt(request -> safeDays(request.getDays()))
         .sum();
 
     int allocated = systemSettingsRepository.findAll().stream()
+        .filter(Objects::nonNull)
         .findFirst()
         .map(settings -> settings == null ? null : settings.getLeaveTypes())
         .map(types -> types == null ? 0 : types.stream().mapToInt(type -> type.getDays() != null ? type.getDays() : 0).sum())
@@ -181,6 +192,10 @@ public class DashboardController {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+  }
+
+  private int safeDays(Integer days) {
+    return days != null ? days : 0;
   }
 
   private boolean isDueToday(String dueDate) {
@@ -234,15 +249,17 @@ public class DashboardController {
         || assignedTo.equals(normalizedEmployeeName);
   }
 
-  private record LeaveTotals(int remaining, int used) {}
+  private record LeaveTotals(int remaining, int used) {
+  }
 
   @GetMapping("/interviews/today")
   public Map<String, Long> interviewsToday() {
     long pendingLeaves = leaveRequestRepository.findAll().stream()
-      .filter(r -> "Pending".equalsIgnoreCase(r.getStatus()))
-      .count();
+        .filter(r -> "Pending".equalsIgnoreCase(r.getStatus()))
+        .count();
     long vacancyAnnouncements = announcementRepository.findByCategoryIgnoreCase("Vacancy").size();
-    long estimatedInterviews = Math.max(0, pendingLeaves + vacancyAnnouncements + Math.round(employeeRepository.count() / 25.0));
+    long estimatedInterviews = Math.max(0,
+        pendingLeaves + vacancyAnnouncements + Math.round(employeeRepository.count() / 25.0));
     return Map.of("count", estimatedInterviews);
   }
 }

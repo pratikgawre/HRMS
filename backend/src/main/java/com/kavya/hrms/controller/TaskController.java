@@ -103,7 +103,6 @@ public class TaskController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<TaskItem> bulkSave(
       @RequestBody List<TaskItem> tasks,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -164,7 +163,6 @@ public class TaskController {
   }
 
   @DeleteMapping("/{id}")
-  @SuppressWarnings("null")
   public void delete(
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
