@@ -186,14 +186,15 @@ public class AssetController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Asset current = assetRepository.findById(id).orElse(null);
-    assetRepository.deleteById(id);
+    String assetId = Objects.requireNonNull(id, "id must not be null");
+    Asset current = assetRepository.findById(assetId).orElse(null);
+    assetRepository.deleteById(assetId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset removed",
         buildAssetMessage(current, "removed"),
         "asset",
-        id,
+        assetId,
         accessRole,
         "System",
         userId);

@@ -22,6 +22,14 @@ import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
 import com.kavya.hrms.repository.TaskRepository;
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.NonNull;
 
 @Configuration
 @SuppressWarnings("null")
@@ -91,7 +99,7 @@ public class DataSeeder {
       }
 
       if (projectRepository.count() == 0) {
-        projectRepository.save(buildProject(
+        projectRepository.save(Objects.requireNonNull(buildProject(
             "PRJ-01",
             "Employee Self Service",
             "Priya Menon",
@@ -102,8 +110,8 @@ public class DataSeeder {
             "KV003",
             "Kabir Khan",
             "Team Lead",
-            List.of("KV001", "KV002")));
-        projectRepository.save(buildProject(
+            List.of("KV001", "KV002"))));
+        projectRepository.save(Objects.requireNonNull(buildProject(
             "PRJ-02",
             "Payroll Automation",
             "Nikhil Rao",
@@ -114,8 +122,8 @@ public class DataSeeder {
             "KV003",
             "Kabir Khan",
             "Team Lead",
-            List.of("KV004")));
-        projectRepository.save(buildProject(
+            List.of("KV004"))));
+        projectRepository.save(Objects.requireNonNull(buildProject(
             "PRJ-03",
             "Attendance Insights",
             "Priya Menon",
@@ -126,7 +134,7 @@ public class DataSeeder {
             "KV003",
             "Kabir Khan",
             "Team Lead",
-            List.of("KV005")));
+            List.of("KV005"))));
       }
 
       if (settingsRepository.count() == 0) {
@@ -212,7 +220,7 @@ public class DataSeeder {
     AppUser user = usersWithEmail.isEmpty() ? new AppUser() : usersWithEmail.get(0);
 
     if (usersWithEmail.size() > 1) {
-      appUserRepository.deleteAll(usersWithEmail.subList(1, usersWithEmail.size()));
+      appUserRepository.deleteAll(new ArrayList<>(usersWithEmail.subList(1, usersWithEmail.size())));
     }
 
     user.setEmail(email);
@@ -226,7 +234,7 @@ public class DataSeeder {
     if (user.getUserId() == null || user.getUserId().isEmpty()) {
       user.setUserId("USR-" + employeeId);
     }
-    appUserRepository.save(user);
+    appUserRepository.save(Objects.requireNonNull(user));
   }
 
   @NonNull

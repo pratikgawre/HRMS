@@ -15,6 +15,7 @@ import {
   getProjectAssigneeOptions,
   getSelectableTeamLeadProjects,
 } from '../utils/teamLeadAssignments.js';
+import { taskColumns } from './taskColumns.js';
 
 export const taskColumns = [
   { key: 'id', label: 'Task ID' },
@@ -262,50 +263,48 @@ function Tasks() {
       label: 'Module',
       render: (row) => row.title || '-',
     },
-    {
-      key: 'status',
-      label: 'Status',
-      render: (row) => (
-        <span style={{ padding: '0.18rem 0.6rem', borderRadius: 999, background: 'rgba(15,159,154,0.08)', color: '#0f9f9a', fontWeight: 800, fontSize: '0.86rem' }}>
-          {row.status || 'Pending'}
-        </span>
-      ),
-    },
-    ...(
-      showTaskActionColumns
-        ? [
-          {
-            key: 'edit',
-            label: 'Edit',
-            render: (row) => (
-              <div className="table-actions table-actions-inline">
-                <button type="button" className="section-action" onClick={() => openTaskEditModal(row)}>
-                  Edit
-                </button>
-              </div>
-            ),
-          },
-          {
-            key: 'delete',
-            label: 'Delete',
-            render: (row) => (
-              <div className="table-actions table-actions-inline">
-                <button
-                  type="button"
-                  className="section-action danger"
-                  onClick={() => deleteTaskAssignment(row)}
-                >
-                  Delete
-                </button>
-              </div>
-            ),
-          },
-        ]
-        : []
-    ),
-  ];
+   {
+  key: 'status',
+  label: 'Status',
+  render: (row) => {
+    const status = (row.status || 'Pending').toLowerCase();
 
-  const taskAssignmentColumns = [
+    const colors = {
+      pending: {
+        background: 'rgba(255,193,7,0.15)',
+        color: '#d88a12',
+      },
+      completed: {
+        background: 'rgba(47,116,208,0.12)',
+        color: '#2f74d0',
+      },
+      active: {
+        background: 'rgba(31,166,122,0.12)',
+        color: '#1fa67a',
+      },
+      approved: {
+        background: 'rgba(31,166,122,0.12)',
+        color: '#1fa67a',
+      },
+    };
+
+    const style = colors[status] || colors.pending;
+
+    return (
+      <span
+        style={{
+          padding: '0.18rem 0.6rem',
+          borderRadius: 999,
+          fontWeight: 800,
+          fontSize: '0.86rem',
+          ...style,
+        }}
+      >
+        {row.status || 'Pending'}
+      </span>
+    );
+  },
+},
     {
       key: 'owner',
       label: 'Assign',
@@ -767,13 +766,21 @@ function EmployeeTasksView() {
           ...col,
           render: (row) => {
             const s = String(row.status || '').trim() || 'Pending';
-            const map = {
-              Pending: { color: '#d88a12', bg: 'rgba(216,138,18,0.08)' },
-              'In Progress': { color: '#0f9f9a', bg: 'rgba(15,159,154,0.08)' },
-              Completed: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
-              Blocked: { color: '#d94d63', bg: 'rgba(217,77,99,0.08)' },
+            const normalized = s.toLowerCase();
+            const teamLeadStatusStyles = {
+              pending: { color: '#d88a12', bg: 'rgba(216,138,18,0.10)' },
+              active: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+              approved: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+              completed: { color: '#2f74d0', bg: 'rgba(47,116,208,0.12)' },
             };
-            const style = map[s] || { color: '#485666', bg: 'rgba(72,86,102,0.06)' };
+            const style = isTeamLead
+              ? (teamLeadStatusStyles[normalized] || { color: '#485666', bg: 'rgba(72,86,102,0.06)' })
+              : ({
+                  Pending: { color: '#d88a12', bg: 'rgba(216,138,18,0.08)' },
+                  'In Progress': { color: '#0f9f9a', bg: 'rgba(15,159,154,0.08)' },
+                  Completed: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+                  Blocked: { color: '#d94d63', bg: 'rgba(217,77,99,0.08)' },
+                }[s] || { color: '#485666', bg: 'rgba(72,86,102,0.06)' });
             return (
               <span style={{ padding: '0.18rem 0.6rem', borderRadius: 999, background: style.bg, color: style.color, fontWeight: 800, fontSize: '0.86rem' }}>{s}</span>
             );

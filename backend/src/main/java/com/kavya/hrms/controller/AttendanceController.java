@@ -4,7 +4,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-
+import java.util.Objects;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -57,7 +57,7 @@ public class AttendanceController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     attendanceAutoCheckoutService.finalizeOpenAttendanceRecords();
-    AttendanceRecord saved = attendanceRecordRepository.save(record);
+    AttendanceRecord saved = attendanceRecordRepository.save(Objects.requireNonNull(record));
     notifyAttendanceChange(List.of(saved), "Attendance updated", accessRole, userId, "updated");
     return saved;
   }
@@ -70,7 +70,7 @@ public class AttendanceController {
     attendanceAutoCheckoutService.finalizeOpenAttendanceRecords();
     long existingCount = attendanceRecordRepository.count();
     attendanceRecordRepository.deleteAll();
-    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(records);
+    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(Objects.requireNonNull(records));
     if (existingCount > 0) {
       notifyAttendanceChange(saved, "Attendance updated", accessRole, userId, "updated");
     }
@@ -80,12 +80,12 @@ public class AttendanceController {
   private void notifyAttendanceChange(List<AttendanceRecord> records, String title, String accessRole, String userId,
       String verb) {
     Set<String> employeeIds = records.stream()
-        .map(AttendanceRecord::getEmployeeId)
+        .map(record -> record == null ? null : record.getEmployeeId())
         .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.toCollection(LinkedHashSet::new));
 
     Set<String> employeeUserIds = appUserRepository.findByEmployeeIdIn(employeeIds).stream()
-        .map(user -> user.getUserId())
+        .map(user -> user == null ? null : user.getUserId())
         .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.toCollection(LinkedHashSet::new));
 

@@ -9,6 +9,7 @@ import com.kavya.hrms.repository.TaskRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.List;
+import java.util.Objects;
 import java.time.OffsetDateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,7 +88,7 @@ public class TaskController {
     if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
       task.setCreatedDateTime(OffsetDateTime.now().toString());
     }
-    TaskItem saved = taskRepository.save(task);
+    TaskItem saved = taskRepository.save(Objects.requireNonNull(task));
     syncProjectAssignment(saved);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
@@ -108,7 +109,7 @@ public class TaskController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
-    List<TaskItem> saved = taskRepository.saveAll(tasks);
+    List<TaskItem> saved = taskRepository.saveAll(new java.util.ArrayList<>(Objects.requireNonNull(tasks)));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -131,11 +132,8 @@ public class TaskController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     task.setId(id);
     hydrateTeamLeadFields(task);
-    Query query = new Query(Criteria.where("id").is(id));
-    Update update = new Update();
-    applyTaskFields(update, task);
-    mongoTemplate.updateFirst(query, update, TaskItem.class);
-    TaskItem saved = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    TaskItem saved = taskRepository.save(Objects.requireNonNull(task));
+    syncProjectAssignment(saved);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Task updated",
@@ -169,14 +167,15 @@ public class TaskController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem current = taskRepository.findById(id).orElse(null);
-    taskRepository.deleteById(id);
+    String taskId = Objects.requireNonNull(id, "id must not be null");
+    TaskItem current = taskRepository.findById(taskId).orElse(null);
+    taskRepository.deleteById(taskId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Task removed",
         buildTaskMessage(current, "removed"),
         "task",
-        id,
+        taskId,
         accessRole,
         "System",
         userId);

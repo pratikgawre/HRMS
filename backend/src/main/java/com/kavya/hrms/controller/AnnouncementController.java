@@ -74,7 +74,7 @@ public class AnnouncementController {
   public List<Announcement> bulkSave(@RequestBody List<Announcement> announcements) {
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
-    List<Announcement> saved = announcementRepository.saveAll(announcements);
+    List<Announcement> saved = announcementRepository.saveAll(Objects.requireNonNull(announcements));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.companyWideRecipients(),
@@ -96,7 +96,7 @@ public class AnnouncementController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     announcement.setId(id);
-    Announcement saved = announcementRepository.save(announcement);
+    Announcement saved = announcementRepository.save(Objects.requireNonNull(announcement));
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "Announcement updated",
@@ -129,7 +129,7 @@ public class AnnouncementController {
         "Announcement removed",
         title + " was removed.",
         "announcement",
-        id,
+        announcementId,
         accessRole,
         "System",
         userId);

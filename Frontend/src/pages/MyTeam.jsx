@@ -5,7 +5,16 @@ import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
-import { buildTeamLeadAssignmentGroups, getEmployeeId, getEmployeeName, normalizeLookupValue } from '../utils/teamLeadAssignments.js';
+import {
+  buildEmployeeDirectory,
+  buildTeamLeadAssignmentGroups,
+  buildTaskAssignmentGroups,
+  getProjectAssigneeOptions,
+  getEmployeeId,
+  getEmployeeName,
+  isEligibleTeamMember,
+  normalizeLookupValue,
+} from '../utils/teamLeadAssignments.js';
 
 function MyTeam() {
   const role = getSessionValue('kavyaRole') || 'employee';
@@ -26,6 +35,9 @@ function TeamLeadMyTeamView({ role }) {
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [taskEditTarget, setTaskEditTarget] = useState(null);
+  const [taskForm, setTaskForm] = useState(getEmptyTaskForm());
+  const [isAssignmentSummaryOpen, setIsAssignmentSummaryOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [editAssigneeId, setEditAssigneeId] = useState('');
   const [editMessage, setEditMessage] = useState('');
@@ -52,7 +64,7 @@ function TeamLeadMyTeamView({ role }) {
         }
 
         setProjects(Array.isArray(projectRows) ? projectRows : []);
-        setTasks(Array.isArray(assignmentRows) ? assignmentRows : []);
+        setTasks(attachClientTaskKeys(Array.isArray(taskRows) ? taskRows : []));
       });
     };
 
@@ -84,106 +96,118 @@ function TeamLeadMyTeamView({ role }) {
     () => buildTaskAssignmentGroups(tasks, currentTeamLeadIdentity),
     [currentTeamLeadIdentity, tasks],
   );
+  const visibleTaskRows = useMemo(() => (
+    Array.isArray(taskAssignmentData.tasks) ? taskAssignmentData.tasks : []
+  ), [taskAssignmentData.tasks]);
+
   const teamAssignmentGroups = assignmentData.groups.length > 0 ? assignmentData.groups : taskAssignmentData.groups;
   const effectiveEmployeeDirectory = assignmentData.employeeDirectory.size > 0
     ? assignmentData.employeeDirectory
     : taskAssignmentData.employeeDirectory;
 
-  const memberProjectMap = useMemo(() => {
-    const map = new Map();
-
-    teamAssignmentGroups.forEach((group) => {
-      group.teamMembers.forEach((member) => {
-        const key = normalizeLookupValue(getEmployeeId(member));
-        if (!key) {
-          return;
-        }
-
-        const current = map.get(key) || { ...member, projects: [] };
-        current.projects = Array.from(new Set([...(current.projects || []), group.name]));
-        map.set(key, current);
-      });
-    });
-
-    return map;
-  }, [teamAssignmentGroups]);
-
   const uniqueMemberRows = useMemo(() => (
-    Array.from(memberProjectMap.values()).map((member) => {
-      const source = effectiveEmployeeDirectory.get(normalizeLookupValue(getEmployeeId(member)));
-      const memberTasks = (Array.isArray(tasks) ? tasks : []).filter((task) => {
-        const assigneeValues = [
-          task.assignedToId,
-          task.assignedToName,
-          task.owner,
-        ].map((value) => String(value || '').trim().toLowerCase());
-        const memberId = String(getEmployeeId(member) || '').trim().toLowerCase();
-        const memberName = String(getEmployeeName(member) || '').trim().toLowerCase();
-        return assigneeValues.includes(memberId) || assigneeValues.includes(memberName);
-      });
-      const memberModules = Array.from(new Set(
-        memberTasks
-          .map((task) => String(task.title || task.projectName || task.projectCode || '-').trim())
-          .filter(Boolean),
-      ));
+    visibleTaskRows.map((task) => normalizeTaskRowForTeamLead(task, effectiveEmployeeDirectory))
+  ), [effectiveEmployeeDirectory, visibleTaskRows]);
 
-      return {
-        id: getEmployeeId(member),
-        avatar: member.avatar || source?.avatar || getInitials(getEmployeeName(member)),
-        name: getEmployeeName(member),
-        role: member.role || source?.role || '-',
-        department: member.department || source?.department || '-',
-        projects: member.projects.join(', '),
-        status: member.status || source?.status || '-',
-      };
-    })
-  ), [effectiveEmployeeDirectory, memberProjectMap, tasks]);
+  const projectTaskMap = taskAssignmentData.groups;
 
-  const projectTaskMap = useMemo(() => {
-    const map = new Map();
-    const normalize = (value) => String(value || '').trim().toLowerCase();
-    const currentLeadId = normalize(currentTeamLeadIdentity.employeeId);
-    const currentLeadName = normalize(currentTeamLeadIdentity.employeeName);
-    const visibleTasks = (Array.isArray(tasks) ? tasks : []).filter((task) => {
-      const assignedById = normalize(task.assignedById);
-      const assignedByName = normalize(task.assignedByName);
-      return (
-        (currentLeadId && assignedById === currentLeadId)
-        || (currentLeadName && assignedByName === currentLeadName)
-      );
-    });
-
-    if (teamAssignmentGroups.length > 0) {
-      teamAssignmentGroups.forEach((group) => {
-        map.set(group.id, []);
-      });
+  function openTaskEditor(task) {
+    if (!task) {
+      return;
     }
 
-    visibleTasks.forEach((task) => {
-      const projectKey = normalizeLookupValue(task.projectId || task.project || task.projectCode || '');
-      const projectName = String(task.projectName || task.project || 'Project').trim() || 'Project';
-      const groupKey = teamAssignmentGroups.length > 0
-        ? (teamAssignmentGroups.find((group) => normalizeLookupValue(group.projectId || group.projectCode || group.id) === projectKey)?.id || '')
-        : projectKey || normalize(projectName);
-      if (!groupKey) {
-        return;
-      }
+    setTaskEditTarget(task);
+    setTaskForm(buildTaskFormFromTask(task, role === 'teamLead'));
+  }
 
-      const rows = map.get(groupKey) || [];
-      rows.push({
-        id: task.id || '-',
-        title: task.title || '-',
-        assignee: task.assignedToName || task.owner || task.assignedTo || '-',
-        priority: task.priority || 'Medium',
-        status: task.status || 'Pending',
-        dueDate: task.dueDate || task.due || '-',
-        projectName,
-      });
-      map.set(groupKey, rows);
+  async function saveTaskChange(event) {
+    event?.preventDefault?.();
+
+    if (!taskEditTarget) {
+      return;
+    }
+
+    const nextProject = projects.find((project) => String(project.id || project.projectId || '').trim() === String(taskForm.projectId || '').trim()) || null;
+    const employeeLookup = buildEmployeeDirectory(employees);
+    const selectedAssignee = employees.find((employee) => String(employee.employeeId || employee.id || '').trim() === String(taskForm.assignedToId || '').trim()) || null;
+    const eligibleOptions = nextProject
+      ? getProjectAssigneeOptions(nextProject, employees, currentEmployeeId)
+      : employees.filter((employee) => isEligibleTeamMember(employee));
+    const assignee = eligibleOptions.find((employee) => String(getEmployeeId(employee)).trim() === String(taskForm.assignedToId || '').trim())
+      || selectedAssignee;
+    if (!assignee) {
+      return;
+    }
+
+    const payload = buildTaskPayload({
+      task: taskEditTarget,
+      form: taskForm,
+      assignee,
+      project: nextProject,
+      role,
+      currentEmployeeId,
+      currentEmployeeName,
+      employeeLookup,
     });
 
-    return map;
-  }, [teamAssignmentGroups, tasks]);
+    const taskId = String(taskEditTarget.id || '').trim();
+    const isExistingTask = Boolean(taskId) && tasks.some((item) => String(item.id || '').trim() === taskId);
+    const savedTask = await apiRequest(isExistingTask ? `/tasks/${taskId}` : '/tasks', {
+      method: isExistingTask ? 'PUT' : 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    const resolvedTask = savedTask && typeof savedTask === 'object'
+      ? savedTask
+      : { ...payload, id: taskId || payload.id || `${Date.now()}` };
+    const clientTaskKey = String(taskEditTarget.clientTaskKey || taskEditTarget.taskKey || buildClientTaskKey(taskEditTarget)).trim();
+    const nextResolvedTask = {
+      ...resolvedTask,
+      clientTaskKey,
+    };
+
+    setTasks((current) => {
+      if (isExistingTask) {
+        return current.map((item) => (
+          String(item.id || '').trim() === taskId
+            || String(item.clientTaskKey || '').trim() === clientTaskKey
+            ? { ...item, ...nextResolvedTask }
+            : item
+        ));
+      }
+
+      return [nextResolvedTask, ...current];
+    });
+    window.dispatchEvent(new Event('kavyaTasksChanged'));
+    window.dispatchEvent(new Event('kavyaProjectsChanged'));
+    setTaskEditTarget(null);
+    setTaskForm(getEmptyTaskForm());
+  }
+
+  async function deleteTask(task) {
+    if (!task) {
+      return;
+    }
+
+    const confirmDelete = window.confirm('Are you sure you want to delete?');
+    if (!confirmDelete) {
+      return;
+    }
+
+    await apiRequest(`/tasks/${task.id}`, { method: 'DELETE' });
+    window.dispatchEvent(new Event('kavyaTasksChanged'));
+    window.dispatchEvent(new Event('kavyaProjectsChanged'));
+    setTasks((current) => current.filter((item) => String(item.id || '').trim() !== String(task.id || '').trim()));
+  }
+
+  function openAssignmentEditor(row) {
+    if (!row) {
+      return;
+    }
+
+    const rowTask = getPrimaryTaskForMember(row);
+    openTaskEditor(rowTask);
+  }
 
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
   const totalAssignments = assignmentData.groups.reduce((sum, group) => sum + group.teamMemberCount, 0);
@@ -197,22 +221,88 @@ function TeamLeadMyTeamView({ role }) {
   const memberColumns = [
     {
       key: 'name',
-      label: 'Team Member',
+      label: 'Assign',
       render: (row) => (
         <div className="employee-cell">
           <span>{row.avatar}</span>
           <div>
             <strong>{row.name}</strong>
-            <small>{row.id}</small>
+            <small>{row.employeeId || row.id}</small>
           </div>
         </div>
       ),
     },
-    { key: 'role', label: 'Designation' },
-    { key: 'department', label: 'Department' },
-    { key: 'projects', label: 'Project Name' },
-    { key: 'modules', label: 'Module' },
-    { key: 'status', label: 'Status' },
+    { key: 'projectName', label: 'Project Name' },
+    {
+      key: 'moduleName',
+      label: 'Module Name',
+      render: (row) => <span className="myteam-module-cell">{row.moduleName || '-'}</span>,
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (row) => {
+        const status = String(row.status || '').trim() || 'Pending';
+        const normalized = status.toLowerCase();
+        const statusStyles = {
+          pending: { color: '#d88a12', bg: 'rgba(216,138,18,0.10)' },
+          active: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+          approved: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+          completed: { color: '#2f74d0', bg: 'rgba(47,116,208,0.12)' },
+          inactive: { color: '#657380', bg: 'rgba(101,115,128,0.10)' },
+          blocked: { color: '#d94d63', bg: 'rgba(217,77,99,0.10)' },
+        };
+        const style = statusStyles[normalized] || { color: '#485666', bg: 'rgba(72,86,102,0.06)' };
+
+        return (
+          <span
+            className={`myteam-status-pill myteam-status-pill--${normalized}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0.22rem 0.7rem',
+              borderRadius: '999px',
+              background: style.bg,
+              color: style.color,
+              fontWeight: 800,
+              fontSize: '0.86rem',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {status}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'edit',
+      label: 'Edit',
+      render: (row) => (
+        <button
+          type="button"
+          className="section-action"
+          style={{ background: '#fff', border: '1px solid #b7e2df', color: '#0f9f9a', borderRadius: '14px', padding: '0.45rem 0.9rem', fontWeight: 700 }}
+          onClick={() => openAssignmentEditor(row)}
+        >
+          Edit
+        </button>
+      ),
+    },
+    {
+      key: 'delete',
+      label: 'Delete',
+      render: (row) => (
+        <button
+          type="button"
+          className="section-action danger"
+          style={{ background: '#fff', border: '1px solid #f2b8c0', color: '#ef5d74', borderRadius: '14px', padding: '0.45rem 0.9rem', fontWeight: 700 }}
+          onClick={() => deleteTask(row.taskRows?.[0] || row)}
+        >
+          Delete
+        </button>
+      ),
+    },
   ];
 
   const cardRoutes = {
@@ -241,8 +331,8 @@ function TeamLeadMyTeamView({ role }) {
         ))}
       </section>
 
-      <Section title="Team Members" action="Assignment Summary">
-        <DataTable columns={memberColumns} rows={uniqueMemberRows} emptyMessage="No team members found." />
+      <Section title="Team Members" action="Assignment Summary" actionOnClick={() => setIsAssignmentSummaryOpen(true)}>
+        <DataTable className="myteam-table" columns={memberColumns} rows={uniqueMemberRows} emptyMessage="No team members found." />
       </Section>
 
       <Section title="Project-wise Team Members" action={`${teamAssignmentGroups.length} Projects`}>
@@ -257,29 +347,26 @@ function TeamLeadMyTeamView({ role }) {
                 <span className="project-action-chip">{group.teamMemberCount} member{group.teamMemberCount === 1 ? '' : 's'}</span>
               </div>
               <DataTable
+                className="myteam-table"
                 columns={memberColumns}
                 rows={group.teamMembers.map((member) => {
+                  const task = findTaskForMemberInProject(tasks, member, group);
+                  if (task) {
+                    return normalizeTaskRowForTeamLead(task, effectiveEmployeeDirectory);
+                  }
+
                   const source = effectiveEmployeeDirectory.get(normalizeLookupValue(getEmployeeId(member)));
-                  const memberTasks = (Array.isArray(tasks) ? tasks : []).filter((task) => {
-                    const assigneeValues = [
-                      task.assignedToId,
-                      task.assignedToName,
-                      task.owner,
-                    ].map((value) => String(value || '').trim().toLowerCase());
-                    const memberId = String(getEmployeeId(member) || '').trim().toLowerCase();
-                    const memberName = String(getEmployeeName(member) || '').trim().toLowerCase();
-                    return assigneeValues.includes(memberId) || assigneeValues.includes(memberName);
-                  });
-                  return {
-                    id: getEmployeeId(member),
-                    avatar: member.avatar || source?.avatar || getInitials(getEmployeeName(member)),
-                    name: getEmployeeName(member),
-                    role: member.role || source?.role || '-',
-                    department: member.department || source?.department || '-',
-                    projects: group.name || '-',
-                    modules: Array.from(new Set(memberTasks.map((task) => String(task.title || '-').trim()).filter(Boolean))).join(', ') || '-',
+                  return normalizeTaskRowForTeamLead({
+                    id: `${getEmployeeId(member)}::${String(group.id || group.projectId || group.projectCode || group.name || 'project').trim()}`,
+                    assignedToId: getEmployeeId(member),
+                    assignedToName: getEmployeeName(member),
+                    owner: getEmployeeName(member),
+                    projectId: group.id,
+                    projectName: group.name,
+                    projectCode: group.projectCode || group.id,
+                    title: '-',
                     status: source?.status || member.status || 'Active',
-                  };
+                  }, effectiveEmployeeDirectory);
                 })}
                 emptyMessage="No team members assigned to this project."
               />
@@ -289,45 +376,28 @@ function TeamLeadMyTeamView({ role }) {
           )}
         </div>
       </Section>
-
-      <Section title="Project-wise Task Assignments" action={`${tasks.length} Tasks`}>
-        <div className="project-group-list">
-          {projectTaskMap.size > 0 ? Array.from(projectTaskMap.entries()).filter(([groupKey, rows]) => {
-            const group = assignmentData.groups.find((item) => item.id === groupKey || item.projectId === groupKey || normalizeLookupValue(item.projectCode) === groupKey);
-            const label = String(group?.name || rows[0]?.projectName || 'Project').trim().toLowerCase();
-            return !['task assignments', 'cosmatic', 'drink-awarence'].includes(label);
-          }).map(([groupKey, rows]) => {
-            const group = assignmentData.groups.find((item) => item.id === groupKey || item.projectId === groupKey || normalizeLookupValue(item.projectCode) === groupKey);
-            const label = group?.name || rows[0]?.projectName || 'Project';
-            const code = group?.projectCode || group?.id || rows[0]?.projectName || groupKey;
-            return (
-            <div key={groupKey} className="project-team-group">
-              <div className="project-team-group-head">
-                <div>
-                  <strong>{label}</strong>
-                  <small>{code}</small>
-                </div>
-                <span className="project-action-chip">{rows.length} task{rows.length === 1 ? '' : 's'}</span>
-              </div>
-              <DataTable
-                columns={[
-                  { key: 'id', label: 'Task ID' },
-                  { key: 'title', label: 'Task Title' },
-                  { key: 'assignee', label: 'Assignee' },
-                  { key: 'priority', label: 'Priority' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'dueDate', label: 'Due Date' },
-                ]}
-                rows={rows}
-                emptyMessage="No tasks assigned to this project."
-              />
-            </div>
-            );
-          }) : (
-            <p className="project-empty-state">No tasks assigned by the current Team Lead.</p>
-          )}
-        </div>
-      </Section>
+      {isAssignmentSummaryOpen && (
+        <AssignmentSummaryModal
+          assignmentData={assignmentData}
+          onClose={() => setIsAssignmentSummaryOpen(false)}
+        />
+      )}
+      {taskEditTarget && (
+        <TaskAssignmentModal
+          mode="edit"
+          form={taskForm}
+          setForm={setTaskForm}
+          assigneeOptions={getTaskAssigneeOptions(taskForm.projectId, employees, currentEmployeeId, projects, role)}
+          projectOptions={getTaskProjectOptions(projects, currentEmployeeId, role)}
+          selectedProject={projects.find((project) => String(project.id || project.projectId || '').trim() === String(taskForm.projectId || '').trim()) || null}
+          isTeamLead={role === 'teamLead'}
+          onClose={() => {
+            setTaskEditTarget(null);
+            setTaskForm(getEmptyTaskForm());
+          }}
+          onSubmit={saveTaskChange}
+        />
+      )}
     </>
   );
 }
@@ -397,6 +467,140 @@ function getInitials(name) {
     .join('')
     .slice(0, 2)
     .toUpperCase() || 'EM';
+}
+
+function normalizeTaskRowForTeamLead(task, employeeDirectory = new Map()) {
+  const baseTask = task || {};
+  const member = employeeDirectory.get(normalizeLookupValue(baseTask.assignedToId))
+    || employeeDirectory.get(normalizeLookupValue(baseTask.assignedToName))
+    || employeeDirectory.get(normalizeLookupValue(baseTask.owner))
+    || null;
+
+  const employeeId = String(baseTask.assignedToId || member?.id || '').trim();
+  const employeeName = String(baseTask.assignedToName || baseTask.owner || member?.name || '').trim();
+  const projectName = String(baseTask.projectName || baseTask.project || '-').trim() || '-';
+  const moduleName = String(baseTask.title || baseTask.moduleName || '-').trim() || '-';
+  const rowKey = String(baseTask.clientTaskKey || baseTask.id || buildClientTaskKey(baseTask)).trim();
+
+  return {
+    id: rowKey,
+    taskId: String(baseTask.id || '').trim(),
+    taskKey: rowKey,
+    clientTaskKey: rowKey,
+    employeeId,
+    avatar: member?.avatar || getInitials(employeeName || employeeId),
+    name: employeeName || employeeId || '-',
+    projectName,
+    moduleName,
+    projectIds: baseTask.projectId ? [baseTask.projectId] : [],
+    projectNames: baseTask.projectName ? [baseTask.projectName] : [],
+    taskRows: [baseTask],
+    status: String(baseTask.status || 'Pending').trim() || 'Pending',
+  };
+}
+
+function getPrimaryTaskForMember(row) {
+  if (!row) {
+    return null;
+  }
+
+  const existingTask = Array.isArray(row.taskRows)
+    ? row.taskRows.find((task) => String(task?.clientTaskKey || '').trim() === String(row.clientTaskKey || row.taskKey || row.id || '').trim())
+      || row.taskRows.find((task) => String(task?.id || '').trim() && String(task.id).trim() === String(row.taskId || '').trim())
+      || row.taskRows.find((task) => task && String(task.id || '').trim())
+    : null;
+  if (existingTask) {
+    return existingTask;
+  }
+
+  const memberId = String(row.employeeId || row.id || row.assignedToId || '').trim();
+  const memberName = String(row.name || row.employee || row.assignedToName || '').trim();
+
+  return {
+    id: String(row.taskId || row.taskKey || row.clientTaskKey || '').trim(),
+    taskKey: String(row.taskKey || row.clientTaskKey || row.id || '').trim(),
+    clientTaskKey: String(row.clientTaskKey || row.taskKey || row.id || '').trim(),
+    title: row.moduleName && row.moduleName !== '-' ? row.moduleName.split(',')[0].trim() : '',
+    description: '',
+    owner: memberName || memberId,
+    assignedToId: memberId,
+    assignedToName: memberName,
+    assignedTo: memberName,
+    assignedById: getSessionValue('kavyaEmployeeId'),
+    assignedByName: getSessionValue('kavyaEmployeeName'),
+    assignedByRole: getSessionValue('kavyaRole') || 'teamLead',
+    priority: 'Medium',
+    dueDate: new Date().toISOString().slice(0, 10),
+    status: row.status || 'Pending',
+    teamLeadId: getSessionValue('kavyaEmployeeId'),
+    projectId: Array.isArray(row.projectIds) ? String(row.projectIds[0] || '') : '',
+    projectName: Array.isArray(row.projectNames) ? String(row.projectNames[0] || '') : '',
+    projectCode: Array.isArray(row.projectIds) ? String(row.projectIds[0] || '') : '',
+  };
+}
+
+function findTaskForMemberInProject(tasks, member, group) {
+  const memberId = String(getEmployeeId(member) || '').trim().toLowerCase();
+  const memberName = String(getEmployeeName(member) || '').trim().toLowerCase();
+  const projectId = String(group?.id || group?.projectId || group?.projectCode || group?.name || '').trim().toLowerCase();
+  const projectName = String(group?.name || '').trim().toLowerCase();
+  const projectCode = String(group?.projectCode || '').trim().toLowerCase();
+
+  return (Array.isArray(tasks) ? tasks : []).find((task) => {
+    const taskClientKey = String(task?.clientTaskKey || '').trim().toLowerCase();
+    const rowKey = `${memberId}::${projectId || projectName || projectCode}`;
+    if (taskClientKey && taskClientKey === rowKey) {
+      return true;
+    }
+
+    const assigneeValues = [task.assignedToId, task.assignedToName, task.owner].map((value) => String(value || '').trim().toLowerCase());
+    const taskProjectValues = [task.projectId, task.projectCode, task.projectName].map((value) => String(value || '').trim().toLowerCase());
+    const belongsToMember = assigneeValues.includes(memberId) || assigneeValues.includes(memberName);
+    const belongsToProject = !projectId || taskProjectValues.includes(projectId) || taskProjectValues.includes(projectName) || taskProjectValues.includes(projectCode);
+    return belongsToMember && belongsToProject;
+  }) || null;
+}
+
+function getTasksForMemberInProject(tasks, member, group) {
+  const memberId = String(getEmployeeId(member) || '').trim().toLowerCase();
+  const memberName = String(getEmployeeName(member) || '').trim().toLowerCase();
+  const projectId = String(group?.id || group?.projectId || group?.projectCode || group?.name || '').trim().toLowerCase();
+  const projectName = String(group?.name || '').trim().toLowerCase();
+  const projectCode = String(group?.projectCode || '').trim().toLowerCase();
+  const memberTaskId = String(member?.taskId || member?.clientTaskKey || member?.taskKey || '').trim().toLowerCase();
+
+  return (Array.isArray(tasks) ? tasks : []).filter((task) => {
+    if (memberTaskId) {
+      const taskClientKey = String(task?.clientTaskKey || '').trim().toLowerCase();
+      const taskId = String(task?.id || '').trim().toLowerCase();
+      return taskClientKey === memberTaskId || taskId === memberTaskId;
+    }
+
+    const assigneeValues = [task.assignedToId, task.assignedToName, task.owner].map((value) => String(value || '').trim().toLowerCase());
+    const taskProjectValues = [task.projectId, task.projectCode, task.projectName].map((value) => String(value || '').trim().toLowerCase());
+    const belongsToMember = assigneeValues.includes(memberId) || assigneeValues.includes(memberName);
+    const belongsToProject = !projectId || taskProjectValues.includes(projectId) || taskProjectValues.includes(projectName) || taskProjectValues.includes(projectCode);
+    return belongsToMember && belongsToProject;
+  });
+}
+
+function getRowTaskStatus(taskRows) {
+  const tasks = Array.isArray(taskRows) ? taskRows : [];
+  const firstNonEmpty = tasks.find((task) => String(task?.status || '').trim() !== '');
+  return firstNonEmpty ? firstNonEmpty.status : '';
+}
+
+function buildClientTaskKey(task) {
+  const assignee = String(task?.assignedToId || task?.assignedToName || task?.owner || '').trim().toLowerCase();
+  const project = String(task?.projectId || task?.projectCode || task?.projectName || '').trim().toLowerCase();
+  return [assignee, project].filter(Boolean).join('::') || String(task?.id || '').trim().toLowerCase();
+}
+
+function attachClientTaskKeys(taskRows) {
+  return (Array.isArray(taskRows) ? taskRows : []).map((task) => ({
+    ...task,
+    clientTaskKey: String(task?.clientTaskKey || buildClientTaskKey(task)).trim(),
+  }));
 }
 
 function DefaultMyTeamView() {
@@ -691,6 +895,210 @@ function getMemberTaskStatus(memberTasks = [], fallback = '-') {
 }
 
 export default MyTeam;
+
+function TaskAssignmentModal({ mode, form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
+  const isEditMode = mode === 'edit';
+
+  return (
+    <div className="payroll-modal-backdrop" role="presentation">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Assign task">
+        <div className="payroll-modal-head">
+          <h3>{isEditMode ? 'Edit Task' : 'Assign Task'}</h3>
+          <button type="button" onClick={onClose} aria-label="Close task modal"><i className="ri-close-line" aria-hidden="true" /></button>
+        </div>
+
+        <form className="salary-form" onSubmit={onSubmit}>
+          <label className="field">
+            <span>Project</span>
+            <select
+              value={form.projectId || ''}
+              onChange={(event) => setForm((current) => ({ ...current, projectId: event.target.value }))}
+            >
+              <option value="">Select project</option>
+              {projectOptions.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name} - {project.projectCode || project.id}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Task Title</span>
+            <input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter task title" />
+          </label>
+
+          <label className="field">
+            <span>Assignee</span>
+            <select value={form.assignedToId || ''} onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}>
+              <option value="">Select employee</option>
+              {assigneeOptions.map((employee) => {
+                const employeeId = getEmployeeId(employee);
+                return <option key={employeeId} value={employeeId}>{getEmployeeName(employee)} - {employee.department || '-'}</option>;
+              })}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Priority</span>
+            <select value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}>
+              <option>High</option>
+              <option>Medium</option>
+              <option>Low</option>
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Due Date</span>
+            <input type="date" value={form.dueDate} onChange={(event) => setForm((current) => ({ ...current, dueDate: event.target.value }))} />
+          </label>
+
+          <label className="field">
+            <span>Status</span>
+            <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+              <option>Pending</option>
+              <option>Active</option>
+              <option>Approved</option>
+              <option>Completed</option>
+            </select>
+          </label>
+
+          <label className="field full">
+            <span>Description</span>
+            <textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Optional task details" />
+          </label>
+
+          {isTeamLead && selectedProject && (
+            <div className="task-summary-card task-summary-card-compact">
+              <small>{selectedProject.projectCode || selectedProject.id}</small>
+              <strong>{selectedProject.name}</strong>
+              <small>Eligible employees: {assigneeOptions.length}</small>
+            </div>
+          )}
+
+          <div className="salary-form-actions">
+            <button className="payroll-primary" type="submit">{isEditMode ? 'Update Task' : 'Save Task'}</button>
+            <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function AssignmentSummaryModal({ assignmentData, onClose }) {
+  return (
+    <div className="payroll-modal-backdrop" role="presentation">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Assignment summary">
+        <div className="payroll-modal-head">
+          <h3>Assignment Summary</h3>
+          <button type="button" onClick={onClose} aria-label="Close assignment summary">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="task-summary-card" style={{ display: 'grid', gap: '0.9rem' }}>
+          <div className="task-summary-card-compact">
+            <small>Total Projects</small>
+            <strong>{assignmentData.totalProjects}</strong>
+          </div>
+          <div className="task-summary-card-compact">
+            <small>Total Team Members</small>
+            <strong>{assignmentData.totalTeamMembers}</strong>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: '0.75rem', marginTop: '1rem' }}>
+          {assignmentData.groups.length > 0 ? assignmentData.groups.map((group) => (
+            <div key={group.id} className="task-summary-card task-summary-card-compact">
+              <small>{group.projectCode || group.id}</small>
+              <strong>{group.name}</strong>
+              <small>{group.teamMemberCount} member{group.teamMemberCount === 1 ? '' : 's'}</small>
+            </div>
+          )) : (
+            <p className="project-empty-state">No assignment summary data available.</p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function getTaskProjectOptions(projects, currentEmployeeId, role) {
+  const visibleProjects = Array.isArray(projects) ? projects : [];
+  if (role === 'teamLead') {
+    return visibleProjects.filter((project) => String(project.teamLeadId || '').trim() === String(currentEmployeeId || '').trim());
+  }
+
+  return visibleProjects;
+}
+
+function getTaskAssigneeOptions(projectId, employees, currentEmployeeId, projects, role) {
+  const currentProject = (Array.isArray(projects) ? projects : []).find((project) => String(project.id || '').trim() === String(projectId || '').trim());
+  const teamLeadOptions = currentProject
+    ? getProjectAssigneeOptions(currentProject, employees, currentEmployeeId)
+    : (Array.isArray(employees) ? employees : []).filter((employee) => isEligibleTeamMember(employee));
+
+  if (role === 'teamLead') {
+    return teamLeadOptions;
+  }
+
+  return (Array.isArray(employees) ? employees : []).filter((employee) => isEligibleTeamMember(employee));
+}
+
+function buildTaskFormFromTask(task) {
+  return {
+    title: task?.title || '',
+    projectId: task?.projectId || '',
+    assignedToId: task?.assignedToId || '',
+    priority: task?.priority || 'Medium',
+    dueDate: task?.dueDate || task?.due || new Date().toISOString().slice(0, 10),
+    status: task?.status || 'Pending',
+    description: task?.description || '',
+  };
+}
+
+function getEmptyTaskForm() {
+  return {
+    title: '',
+    projectId: '',
+    assignedToId: '',
+    priority: 'Medium',
+    dueDate: new Date().toISOString().slice(0, 10),
+    status: 'Pending',
+    description: '',
+  };
+}
+
+function buildTaskPayload({ task, form, assignee, project, role, currentEmployeeId, currentEmployeeName, employeeLookup }) {
+  const assigneeId = getEmployeeId(assignee);
+  const assigneeName = getEmployeeName(assignee);
+  const resolvedProject = project || null;
+  const assignedByName = task?.assignedByName || currentEmployeeName || 'Team Lead';
+  const existingEmployee = employeeLookup?.get(normalizeLookupValue(assigneeId)) || null;
+
+  return {
+    id: task?.id,
+    title: String(form.title || '').trim(),
+    description: String(form.description || '').trim(),
+    owner: assigneeName,
+    assignedToId: assigneeId,
+    assignedToName: assigneeName,
+    assignedTo: assigneeName,
+    assignedById: task?.assignedById || currentEmployeeId,
+    assignedByName,
+    assignedByRole: task?.assignedByRole || role,
+    priority: form.priority,
+    dueDate: form.dueDate,
+    status: form.status,
+    teamLeadId: task?.teamLeadId || currentEmployeeId,
+    projectId: resolvedProject?.id || task?.projectId || '',
+    projectName: resolvedProject?.name || task?.projectName || '',
+    projectCode: resolvedProject?.projectCode || task?.projectCode || '',
+    assignedToStatus: existingEmployee?.status || assignee?.status || '',
+    assignedToDepartment: existingEmployee?.department || assignee?.department || '',
+  };
+}
 
 
 

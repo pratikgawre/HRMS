@@ -5,6 +5,7 @@ import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,7 +38,7 @@ public class EmployeeController {
       @RequestBody Employee employee,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Employee saved = employeeRepository.save(employee);
+    Employee saved = employeeRepository.save(Objects.requireNonNull(employee));
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Employee profile saved",
@@ -56,7 +57,7 @@ public class EmployeeController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     long existingCount = employeeRepository.count();
-    List<Employee> saved = employeeRepository.saveAll(employees);
+    List<Employee> saved = employeeRepository.saveAll(new java.util.ArrayList<>(Objects.requireNonNull(employees)));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -78,7 +79,7 @@ public class EmployeeController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     employee.setEmployeeId(employeeId);
-    Employee saved = employeeRepository.save(employee);
+    Employee saved = employeeRepository.save(Objects.requireNonNull(employee));
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Employee profile updated",
@@ -96,14 +97,15 @@ public class EmployeeController {
       @PathVariable String employeeId,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Employee current = employeeRepository.findById(employeeId).orElse(null);
-    employeeRepository.deleteById(employeeId);
+    String resolvedEmployeeId = Objects.requireNonNull(employeeId, "id must not be null");
+    Employee current = employeeRepository.findById(resolvedEmployeeId).orElse(null);
+    employeeRepository.deleteById(resolvedEmployeeId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Employee profile removed",
         buildEmployeeMessage(current, "removed"),
         "employee",
-        employeeId,
+        resolvedEmployeeId,
         accessRole,
         "System",
         userId);

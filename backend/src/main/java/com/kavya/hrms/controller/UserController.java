@@ -25,12 +25,12 @@ public class UserController {
 
   @GetMapping
   public List<AppUser> list() {
-    return appUserRepository.findAll();
+    return new ArrayList<>(appUserRepository.findAll());
   }
 
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
-    return appUserRepository.saveAll(dedupeUsers(users));
+    return appUserRepository.saveAll(new ArrayList<>(dedupeUsers(users)));
   }
 
   private List<AppUser> dedupeUsers(List<AppUser> users) {

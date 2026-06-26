@@ -59,10 +59,9 @@ public class PayrollGenerationService {
     List<LeaveRequest> leaveRequests = leaveRequestRepository.findAll();
     Map<String, PayrollRecord> existingRecords = new HashMap<>();
     for (PayrollRecord record : payrollRecordRepository.findByMonthAndYear(normalizedMonth, normalizedYear)) {
-      if (record == null || record.getEmployeeId() == null || record.getEmployeeId().isBlank()) {
-        continue;
+      if (record != null && record.getEmployeeId() != null && !record.getEmployeeId().isBlank()) {
+        existingRecords.put(record.getEmployeeId(), record);
       }
-      existingRecords.put(record.getEmployeeId(), record);
     }
 
     List<PayrollRecord> generatedRecords = new ArrayList<>();
@@ -83,7 +82,7 @@ public class PayrollGenerationService {
       return List.of();
     }
 
-    return payrollRecordRepository.saveAll(generatedRecords);
+    return payrollRecordRepository.saveAll(new ArrayList<>(generatedRecords));
   }
 
   private PayrollRecord buildPayrollRecord(
