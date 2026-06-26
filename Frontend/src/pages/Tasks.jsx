@@ -961,7 +961,7 @@ function EmployeeTasksView() {
   );
 }
 
-function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
+function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
   const teamLeadMode = Boolean(isTeamLead);
   const isEditMode = mode === 'edit';
 
