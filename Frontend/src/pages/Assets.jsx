@@ -553,6 +553,16 @@ function Assets() {
     { key: 'id', label: 'Asset ID' },
     { key: 'assetName', label: 'Asset' },
     { key: 'category', label: 'Category' },
+    {
+      key: 'currentDate',
+      label: 'Current Date',
+      render: (asset) => <span>{formatDateForDisplay(asset.currentDate)}</span>,
+    },
+    {
+      key: 'dueDate',
+      label: 'Due Date',
+      render: (asset) => <span>{formatDateForDisplay(asset.dueDate)}</span>,
+    },
     { key: 'assignedTo', label: 'Assigned To' },
     { key: 'status', label: 'Status' },
     { key: 'location', label: 'Location' },
@@ -571,8 +581,20 @@ function Assets() {
   const requestColumns = [
     { key: 'id', label: 'Asset ID' },
     { key: 'assetName', label: 'Asset' },
+    { key: 'category', label: 'Category' },
+    {
+      key: 'currentDate',
+      label: 'Current Date',
+      render: (asset) => <span>{formatDateForDisplay(asset.currentDate)}</span>,
+    },
+    {
+      key: 'dueDate',
+      label: 'Due Date',
+      render: (asset) => <span>{formatDateForDisplay(asset.dueDate)}</span>,
+    },
     { key: 'assignedTo', label: 'Assigned To' },
     { key: 'status', label: 'Request Status' },
+    { key: 'location', label: 'Location' },
   ];
 
   const filteredAssets = useMemo(() => {

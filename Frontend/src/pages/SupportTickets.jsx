@@ -269,6 +269,7 @@ function SupportTickets() {
                       {nonEmployeeTableColumns.map((column) => (
                         <td key={column} style={{ padding: '12px' }}>
                           {renderSupportTableCell(column, ticket, {
+                            role,
                             canUpdateTicketStatus,
                             handleStatusUpdate,
                             useHrTicketHistoryLayout,
