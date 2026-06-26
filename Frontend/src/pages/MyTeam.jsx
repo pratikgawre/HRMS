@@ -21,7 +21,7 @@ function TeamLeadMyTeamView({ role }) {
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
   const currentTeamLeadIdentity = {
     employeeId: currentEmployeeId,
-    employeeName: getSessionValue('kavyaEmployeeName') || getSessionValue('kavyaUserName') || '',
+    employeeName: getSessionValue('kavyaEmployeeName') || '',
   };
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -44,7 +44,7 @@ function TeamLeadMyTeamView({ role }) {
 
     const refreshTeamData = () => {
       Promise.all([
-        safeApiRequest(`/team-lead/${currentEmployeeId}/projects`, []),
+        loadTeamLeadProjects(),
         safeApiRequest(`/tasks/assigned-by/${currentEmployeeId}`, []),
       ]).then(([projectRows, assignmentRows]) => {
         if (!active) {
@@ -74,6 +74,8 @@ function TeamLeadMyTeamView({ role }) {
   }, [currentEmployeeId]);
 
   const assignmentData = useMemo(
+    () => buildTeamLeadAssignmentGroups(projects, employees, currentTeamLeadIdentity),
+    [currentTeamLeadIdentity, employees, projects],
     () => buildTeamLeadAssignmentGroups(projects, [], currentEmployeeId),
     [currentEmployeeId, projects],
   );

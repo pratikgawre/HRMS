@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
@@ -8,7 +8,7 @@ import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitials } from '../utils/user-management.js';
-import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
+import { getNextTaskCode, loadTasksWithSeed } from '../utils/taskStorage.js';
 import {
   getEmployeeId,
   getEmployeeName,
@@ -491,9 +491,9 @@ function Tasks() {
     };
 
     try {
-      const saved = await apiRequest(`/tasks/${selectedTask.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(serializeTaskForApi(nextTask)),
+      const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextTask.status }),
       });
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
@@ -651,6 +651,8 @@ function EmployeeTasksView() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedDetailsTask, setSelectedDetailsTask] = useState(null);
   const [message, setMessage] = useState('');
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
   const [form, setForm] = useState(getEmptyTaskForm());
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
@@ -684,6 +686,26 @@ function EmployeeTasksView() {
       window.removeEventListener('kavyaTasksChanged', refreshData);
     };
   }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+    }, 2400);
+
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, [toast]);
 
   const filteredRows = useMemo(() => {
     let rows = taskRows.filter((task) => isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee));
@@ -810,9 +832,9 @@ function EmployeeTasksView() {
     };
 
     try {
-      const saved = await apiRequest(`/tasks/${selectedTask.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(serializeTaskForApi(nextTask)),
+      const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextTask.status }),
       });
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
@@ -820,6 +842,10 @@ function EmployeeTasksView() {
       setIsStatusModalOpen(false);
       setSelectedTask(null);
       setMessage('Task status updated successfully.');
+      setToast({
+        message: 'Task status updated successfully.',
+        type: 'success',
+      });
     } catch {
       setMessage('Task status could not be updated right now.');
     }
@@ -835,6 +861,21 @@ function EmployeeTasksView() {
         <div className="user-alert" role="status">
           <i className="ri-checkbox-circle-line" aria-hidden="true" />
           <span>{message}</span>
+        </div>
+      )}
+      {toast && (
+        <div className={`project-toast is-${toast.type || 'success'}`} role="status" aria-live="polite">
+          <span className="project-toast__icon" aria-hidden="true">
+            <i className="ri-checkbox-circle-fill" />
+          </span>
+          <div className="project-toast__copy">
+            <span>Success</span>
+            <strong>{toast.message}</strong>
+          </div>
+          <button type="button" className="project-toast__close" onClick={() => setToast(null)} aria-label="Dismiss notification">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+          <span className="project-toast__accent" aria-hidden="true" />
         </div>
       )}
       <section className="dashboard-card-grid" style={{ marginBottom: '0.9rem' }}>
@@ -937,9 +978,9 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
 
   return (
     <div className="payroll-modal-backdrop" role="presentation">
-      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Assign task">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label={isEditMode ? 'Edit task' : 'Assign task'}>
         <div className="payroll-modal-head">
-          <h3>Assign Task</h3>
+          <h3>{isEditMode ? 'Edit Task' : 'Assign Task'}</h3>
           <button type="button" onClick={onClose} aria-label="Close task modal"><i className="ri-close-line" aria-hidden="true" /></button>
         </div>
 
@@ -1066,7 +1107,58 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
   );
 }
 
+function TaskDetailsModal({ task, onClose }) {
+  if (!task) {
+    return null;
+  }
+
+  const dueIndicator = getDueIndicator(task);
+
+  return (
+    <div className="payroll-modal-backdrop" role="presentation">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Task details">
+        <div className="payroll-modal-head">
+          <h3>Task Details</h3>
+          <button type="button" onClick={onClose} aria-label="Close task details">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="task-summary-card" style={{ display: 'grid', gap: '0.75rem' }}>
+          <div>
+            <p className="eyebrow">{task.id}</p>
+            <strong>{task.title}</strong>
+          </div>
+          <small>Assigned by: {task.owner || '-'}</small>
+          <small>Priority: {task.priority || 'Medium'}</small>
+          <small>Status: {task.status || 'Pending'}</small>
+          <small>Due date: {task.dueDate || task.due || '-'}</small>
+          {dueIndicator ? (
+            <small>
+              Deadline: {dueIndicator.label}
+            </small>
+          ) : null}
+          {task.projectName || task.projectCode ? (
+            <small>Project: {task.projectName || '-'}{task.projectCode ? ` (${task.projectCode})` : ''}</small>
+          ) : null}
+          {task.description ? <p style={{ margin: 0, color: 'var(--muted-text, #667085)' }}>{task.description}</p> : null}
+        </div>
+
+        <div className="salary-form-actions">
+          <button className="payroll-primary" type="button" onClick={onClose}>Close</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
+  const statusOptions = taskStatusOptions.filter((item) => item !== 'Approved');
+  const handleSubmit = (event) => {
+    event?.preventDefault?.();
+    onSubmit(event);
+  };
+
   return (
     <div className="payroll-modal-backdrop" role="presentation">
       <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Update task status">
@@ -1075,7 +1167,7 @@ function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
           <button type="button" onClick={onClose} aria-label="Close status modal"><i className="ri-close-line" aria-hidden="true" /></button>
         </div>
 
-        <form className="salary-form" onSubmit={onSubmit}>
+        <form className="salary-form" onSubmit={handleSubmit}>
           <div className="task-summary-card">
             <p className="eyebrow">{task.id}</p>
             <strong>{task.title}</strong>
@@ -1085,7 +1177,7 @@ function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
           <label className="field">
             <span>Status</span>
             <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-              {taskStatusOptions.map((item) => <option key={item}>{item}</option>)}
+              {statusOptions.map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
           <div className="salary-form-actions">

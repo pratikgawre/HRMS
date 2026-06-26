@@ -333,6 +333,10 @@ public class AssetController {
       asset.setAssignedTo(matched.getEmployeeName());
     }
 
+    asset.setEmployeeName(
+        !normalize(matched.getEmployeeName()).isBlank() ? matched.getEmployeeName() : matched.getEmployeeId());
+    asset.setAssignedDate(matched.getAssignedDate());
+
     if (!normalize(matched.getStatus()).isBlank()) {
       asset.setStatus(matched.getStatus());
     }
@@ -476,6 +480,9 @@ public class AssetController {
     asset.setStatus(!normalize(assignment.getStatus()).isBlank() ? assignment.getStatus() : "Assigned");
     asset.setAssignedTo(
         !normalize(assignment.getEmployeeName()).isBlank() ? assignment.getEmployeeName() : assignment.getEmployeeId());
+    asset.setEmployeeName(
+        !normalize(assignment.getEmployeeName()).isBlank() ? assignment.getEmployeeName() : assignment.getEmployeeId());
+    asset.setAssignedDate(assignment.getAssignedDate());
     asset.setAssignedToEmployeeId(!normalize(assignment.getEmployeeId()).isBlank() ? assignment.getEmployeeId() : "");
     asset.setCurrentDate(firstNonBlank(assignment.getAssignedDate()));
     asset.setDueDate(firstNonBlank(assignment.getDueDate(), assignment.getReturnDate()));
