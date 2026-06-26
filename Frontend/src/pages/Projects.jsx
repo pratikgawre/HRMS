@@ -59,6 +59,7 @@ function Projects() {
   const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isAdmin = role === 'admin';
+  const isHrReadOnlyProjects = role === 'hr';
   const isProjectManager = role === 'projectManager';
   const canManage = isAdmin || isProjectManager;
   const managerName = getSessionValue('kavyaEmployeeName') || (isAdmin ? 'Admin' : 'Project Manager');
@@ -240,7 +241,7 @@ function Projects() {
       || visibleProjects[0]
       || null
   ), [selectedProjectId, visibleProjects]);
-  const showInlineProjectDetails = role === 'hr' && activeTab === 'list' && Boolean(selectedProject);
+  const showInlineProjectDetails = role === 'hr' && !isHrReadOnlyProjects && activeTab === 'list' && Boolean(selectedProject);
   const selectedProjectTeamMembers = useMemo(
     () => getProjectTeamMemberDetails(selectedProject, employeeDirectory),
     [employeeDirectory, selectedProject],
@@ -327,7 +328,7 @@ function Projects() {
         </div>
       ),
     });
-  } else {
+  } else if (!isHrReadOnlyProjects) {
     projectTableColumns.push({
       key: 'controls',
       label: 'View',
@@ -668,8 +669,8 @@ function Projects() {
                   columns={projectTableColumns}
                   rows={visibleProjects}
                   emptyMessage="No projects available."
-                  onRowClick={(row) => openProject(row, { scrollToDetails: true })}
-                  getRowClassName={(row) => (row.id === selectedProjectId ? 'is-selected-row' : '')}
+                  onRowClick={isHrReadOnlyProjects ? undefined : (row) => openProject(row, { scrollToDetails: true })}
+                  getRowClassName={isHrReadOnlyProjects ? undefined : (row) => (row.id === selectedProjectId ? 'is-selected-row' : '')}
                 />
                 {showInlineProjectDetails && selectedProject && (
                   <div className="project-inline-details" id={PROJECT_INLINE_DETAILS_ID}>

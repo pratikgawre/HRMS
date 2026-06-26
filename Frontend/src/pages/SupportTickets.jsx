@@ -31,6 +31,8 @@ function SupportTickets() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const isEmployeeView = role === 'employee';
   const isHrSupportView = role === 'hr';
+  const isAdminSupportView = role === 'admin';
+  const useHrTicketHistoryLayout = isHrSupportView || isAdminSupportView;
   const canUpdateTicketStatus = role === 'admin' || role === 'hr' || role === 'teamLead';
   const currentEmployee = getCurrentEmployeeIdentity();
   const [tickets, setTickets] = useState([]);
@@ -85,7 +87,7 @@ function SupportTickets() {
       : ticketColumns
   ), [isEmployeeView]);
 
-  const nonEmployeeTableColumns = isHrSupportView
+  const nonEmployeeTableColumns = useHrTicketHistoryLayout
     ? ['createdDate', 'id', 'employeeName', 'title', 'category', 'priority', 'status']
     : ['id', 'employeeName', 'title', 'category', 'priority', 'status', 'createdDate'];
 
@@ -269,7 +271,7 @@ function SupportTickets() {
                           {renderSupportTableCell(column, ticket, {
                             canUpdateTicketStatus,
                             handleStatusUpdate,
-                            isHrSupportView,
+                            useHrTicketHistoryLayout,
                           })}
                         </td>
                       ))}
@@ -316,7 +318,7 @@ function getSupportColumnLabel(column) {
 }
 
 function renderSupportTableCell(column, ticket, context) {
-  const { canUpdateTicketStatus, handleStatusUpdate, isHrSupportView } = context;
+  const { canUpdateTicketStatus, handleStatusUpdate, useHrTicketHistoryLayout } = context;
 
   switch (column) {
     case 'createdDate':
@@ -334,7 +336,7 @@ function renderSupportTableCell(column, ticket, context) {
     case 'status':
       return canUpdateTicketStatus ? (
         <select
-          className={isHrSupportView ? 'hr-support-status-select' : ''}
+          className={useHrTicketHistoryLayout ? 'hr-support-status-select' : ''}
           value={ticket.status}
           onChange={(e) => handleStatusUpdate(ticket.id || ticket.ticketId, ticket.mongoId || ticket._id || ticket.id, e.target.value)}
         >
