@@ -71,7 +71,6 @@ public class AnnouncementController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<Announcement> bulkSave(@RequestBody List<Announcement> announcements) {
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
