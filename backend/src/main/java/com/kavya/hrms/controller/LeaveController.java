@@ -53,7 +53,6 @@ public class LeaveController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<LeaveRequest> bulkSave(@RequestBody List<LeaveRequest> requests) {
     long existingCount = leaveRequestRepository.count();
     leaveRequestRepository.deleteAll();

@@ -1,5 +1,14 @@
 package com.kavya.hrms.config;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.NonNull;
+
 import com.kavya.hrms.model.Announcement;
 import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.LeaveRequest;
@@ -13,18 +22,12 @@ import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
 import com.kavya.hrms.repository.TaskRepository;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.List;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.lang.NonNull;
 
 @Configuration
 @SuppressWarnings("null")
 public class DataSeeder {
   @Bean
+  @SuppressWarnings("unused")
   CommandLineRunner seedData(
       AppUserRepository appUserRepository,
       LeaveRequestRepository leaveRequestRepository,

@@ -1,10 +1,9 @@
 package com.kavya.hrms.controller;
 
-import com.kavya.hrms.model.AssetRequest;
-import com.kavya.hrms.repository.AssetRequestRepository;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -14,6 +13,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.kavya.hrms.model.AssetRequest;
+import com.kavya.hrms.repository.AssetRequestRepository;
 
 @RestController
 @RequestMapping("/api/asset-requests")
@@ -43,7 +45,6 @@ public class AssetRequestController {
   }
 
   @PatchMapping("/{id}/status")
-  @SuppressWarnings("null")
   public ResponseEntity<AssetRequest> updateStatus(@PathVariable String id, @RequestBody RequestStatusUpdate payload) {
     return repository.findById(id)
         .map((request) -> {
