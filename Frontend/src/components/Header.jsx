@@ -265,6 +265,7 @@ function getSearchRoutes(role) {
       { path: '/admin/leave-management', keywords: ['leave', 'vacation', 'absence'] },
       { path: '/admin/support', keywords: ['support', 'ticket', 'help'] },
       { path: '/admin/assets', keywords: ['asset', 'assets', 'inventory'] },
+      { path: '/admin/tasks', keywords: ['task', 'tasks', 'assignment'] },
       { path: '/admin/projects', keywords: ['project', 'projects', 'delivery'] },
       { path: '/admin/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
       { path: '/admin/profile', keywords: ['profile', 'account', 'me'] },
@@ -398,7 +399,7 @@ function getNotificationTargetPath(notification, role, roleBasePath) {
 
   if (normalizedSourceType === 'task' || normalizedText.includes('task')) {
     return getRolePath(role, {
-      admin: '/admin/dashboard',
+      admin: '/admin/tasks',
       hr: '/hr/tasks',
       teamLead: '/team-lead/tasks',
       projectManager: '/project-manager/tasks',

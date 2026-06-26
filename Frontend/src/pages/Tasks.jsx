@@ -510,7 +510,7 @@ function Tasks() {
   return (
     <>
       <Hero
-        title={role === 'employee' ? 'My Tasks' : isTeamLead || role === 'projectManager' ? 'Task Assignment' : 'Task Management'}
+        title={role === 'employee' ? 'My Tasks' : isTeamLead || role === 'projectManager' || role === 'admin' ? 'Task Assignment' : 'Task Management'}
         copy={role === 'employee'
           ? 'Track your assigned tasks, update the current status, and stay on top of due dates.'
           : 'Assign tasks, track priority and due date, and keep delivery moving across the team.'}

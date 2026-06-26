@@ -267,6 +267,7 @@ function SupportTickets() {
                       {nonEmployeeTableColumns.map((column) => (
                         <td key={column} style={{ padding: '12px' }}>
                           {renderSupportTableCell(column, ticket, {
+                            role,
                             canUpdateTicketStatus,
                             handleStatusUpdate,
                             isHrSupportView,
@@ -316,7 +317,7 @@ function getSupportColumnLabel(column) {
 }
 
 function renderSupportTableCell(column, ticket, context) {
-  const { canUpdateTicketStatus, handleStatusUpdate, isHrSupportView } = context;
+  const { role, canUpdateTicketStatus, handleStatusUpdate, isHrSupportView } = context;
 
   switch (column) {
     case 'createdDate':
@@ -334,7 +335,7 @@ function renderSupportTableCell(column, ticket, context) {
     case 'status':
       return canUpdateTicketStatus ? (
         <select
-          className={isHrSupportView ? 'hr-support-status-select' : ''}
+          className={role === 'admin' || isHrSupportView ? 'hr-support-status-select' : ''}
           value={ticket.status}
           onChange={(e) => handleStatusUpdate(ticket.id || ticket.ticketId, ticket.mongoId || ticket._id || ticket.id, e.target.value)}
         >
