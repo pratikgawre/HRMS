@@ -6,6 +6,7 @@ import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { apiRequest } from '../utils/api.js';
 
 const categories = [
+  'Select category',
   'Technical Issue',
   'Login Issue',
   'Attendance Issue',
@@ -14,7 +15,7 @@ const categories = [
   'Other',
 ];
 
-const priorities = ['Low', 'Medium', 'High', 'Urgent'];
+const priorities = [ 'Select Priority', 'Low', 'Medium', 'High', 'Urgent'];
 const statusStages = ['Pending', 'Open', 'In Process', 'Completed'];
 
 const ticketColumns = [
@@ -39,7 +40,7 @@ function SupportTickets() {
   const [form, setForm] = useState({
     title: '',
     category: categories[0],
-    priority: priorities[1],
+    priority: priorities[0],
     description: '',
     screenshot: null,
   });
@@ -88,6 +89,19 @@ function SupportTickets() {
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: '' }));
     setSuccessMessage('');
+  };
+
+  const resetForm = () => {
+    setForm({
+      title: '',
+      category: categories[0],
+      priority: priorities[1],
+      description: '',
+      screenshot: null,
+    });
+    setErrors({});
+    setSuccessMessage('');
+    setErrorMessage('');
   };
 
   const handleStatusUpdate = async (ticketId, mongoId, newStatus) => {
@@ -170,7 +184,7 @@ function SupportTickets() {
       />
 
       <div className="support-layout">
-        <Section title="Raise Support Ticket" action="New request">
+        <Section title="Raise Support Ticket" action="New request" actionOnClick={resetForm}>
           {successMessage && (
             <div className="support-alert success" role="status">
               <i className="ri-checkbox-circle-line" aria-hidden="true" />

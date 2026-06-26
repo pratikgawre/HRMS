@@ -65,7 +65,7 @@ public class TeamLeadController {
     project.setStatus(source.getStatus());
 
     List<ProjectMember> members = resolveProjectMembers(source, teamLeadId, employeeIndex);
-    project.setTeamMembers(members.stream().map(ProjectMember::getId).filter(Objects::nonNull).collect(Collectors.toList()));
+    project.setTeamMembers(members.stream().map(member -> member == null ? null : member.getId()).filter(Objects::nonNull).collect(Collectors.toList()));
     project.setTeamMemberDetails(members);
     return project;
   }

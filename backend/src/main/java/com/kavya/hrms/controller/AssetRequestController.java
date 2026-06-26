@@ -5,6 +5,7 @@ import com.kavya.hrms.repository.AssetRequestRepository;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -43,7 +44,8 @@ public class AssetRequestController {
 
   @PatchMapping("/{id}/status")
   public ResponseEntity<AssetRequest> updateStatus(@PathVariable String id, @RequestBody RequestStatusUpdate payload) {
-    return repository.findById(id)
+    String requestId = Objects.requireNonNull(id, "id must not be null");
+    return repository.findById(requestId)
       .map((request) -> {
         request.setStatus(payload.getStatus());
         request.setResolution(payload.getResolution());

@@ -60,7 +60,8 @@ function Projects() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const isAdmin = role === 'admin';
   const isProjectManager = role === 'projectManager';
-  const canManage = isAdmin || isProjectManager;
+  const isTeamLead = role === 'teamLead';
+  const canManage = isAdmin || isProjectManager || isTeamLead;
   const managerName = getSessionValue('kavyaEmployeeName') || (isAdmin ? 'Admin' : 'Project Manager');
   const managerId = getSessionValue('kavyaEmployeeId') || '';
 
@@ -80,6 +81,8 @@ function Projects() {
   const [selectedTeamMembers, setSelectedTeamMembers] = useState([]);
   const [isTeamDraftDirty, setIsTeamDraftDirty] = useState(false);
   const [isTeamRosterOpen, setIsTeamRosterOpen] = useState(false);
+  const [memberEditTarget, setMemberEditTarget] = useState(null);
+  const [memberEditValue, setMemberEditValue] = useState('');
   const [savePopup, setSavePopup] = useState(null);
 
   function showProjectToast(text, tone = 'success') {
@@ -319,7 +322,7 @@ function Projects() {
           <button type="button" onClick={() => startEditingProject(row)}>
             Edit
           </button>
-          {isAdmin && (
+          {canManage && (
             <button type="button" className="danger" onClick={() => removeProject(row)}>
               Delete
             </button>
@@ -374,6 +377,8 @@ function Projects() {
 
   function closeTeamRoster() {
     setIsTeamRosterOpen(false);
+    setMemberEditTarget(null);
+    setMemberEditValue('');
   }
 
   function startEditingProject(project) {
@@ -385,6 +390,113 @@ function Projects() {
     setMessage('');
     showProjectToast(`Editing ${project.name}.`, 'success');
     setActiveTab('create');
+  }
+
+  function openMemberEdit(member) {
+    if (!selectedProject || !member) {
+      return;
+    }
+
+    setMemberEditTarget(member);
+    setMemberEditValue(member.id || member.employeeCode || '');
+  }
+
+  async function saveMemberAssignment() {
+    if (!selectedProject || !memberEditTarget) {
+      return;
+    }
+
+    const nextMemberId = String(memberEditValue || '').trim();
+    if (!nextMemberId) {
+      showProjectToast('Please select a replacement assign.', 'error');
+      return;
+    }
+
+    if (!employeeLookup.has(nextMemberId)) {
+      showProjectToast('Selected employee was not found.', 'error');
+      return;
+    }
+
+    const targetKey = normalizeLookupValue(memberEditTarget.id || memberEditTarget.employeeCode);
+    const updatedTeamMembers = selectedTeamMembers.map((memberId) => (
+      normalizeLookupValue(memberId) === targetKey ? nextMemberId : memberId
+    ));
+
+    const payload = buildProjectPayload({
+      ...selectedProject,
+      teamMembers: updatedTeamMembers,
+      teamMemberDetails: buildTeamMemberDetails(updatedTeamMembers, employeeDirectory),
+      team: buildTeamLabel(updatedTeamMembers, employeeLookup),
+    });
+
+    try {
+      const savedProject = await apiRequest(`/projects/${selectedProject.backendId || selectedProject.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(serializeProjectForApi(payload)),
+      });
+      const normalized = normalizeProjectRows([savedProject || payload])[0];
+      setProjects((current) => current.map((project) => (
+        project.id === normalized.id || project.backendId === normalized.id
+          ? normalized
+          : project
+      )));
+      setSelectedProjectId(normalized.id);
+      setSelectedTeamMembers(Array.isArray(normalized.teamMembers) ? normalized.teamMembers : []);
+      setIsTeamDraftDirty(false);
+      setMemberEditTarget(null);
+      setMemberEditValue('');
+      setMessage('Assignment updated successfully.');
+      showProjectToast('Assignment updated successfully.', 'success');
+      await loadProjectsFromServer(setProjects, setSelectedProjectId);
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
+    } catch {
+      setMessage('Assignment could not be updated.');
+      showProjectToast('Assignment could not be updated.', 'error');
+    }
+  }
+
+  async function deleteMemberAssignment(member) {
+    if (!selectedProject || !member) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete assignment for ${member.name || member.displayName || member.id}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const targetKey = normalizeLookupValue(member.id || member.employeeCode);
+    const updatedTeamMembers = selectedTeamMembers.filter((memberId) => normalizeLookupValue(memberId) !== targetKey);
+
+    const payload = buildProjectPayload({
+      ...selectedProject,
+      teamMembers: updatedTeamMembers,
+      teamMemberDetails: buildTeamMemberDetails(updatedTeamMembers, employeeDirectory),
+      team: buildTeamLabel(updatedTeamMembers, employeeLookup),
+    });
+
+    try {
+      const savedProject = await apiRequest(`/projects/${selectedProject.backendId || selectedProject.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(serializeProjectForApi(payload)),
+      });
+      const normalized = normalizeProjectRows([savedProject || payload])[0];
+      setProjects((current) => current.map((project) => (
+        project.id === normalized.id || project.backendId === normalized.id
+          ? normalized
+          : project
+      )));
+      setSelectedProjectId(normalized.id);
+      setSelectedTeamMembers(Array.isArray(normalized.teamMembers) ? normalized.teamMembers : []);
+      setIsTeamDraftDirty(false);
+      setMessage('Assignment deleted successfully.');
+      showProjectToast('Assignment deleted successfully.', 'success');
+      await loadProjectsFromServer(setProjects, setSelectedProjectId);
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
+    } catch {
+      setMessage('Assignment could not be deleted.');
+      showProjectToast('Assignment could not be deleted.', 'error');
+    }
   }
 
   function resetProjectForm() {
@@ -1001,19 +1113,81 @@ function Projects() {
             </div>
 
             <div className="project-team-modal-body">
-              {selectedProjectTeamMembers.length > 0 ? selectedProjectTeamMembers.map((member) => (
-                <div key={member.id} className="project-team-member-card">
-                  <div className="project-team-member-avatar">{member.avatar}</div>
-                  <div className="project-team-member-copy">
-                    <strong>{member.name}</strong>
-                    <span>{member.department}</span>
-                    <small>{member.role}</small>
-                    <code>{member.id}</code>
-                  </div>
-                </div>
-              )) : (
+              {selectedProjectTeamMembers.length > 0 ? (
+                <DataTable
+                  columns={[
+                    {
+                      key: 'assign',
+                      label: 'Assign',
+                      render: (row) => (
+                        <div className="employee-cell">
+                          <span>{row.avatar}</span>
+                          <div>
+                            <strong>{row.name}</strong>
+                            <small>{row.id}</small>
+                          </div>
+                        </div>
+                      ),
+                    },
+                    { key: 'module', label: 'Module', render: (row) => row.role || '-' },
+                    { key: 'status', label: 'Status', render: (row) => <span className={`status status-${String(row.status || 'Active').toLowerCase().replaceAll(' ', '-')}`}>{row.status || 'Active'}</span> },
+                    {
+                      key: 'edit',
+                      label: 'Edit',
+                      render: (row) => (
+                        <button type="button" className="section-action" onClick={() => openMemberEdit(row)}>
+                          Edit
+                        </button>
+                      ),
+                    },
+                    {
+                      key: 'delete',
+                      label: 'Delete',
+                      render: (row) => (
+                        <button type="button" className="section-action danger" onClick={() => deleteMemberAssignment(row)}>
+                          Delete
+                        </button>
+                      ),
+                    },
+                  ]}
+                  rows={selectedProjectTeamMembers}
+                  emptyMessage="No team members found for this project."
+                />
+              ) : (
                 <p className="project-empty-state">No team members found for this project.</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {memberEditTarget && (
+        <div className="project-team-modal-backdrop" role="presentation" onClick={() => setMemberEditTarget(null)}>
+          <div className="project-team-modal" role="dialog" aria-modal="true" aria-label="Edit assignment" onClick={(event) => event.stopPropagation()}>
+            <div className="project-team-modal-head">
+              <div>
+                <p className="eyebrow">Edit Assignment</p>
+                <h3>{memberEditTarget.name || memberEditTarget.displayName || 'Assign Member'}</h3>
+              </div>
+              <button type="button" className="project-team-modal-close" onClick={() => setMemberEditTarget(null)} aria-label="Close edit assignment popup">
+                <i className="ri-close-line" aria-hidden="true" />
+              </button>
+            </div>
+
+            <label className="full-width">
+              <span>Assign</span>
+              <select value={memberEditValue} onChange={(event) => setMemberEditValue(event.target.value)}>
+                <option value="">Select employee</option>
+                {employeeOptions.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name} - {employee.department || '-'}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="notification-actions profile-form-actions asset-create-actions">
+              <button type="button" onClick={saveMemberAssignment}>Save Change</button>
+              <button type="button" className="danger" onClick={() => setMemberEditTarget(null)}>Cancel</button>
             </div>
           </div>
         </div>

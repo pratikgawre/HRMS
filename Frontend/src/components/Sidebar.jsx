@@ -114,7 +114,12 @@ function Sidebar({ role, isOpen, onClose }) {
 
         <nav className="sidebar-nav" aria-label={`${role} navigation`}>
           {(menus[role] || menus.employee).map((item) => (
-            <NavLink key={item.to} to={item.to} className="nav-item" onClick={onClose}>
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+              onClick={onClose}
+            >
               <i className={item.icon} aria-hidden="true" />
               <span>{item.label}</span>
             </NavLink>

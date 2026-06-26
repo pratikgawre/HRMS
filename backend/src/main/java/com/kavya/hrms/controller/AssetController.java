@@ -9,6 +9,7 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.logging.Logger;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -86,7 +87,7 @@ public class AssetController {
       @RequestBody Asset asset,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Asset saved = assetRepository.save(asset);
+    Asset saved = assetRepository.save(Objects.requireNonNull(asset));
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset created",
@@ -106,7 +107,7 @@ public class AssetController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
-    List<Asset> saved = assetRepository.saveAll(assets);
+    List<Asset> saved = assetRepository.saveAll(Objects.requireNonNull(assets));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -128,7 +129,7 @@ public class AssetController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     asset.setId(id);
-    Asset saved = assetRepository.save(asset);
+    Asset saved = assetRepository.save(Objects.requireNonNull(asset));
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset updated",
@@ -146,14 +147,15 @@ public class AssetController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Asset current = assetRepository.findById(id).orElse(null);
-    assetRepository.deleteById(id);
+    String assetId = Objects.requireNonNull(id, "id must not be null");
+    Asset current = assetRepository.findById(assetId).orElse(null);
+    assetRepository.deleteById(assetId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset removed",
         buildAssetMessage(current, "removed"),
         "asset",
-        id,
+        assetId,
         accessRole,
         "System",
         userId);

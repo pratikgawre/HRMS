@@ -1807,7 +1807,10 @@ button.attendance-summary-card.is-clickable:focus-visible {
   flex: 1 1 260px;
   max-width: 340px;
 }
-
+.status-completed {
+  background: rgba(42, 111, 219, 0.14);
+  color: #2458af;
+}
 .date-chip {
   flex: 0 0 auto;
   color: var(--dark-text);
@@ -4583,6 +4586,71 @@ button.attendance-summary-card.is-clickable:focus-visible {
   min-width: 680px;
   color: var(--normal-text);
   font-size: 0.96rem;
+}
+
+.myteam-table .table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.myteam-table .table th:nth-child(1),
+.myteam-table .table td:nth-child(1) {
+  width: 22%;
+}
+
+.myteam-table .table th:nth-child(2),
+.myteam-table .table td:nth-child(2) {
+  width: 22%;
+}
+
+.myteam-table .table th:nth-child(3),
+.myteam-table .table td:nth-child(3) {
+  width: 24%;
+}
+
+.myteam-table .table th:nth-child(4),
+.myteam-table .table td:nth-child(4) {
+  width: 11%;
+  text-align: center;
+}
+
+.myteam-table .table th:nth-child(5),
+.myteam-table .table td:nth-child(5),
+.myteam-table .table th:nth-child(6),
+.myteam-table .table td:nth-child(6) {
+  width: 10.5%;
+  text-align: center;
+}
+
+.myteam-table .table th,
+.myteam-table .table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.myteam-table .table th:nth-child(4),
+.myteam-table .table td:nth-child(4),
+.myteam-table .table th:nth-child(5),
+.myteam-table .table td:nth-child(5),
+.myteam-table .table th:nth-child(6),
+.myteam-table .table td:nth-child(6) {
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+}
+
+.myteam-table .table td:nth-child(5),
+.myteam-table .table td:nth-child(6) {
+  vertical-align: middle;
+}
+
+.myteam-module-cell {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
 }
 
 .table th {

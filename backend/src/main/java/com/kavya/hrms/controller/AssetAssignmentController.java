@@ -5,6 +5,7 @@ import com.kavya.hrms.repository.AssetAssignmentRepository;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -52,7 +53,8 @@ public class AssetAssignmentController {
 
   @PatchMapping("/{id}/return")
   public ResponseEntity<AssetAssignment> returnAsset(@PathVariable String id, @RequestBody ReturnAssetRequest request) {
-    return repository.findById(id)
+    String assignmentId = Objects.requireNonNull(id, "id must not be null");
+    return repository.findById(assignmentId)
       .map((assignment) -> {
         assignment.setReturnDate(request.getReturnDate() == null || request.getReturnDate().isBlank()
           ? ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"))
@@ -66,7 +68,7 @@ public class AssetAssignmentController {
 
   @DeleteMapping("/{id}")
   public void delete(@PathVariable String id) {
-    repository.deleteById(id);
+    repository.deleteById(Objects.requireNonNull(id, "id must not be null"));
   }
 
   public static class ReturnAssetRequest {

@@ -138,14 +138,14 @@ public class NotificationService {
     if ("all".equals(normalized)) {
       return appUserRepository.findAll().stream()
           .filter(this::isActiveUser)
-          .map(AppUser::getUserId)
+          .map(user -> user == null ? null : user.getUserId())
           .filter(value -> !isBlank(value))
           .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     return appUserRepository.findByRoleIgnoreCase(normalized).stream()
         .filter(this::isActiveUser)
-        .map(AppUser::getUserId)
+        .map(user -> user == null ? null : user.getUserId())
         .filter(value -> !isBlank(value))
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }

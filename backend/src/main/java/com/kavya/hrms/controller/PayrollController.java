@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -112,8 +113,9 @@ public class PayrollController {
   }
 
   private ResponseEntity<Object> markPaidInternal(String payrollId) {
-    return payrollRecordRepository.findById(payrollId)
-        .map(this::updatePaidStatus)
+    String resolvedPayrollId = Objects.requireNonNull(payrollId, "payrollId must not be null");
+    return payrollRecordRepository.findById(resolvedPayrollId)
+        .map(record -> updatePaidStatus(record))
         .orElseGet(() -> notFound(NOT_FOUND_MESSAGE));
   }
 
@@ -136,7 +138,7 @@ public class PayrollController {
   @PostMapping("/bulk")
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
-    return payrollRecordRepository.saveAll(records);
+    return payrollRecordRepository.saveAll(new java.util.ArrayList<>(Objects.requireNonNull(records)));
   }
 
   private ResponseEntity<Object> forbidden(String message) {

@@ -3,6 +3,7 @@ package com.kavya.hrms.controller;
 import java.time.format.DateTimeFormatter;
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,12 +47,13 @@ public class SupportController {
       payload.setStatus("Pending");
     }
 
-    return repository.save(payload);
+    return repository.save(Objects.requireNonNull(payload));
   }
 
   @PatchMapping("/{id}/status")
   public ResponseEntity<SupportTicket> updateStatus(@PathVariable String id, @RequestBody StatusUpdateRequest request) {
-    return repository.findById(id)
+    String ticketId = Objects.requireNonNull(id, "id must not be null");
+    return repository.findById(ticketId)
       .map((ticket) -> {
         ticket.setStatus(request.getStatus());
         return ResponseEntity.ok(repository.save(ticket));

@@ -10,6 +10,7 @@ import com.kavya.hrms.repository.SystemSettingsRepository;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.http.HttpStatus;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -29,12 +30,12 @@ public class EmployeeLeaveSummaryService {
     this.systemSettingsRepository = systemSettingsRepository;
   }
 
-  public EmployeeLeaveSummaryResponse getCurrentEmployeeSummary(String userId, String employeeId) {
+  public EmployeeLeaveSummaryResponse getCurrentEmployeeSummary(@Nullable String userId, @Nullable String employeeId) {
     String resolvedEmployeeId = resolveEmployeeId(userId, employeeId)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Employee identity not found"));
 
     Optional<AppUser> user = appUserRepository.findByEmployeeId(resolvedEmployeeId);
-    String employeeName = user.map(AppUser::getEmployeeName).orElse("");
+    String employeeName = user.map(foundUser -> foundUser == null ? null : foundUser.getEmployeeName()).orElse("");
 
     long totalAllotted = resolveTotalAllottedLeaves();
     long totalTaken = calculateTotalTakenLeaves(resolvedEmployeeId);
@@ -49,26 +50,26 @@ public class EmployeeLeaveSummaryService {
     return response;
   }
 
-  private Optional<String> resolveEmployeeId(String userId, String employeeId) {
+  private Optional<String> resolveEmployeeId(@Nullable String userId, @Nullable String employeeId) {
     if (employeeId != null && !employeeId.isBlank()) {
       return Optional.of(employeeId.trim());
     }
 
     if (userId != null && !userId.isBlank()) {
-      return appUserRepository.findByUserId(userId.trim()).map(AppUser::getEmployeeId);
+      return appUserRepository.findByUserId(userId.trim()).map(foundUser -> foundUser.getEmployeeId());
     }
 
     return Optional.empty();
   }
 
   private long resolveTotalAllottedLeaves() {
-    SystemSettings settings = systemSettingsRepository.findById(DEFAULT_SETTINGS_ID).orElse(null);
-    List<SystemSettings.LeaveTypeSetting> leaveTypes = settings == null || settings.getLeaveTypes() == null || settings.getLeaveTypes().isEmpty()
-      ? buildDefaultLeaveTypes()
-      : settings.getLeaveTypes();
+    List<SystemSettings.LeaveTypeSetting> leaveTypes = systemSettingsRepository.findById(DEFAULT_SETTINGS_ID)
+      .map(settings -> settings == null ? null : settings.getLeaveTypes())
+      .filter(types -> types != null && !types.isEmpty())
+      .orElseGet(this::buildDefaultLeaveTypes);
 
     return leaveTypes.stream()
-      .map(SystemSettings.LeaveTypeSetting::getDays)
+      .map(leaveType -> leaveType == null ? null : leaveType.getDays())
       .mapToLong(this::normalizeDays)
       .sum();
   }
@@ -97,12 +98,12 @@ public class EmployeeLeaveSummaryService {
     List<LeaveRequest> requests = leaveRequestRepository.findByEmployeeId(employeeId);
     return requests.stream()
       .filter(request -> isApproved(request.getStatus()))
-      .map(LeaveRequest::getDays)
+      .map(request -> request == null ? null : request.getDays())
       .mapToLong(this::normalizeDays)
       .sum();
   }
 
-  private boolean isApproved(String status) {
+  private boolean isApproved(@Nullable String status) {
     return "approved".equalsIgnoreCase(String.valueOf(status).trim());
   }
 

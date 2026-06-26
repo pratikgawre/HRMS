@@ -6,6 +6,7 @@ import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,7 +46,7 @@ public class LeaveController {
     if (accessRole != null && !accessRole.isBlank()) {
       request.setOwnerRole(accessRole);
     }
-    LeaveRequest saved = leaveRequestRepository.save(request);
+    LeaveRequest saved = leaveRequestRepository.save(Objects.requireNonNull(request));
     notifyLeaveChange(saved, "Leave request submitted", accessRole, userId, "submitted");
     return saved;
   }
@@ -54,7 +55,7 @@ public class LeaveController {
   public List<LeaveRequest> bulkSave(@RequestBody List<LeaveRequest> requests) {
     long existingCount = leaveRequestRepository.count();
     leaveRequestRepository.deleteAll();
-    List<LeaveRequest> saved = leaveRequestRepository.saveAll(requests);
+    List<LeaveRequest> saved = leaveRequestRepository.saveAll(new java.util.ArrayList<>(Objects.requireNonNull(requests)));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.leaveRecipients("hr"),
@@ -76,7 +77,7 @@ public class LeaveController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     request.setId(id);
-    LeaveRequest saved = leaveRequestRepository.save(request);
+    LeaveRequest saved = leaveRequestRepository.save(Objects.requireNonNull(request));
     notifyLeaveChange(saved, "Leave request updated", accessRole, userId, "updated");
     return saved;
   }
