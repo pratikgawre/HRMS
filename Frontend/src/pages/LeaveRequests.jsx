@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
-import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
+import { Hero, Section } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
@@ -160,15 +160,24 @@ function LeaveRequests() {
   }, []);
 
   const columns = [
-    ...leaveColumns,
+    { key: 'employee', label: 'Employee' },
+    { key: 'type', label: 'Type' },
+    { key: 'days', label: 'Days' },
+    { key: 'from', label: 'From Date' },
+    { key: 'to', label: 'To Date' },
+    { key: 'status', label: 'Status' },
     ...(isAdminOrHr ? [{
       key: 'ownerRole',
       label: 'Requested By',
       render: (row) => formatRequesterRole(row.ownerRole),
     }, {
-      key: 'medicalReport',
-      label: 'Medical Report',
-      render: (row) => row.medicalReport?.name || 'Not attached',
+      key: 'leaveDetails',
+      label: 'Leave Details',
+      render: (row) => (
+        <button type="button" className="payroll-secondary" onClick={() => setSelectedRequest(row)}>
+          View Details
+        </button>
+      ),
     }] : []),
     ...(canReviewRequests ? [{
       key: 'actions',
@@ -487,7 +496,7 @@ function LeaveRequests() {
             columns={columns}
             rows={filteredLeaveRequests}
             emptyMessage={queueEmptyMessage}
-            onRowClick={setSelectedRequest}
+            onRowClick={isAdminOrHr ? undefined : setSelectedRequest}
           />
         </div>
       </div>
