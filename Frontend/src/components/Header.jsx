@@ -295,6 +295,8 @@ function getSearchRoutes(role) {
       { path: '/employee/dashboard', keywords: ['dashboard', 'overview', 'home'] },
       { path: '/employee/leave-requests', keywords: ['leave', 'vacation', 'absence', 'request'] },
       { path: '/employee/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/employee/tasks', keywords: ['task', 'tasks', 'my task', 'my tasks', 'assignment'] },
+      { path: '/employee/assets', keywords: ['asset', 'assets', 'my asset', 'my assets', 'inventory'] },
       { path: '/employee/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
       { path: '/employee/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
       { path: '/employee/support', keywords: ['support', 'ticket', 'help'] },

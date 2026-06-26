@@ -34,6 +34,7 @@ function MyAssetsTable({
             <tr>
               <th>Asset ID</th>
               <th>Asset Name</th>
+              <th>Employee Name</th>
               <th>Category</th>
               <th>Assigned Date</th>
               <th>Condition</th>
@@ -44,7 +45,7 @@ function MyAssetsTable({
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td className="table-empty" colSpan={7}>
+                <td className="table-empty" colSpan={8}>
                   <EmptyAssetState
                     icon="ri-briefcase-4-line"
                     title="No assets assigned yet."
@@ -71,8 +72,9 @@ function MyAssetsTable({
                       </div>
                     </div>
                   </td>
+                  <td data-label="Employee Name">{asset.employeeName || asset.assignedTo || '-'}</td>
                   <td data-label="Category">{asset.category}</td>
-                  <td data-label="Assigned Date">{asset.assignedDate}</td>
+                  <td data-label="Assigned Date">{asset.assignedDate || '-'}</td>
                   <td data-label="Condition">{asset.condition}</td>
                   <td data-label="Status">
                     <span className={`status status-${statusClassName(asset.status)}`}>{asset.status}</span>
