@@ -1,5 +1,6 @@
 package com.kavya.hrms.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -15,6 +16,16 @@ public class Asset {
   private String model;
   private String serialNo;
   private String purchaseDate;
+  @JsonAlias({"current_date", "assignedDate", "assigned_date", "assignmentDate", "assignment_date"})
+  private String currentDate;
+  @JsonAlias({"due_date", "returnDate", "return_date"})
+  private String dueDate;
+  @JsonAlias({"assigned_date"})
+  private String assignedDate;
+  @JsonAlias({"assignment_date"})
+  private String assignmentDate;
+  @JsonAlias({"return_date"})
+  private String returnDate;
   private String status;
   private String assignedToEmployeeId;
 
@@ -22,9 +33,6 @@ public class Asset {
 
   @Transient
   private String employeeName;
-
-  @Transient
-  private String assignedDate;
 
   private String condition;
   private String location;
@@ -45,6 +53,16 @@ public class Asset {
   public void setSerialNo(String serialNo) { this.serialNo = serialNo; }
   public String getPurchaseDate() { return purchaseDate; }
   public void setPurchaseDate(String purchaseDate) { this.purchaseDate = purchaseDate; }
+  public String getCurrentDate() { return currentDate; }
+  public void setCurrentDate(String currentDate) { this.currentDate = currentDate; }
+  public String getDueDate() { return dueDate; }
+  public void setDueDate(String dueDate) { this.dueDate = dueDate; }
+  public String getAssignedDate() { return assignedDate; }
+  public void setAssignedDate(String assignedDate) { this.assignedDate = assignedDate; }
+  public String getAssignmentDate() { return assignmentDate; }
+  public void setAssignmentDate(String assignmentDate) { this.assignmentDate = assignmentDate; }
+  public String getReturnDate() { return returnDate; }
+  public void setReturnDate(String returnDate) { this.returnDate = returnDate; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
   public String getAssignedToEmployeeId() { return assignedToEmployeeId; }
@@ -55,9 +73,6 @@ public class Asset {
 
   public String getEmployeeName() { return employeeName; }
   public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
-
-  public String getAssignedDate() { return assignedDate; }
-  public void setAssignedDate(String assignedDate) { this.assignedDate = assignedDate; }
 
   public String getCondition() { return condition; }
   public void setCondition(String condition) { this.condition = condition; }

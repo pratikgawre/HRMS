@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/asset-requests")
+@SuppressWarnings("null")
 public class AssetRequestController {
   private final AssetRequestRepository repository;
 
@@ -42,15 +43,16 @@ public class AssetRequestController {
   }
 
   @PatchMapping("/{id}/status")
+  @SuppressWarnings("null")
   public ResponseEntity<AssetRequest> updateStatus(@PathVariable String id, @RequestBody RequestStatusUpdate payload) {
     return repository.findById(id)
-      .map((request) -> {
-        request.setStatus(payload.getStatus());
-        request.setResolution(payload.getResolution());
-        request.setHandledBy(payload.getHandledBy());
-        return ResponseEntity.ok(repository.save(request));
-      })
-      .orElse(ResponseEntity.notFound().build());
+        .map((request) -> {
+          request.setStatus(payload.getStatus());
+          request.setResolution(payload.getResolution());
+          request.setHandledBy(payload.getHandledBy());
+          return ResponseEntity.ok(repository.save(request));
+        })
+        .orElse(ResponseEntity.notFound().build());
   }
 
   public static class RequestStatusUpdate {
@@ -58,11 +60,28 @@ public class AssetRequestController {
     private String resolution;
     private String handledBy;
 
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public String getResolution() { return resolution; }
-    public void setResolution(String resolution) { this.resolution = resolution; }
-    public String getHandledBy() { return handledBy; }
-    public void setHandledBy(String handledBy) { this.handledBy = handledBy; }
+    public String getStatus() {
+      return status;
+    }
+
+    public void setStatus(String status) {
+      this.status = status;
+    }
+
+    public String getResolution() {
+      return resolution;
+    }
+
+    public void setResolution(String resolution) {
+      this.resolution = resolution;
+    }
+
+    public String getHandledBy() {
+      return handledBy;
+    }
+
+    public void setHandledBy(String handledBy) {
+      this.handledBy = handledBy;
+    }
   }
 }

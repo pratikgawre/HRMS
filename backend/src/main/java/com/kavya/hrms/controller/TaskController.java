@@ -31,6 +31,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/tasks")
+@SuppressWarnings("null")
 public class TaskController {
   private static final Logger log = LoggerFactory.getLogger(TaskController.class);
   private final TaskRepository taskRepository;
@@ -101,6 +102,7 @@ public class TaskController {
   }
 
   @PostMapping("/bulk")
+  @SuppressWarnings("null")
   public List<TaskItem> bulkSave(
       @RequestBody List<TaskItem> tasks,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -164,6 +166,7 @@ public class TaskController {
   }
 
   @DeleteMapping("/{id}")
+  @SuppressWarnings("null")
   public void delete(
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -196,7 +199,8 @@ public class TaskController {
       task.setTeamLeadId(task.getAssignedById());
     }
 
-    if ((task.getAssignedById() == null || task.getAssignedById().isBlank()) && task.getTeamLeadId() != null && !task.getTeamLeadId().isBlank()) {
+    if ((task.getAssignedById() == null || task.getAssignedById().isBlank()) && task.getTeamLeadId() != null
+        && !task.getTeamLeadId().isBlank()) {
       task.setAssignedById(task.getTeamLeadId());
     }
   }
@@ -235,7 +239,8 @@ public class TaskController {
   }
 
   private void syncEmployeeDetails(TaskItem task) {
-    Employee assignedTo = findEmployee(task.getAssignedToId(), task.getAssignedToName(), task.getAssignedTo(), task.getOwner());
+    Employee assignedTo = findEmployee(task.getAssignedToId(), task.getAssignedToName(), task.getAssignedTo(),
+        task.getOwner());
     if (assignedTo != null) {
       String employeeId = firstNonBlank(assignedTo.getEmployeeId(), assignedTo.getEmployeeCode(), assignedTo.getId());
       String employeeName = firstNonBlank(assignedTo.getDisplayName(), assignedTo.getName(), employeeId);

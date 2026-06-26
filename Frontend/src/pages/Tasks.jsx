@@ -52,6 +52,7 @@ function Tasks() {
   }
   const isTeamLead = role === 'teamLead';
   const canAssignTasks = taskAssignableRoles.includes(role);
+  const showTaskActionColumns = role !== 'hr';
   const [taskRows, setTaskRows] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -270,32 +271,38 @@ function Tasks() {
         </span>
       ),
     },
-    {
-      key: 'edit',
-      label: 'Edit',
-      render: (row) => (
-        <div className="table-actions table-actions-inline">
-          <button type="button" className="section-action" onClick={() => openTaskEditModal(row)}>
-            Edit
-          </button>
-        </div>
-      ),
-    },
-    {
-      key: 'delete',
-      label: 'Delete',
-      render: (row) => (
-        <div className="table-actions table-actions-inline">
-          <button
-            type="button"
-            className="section-action danger"
-            onClick={() => deleteTaskAssignment(row)}
-          >
-            Delete
-          </button>
-        </div>
-      ),
-    },
+    ...(
+      showTaskActionColumns
+        ? [
+          {
+            key: 'edit',
+            label: 'Edit',
+            render: (row) => (
+              <div className="table-actions table-actions-inline">
+                <button type="button" className="section-action" onClick={() => openTaskEditModal(row)}>
+                  Edit
+                </button>
+              </div>
+            ),
+          },
+          {
+            key: 'delete',
+            label: 'Delete',
+            render: (row) => (
+              <div className="table-actions table-actions-inline">
+                <button
+                  type="button"
+                  className="section-action danger"
+                  onClick={() => deleteTaskAssignment(row)}
+                >
+                  Delete
+                </button>
+              </div>
+            ),
+          },
+        ]
+        : []
+    ),
   ];
 
   const taskAssignmentColumns = [
@@ -503,7 +510,7 @@ function Tasks() {
   return (
     <>
       <Hero
-        title={role === 'employee' ? 'My Tasks' : isTeamLead || role === 'projectManager' ? 'Task Assignment' : 'Task Management'}
+        title={role === 'employee' ? 'My Tasks' : isTeamLead || role === 'projectManager' || role === 'admin' ? 'Task Assignment' : 'Task Management'}
         copy={role === 'employee'
           ? 'Track your assigned tasks, update the current status, and stay on top of due dates.'
           : 'Assign tasks, track priority and due date, and keep delivery moving across the team.'}
@@ -954,7 +961,7 @@ function EmployeeTasksView() {
   );
 }
 
-function TaskAssignmentModal({ mode, form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
+function TaskAssignmentModal({ form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
   const teamLeadMode = Boolean(isTeamLead);
   const isEditMode = mode === 'edit';
 

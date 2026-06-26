@@ -19,16 +19,14 @@ function MyTeam() {
 function TeamLeadMyTeamView({ role }) {
   const navigate = useNavigate();
   const currentEmployeeId = getSessionValue('kavyaEmployeeId');
+  const currentEmployeeName = getSessionValue('kavyaEmployeeName') || getSessionValue('kavyaUserName') || '';
   const currentTeamLeadIdentity = {
     employeeId: currentEmployeeId,
-    employeeName: getSessionValue('kavyaEmployeeName') || '',
+    employeeName: currentEmployeeName,
   };
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [tasks, setTasks] = useState([]);
-  const [editingTask, setEditingTask] = useState(null);
-  const [editAssigneeId, setEditAssigneeId] = useState('');
-  const [editMessage, setEditMessage] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -45,13 +43,15 @@ function TeamLeadMyTeamView({ role }) {
     const refreshTeamData = () => {
       Promise.all([
         loadTeamLeadProjects(),
+        safeApiRequest('/employees', []),
         safeApiRequest(`/tasks/assigned-by/${currentEmployeeId}`, []),
-      ]).then(([projectRows, assignmentRows]) => {
+      ]).then(([projectRows, employeeRows, assignmentRows]) => {
         if (!active) {
           return;
         }
 
         setProjects(Array.isArray(projectRows) ? projectRows : []);
+        setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
         setTasks(Array.isArray(assignmentRows) ? assignmentRows : []);
       });
     };
@@ -75,13 +75,14 @@ function TeamLeadMyTeamView({ role }) {
 
   const assignmentData = useMemo(
     () => buildTeamLeadAssignmentGroups(projects, employees, currentTeamLeadIdentity),
-    [currentTeamLeadIdentity, employees, projects],
+    [currentEmployeeId, currentEmployeeName, employees, projects],
   );
 
   const taskAssignmentData = useMemo(
     () => buildTaskAssignmentGroups(tasks, currentTeamLeadIdentity),
-    [currentTeamLeadIdentity, tasks],
+    [currentEmployeeId, currentEmployeeName, tasks],
   );
+
   const teamAssignmentGroups = assignmentData.groups.length > 0 ? assignmentData.groups : taskAssignmentData.groups;
   const effectiveEmployeeDirectory = assignmentData.employeeDirectory.size > 0
     ? assignmentData.employeeDirectory
@@ -132,6 +133,7 @@ function TeamLeadMyTeamView({ role }) {
         role: member.role || source?.role || '-',
         department: member.department || source?.department || '-',
         projects: member.projects.join(', '),
+        modules: memberModules.join(', ') || '-',
         status: member.status || source?.status || '-',
       };
     })
@@ -181,7 +183,7 @@ function TeamLeadMyTeamView({ role }) {
     });
 
     return map;
-  }, [teamAssignmentGroups, tasks]);
+  }, [currentTeamLeadIdentity.employeeId, currentTeamLeadIdentity.employeeName, teamAssignmentGroups, tasks]);
 
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
   const totalAssignments = assignmentData.groups.reduce((sum, group) => sum + group.teamMemberCount, 0);
@@ -299,27 +301,27 @@ function TeamLeadMyTeamView({ role }) {
             const label = group?.name || rows[0]?.projectName || 'Project';
             const code = group?.projectCode || group?.id || rows[0]?.projectName || groupKey;
             return (
-            <div key={groupKey} className="project-team-group">
-              <div className="project-team-group-head">
-                <div>
-                  <strong>{label}</strong>
-                  <small>{code}</small>
+              <div key={groupKey} className="project-team-group">
+                <div className="project-team-group-head">
+                  <div>
+                    <strong>{label}</strong>
+                    <small>{code}</small>
+                  </div>
+                  <span className="project-action-chip">{rows.length} task{rows.length === 1 ? '' : 's'}</span>
                 </div>
-                <span className="project-action-chip">{rows.length} task{rows.length === 1 ? '' : 's'}</span>
+                <DataTable
+                  columns={[
+                    { key: 'id', label: 'Task ID' },
+                    { key: 'title', label: 'Task Title' },
+                    { key: 'assignee', label: 'Assignee' },
+                    { key: 'priority', label: 'Priority' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'dueDate', label: 'Due Date' },
+                  ]}
+                  rows={rows}
+                  emptyMessage="No tasks assigned to this project."
+                />
               </div>
-              <DataTable
-                columns={[
-                  { key: 'id', label: 'Task ID' },
-                  { key: 'title', label: 'Task Title' },
-                  { key: 'assignee', label: 'Assignee' },
-                  { key: 'priority', label: 'Priority' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'dueDate', label: 'Due Date' },
-                ]}
-                rows={rows}
-                emptyMessage="No tasks assigned to this project."
-              />
-            </div>
             );
           }) : (
             <p className="project-empty-state">No tasks assigned by the current Team Lead.</p>

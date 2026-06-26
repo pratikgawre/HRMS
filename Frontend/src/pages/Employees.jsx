@@ -5,9 +5,9 @@ import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
-import { getStoredEmployees, saveStoredEmployees, upsertEmployeeLogin } from '../utils/employeeStorage.js';
-import { deleteEmployee, deleteUser, safeApiRequest } from '../utils/api.js';
-import { getUsers } from '../utils/user-management.js';
+import { getStoredEmployees, saveStoredEmployees, setEmployeesCache, upsertEmployeeLogin } from '../utils/employeeStorage.js';
+import { safeApiRequest } from '../utils/api.js';
+import { getUsers, saveUsers, setUsersCache } from '../utils/user-management.js';
 import { ACCESS_ROLE_OPTIONS, normalizeAccessRole } from '../utils/role-access.js';
 import { getSessionValue } from '../utils/appSession.js';
 
@@ -160,6 +160,7 @@ const fallbackEmployeeEmails = {
   KV004: 'isha@kavya.hr',
   KV005: 'rohan@kavya.hr',
 };
+const EMPLOYEE_DELETE_UNDO_MS = 6000;
 
 const employeeSteps = [
   {
@@ -252,6 +253,8 @@ function Employees() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [deleteTargetEmployee, setDeleteTargetEmployee] = useState(null);
+  const [undoDeleteRecord, setUndoDeleteRecord] = useState(null);
   const [form, setForm] = useState(getEmptyEmployeeForm());
 
   useEffect(() => {
@@ -281,6 +284,20 @@ function Employees() {
       });
     }
   }, [location.hash, location.search]);
+
+  useEffect(() => {
+    if (!undoDeleteRecord) {
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      finalizeEmployeeDeletion(undoDeleteRecord);
+    }, EMPLOYEE_DELETE_UNDO_MS);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [undoDeleteRecord]);
 
   const summaryFilterRows = useMemo(() => employees.filter((person) => {
     if (summaryFilter === 'All') {
@@ -355,7 +372,7 @@ function Employees() {
             <i className="ri-edit-line" aria-hidden="true" />
             Edit
           </button>
-          <button type="button" className="danger" onClick={() => handleDeleteEmployee(employee)}>
+          <button type="button" className="danger" onClick={() => openDeleteEmployeeConfirm(employee)}>
             <i className="ri-delete-bin-line" aria-hidden="true" />
             Delete
           </button>
@@ -395,6 +412,14 @@ function Employees() {
     });
   };
 
+  const openDeleteEmployeeConfirm = (employee) => {
+    setDeleteTargetEmployee(employee);
+  };
+
+  const closeDeleteEmployeeConfirm = () => {
+    setDeleteTargetEmployee(null);
+  };
+
   const handleDeleteEmployee = async (employee) => {
     const employeeId = employee.employeeCode || employee.id;
     if (!employeeId) {
@@ -403,17 +428,11 @@ function Employees() {
     }
 
     const employeeName = employee.displayName || employee.name || employeeId;
-    const confirmed = window.confirm(`Delete ${employeeName}? This will remove the employee from the backend and access records.`);
-    if (!confirmed) {
-      return;
-    }
-
     setMessage('');
 
     try {
-      await deleteEmployee(employeeId);
-
-      const nextEmployees = employees.filter((item) => (item.employeeCode || item.id) !== employeeId);
+      const previousEmployees = [...employees];
+      const nextEmployees = previousEmployees.filter((item) => (item.employeeCode || item.id) !== employeeId);
       const userRows = await safeApiRequest('/users', []);
       const availableUsers = Array.isArray(userRows) && userRows.length > 0 ? userRows : getUsers();
       const currentEmployeeEmail = String(employee.email || '').trim().toLowerCase();
@@ -424,13 +443,14 @@ function Employees() {
         return userEmployeeId === String(employeeId).trim().toLowerCase()
           || userEmail === currentEmployeeEmail;
       });
-
-      await saveStoredEmployees(nextEmployees);
-      if (matchingUser?.userId) {
-        await deleteUser(matchingUser.userId);
-      }
+      const previousUsers = [...availableUsers];
+      const nextUsers = matchingUser?.userId
+        ? availableUsers.filter((user) => user.userId !== matchingUser.userId)
+        : availableUsers;
 
       setEmployees(nextEmployees);
+      setEmployeesCache(nextEmployees);
+      setUsersCache(nextUsers);
       if (selectedEmployee && (selectedEmployee.employeeCode || selectedEmployee.id) === employeeId) {
         setSelectedEmployee(null);
         setIsPreviewOpen(false);
@@ -440,9 +460,59 @@ function Employees() {
         setIsModalOpen(false);
       }
 
-      setMessage(`${employeeName} deleted successfully.`);
+      setUndoDeleteRecord({
+        employee,
+        user: matchingUser || null,
+        previousEmployees,
+        previousUsers,
+        nextEmployees,
+        nextUsers,
+      });
+      setMessage(`${employeeName} deleted successfully. You can undo this action for a short time.`);
+      setDeleteTargetEmployee(null);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unable to delete employee right now.';
+      setMessage(errorMessage);
+    }
+  };
+
+  const finalizeEmployeeDeletion = async (record) => {
+    if (!record?.employee) {
+      return;
+    }
+
+    try {
+      await saveStoredEmployees(record.nextEmployees);
+      await saveUsers(record.nextUsers);
+      setUndoDeleteRecord((current) => (
+        current?.employee && (current.employee.employeeCode || current.employee.id) === (record.employee.employeeCode || record.employee.id)
+          ? null
+          : current
+      ));
+    } catch (error) {
+      setEmployees(record.previousEmployees);
+      setEmployeesCache(record.previousEmployees);
+      setUsersCache(record.previousUsers);
+      setUndoDeleteRecord(null);
+      const errorMessage = error instanceof Error ? error.message : 'Unable to delete employee right now.';
+      setMessage(errorMessage);
+    }
+  };
+
+  const undoDeleteEmployee = async () => {
+    if (!undoDeleteRecord?.employee) {
+      return;
+    }
+
+    try {
+      const employeeToRestore = undoDeleteRecord.employee;
+      setEmployees(undoDeleteRecord.previousEmployees);
+      setEmployeesCache(undoDeleteRecord.previousEmployees);
+      setUsersCache(undoDeleteRecord.previousUsers);
+      setUndoDeleteRecord(null);
+      setMessage(`${employeeToRestore.displayName || employeeToRestore.name || employeeToRestore.employeeCode || employeeToRestore.id} restored successfully.`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unable to restore employee right now.';
       setMessage(errorMessage);
     }
   };
@@ -545,6 +615,43 @@ function Employees() {
 
         <DataTable columns={columns} rows={rows} emptyMessage="No employees match your filters." />
       </Section>
+
+      {deleteTargetEmployee && (
+        <div className="employee-delete-backdrop" role="presentation" onClick={closeDeleteEmployeeConfirm}>
+          <section
+            className="employee-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Employee offboarding confirmation"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="employee-delete-icon" aria-hidden="true">
+              <i className="ri-delete-bin-line" />
+            </div>
+            <div className="employee-delete-copy">
+              <h3>Employee Offboarding Confirmation</h3>
+              <p>Confirm the permanent removal of {deleteTargetEmployee.displayName || deleteTargetEmployee.name || deleteTargetEmployee.employeeCode || deleteTargetEmployee.id}.</p>
+            </div>
+            <div className="employee-delete-actions">
+              <button type="button" className="employee-delete-cancel" onClick={closeDeleteEmployeeConfirm}>
+                No, Keep It
+              </button>
+              <button type="button" className="employee-delete-confirm" onClick={() => handleDeleteEmployee(deleteTargetEmployee)}>
+                Yes, Delete
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {undoDeleteRecord?.employee && (
+        <div className="employee-undo-toast" role="status" aria-live="polite">
+          <span>{undoDeleteRecord.employee.displayName || undoDeleteRecord.employee.name || undoDeleteRecord.employee.employeeCode || undoDeleteRecord.employee.id} was deleted.</span>
+          <button type="button" onClick={undoDeleteEmployee}>
+            Undo
+          </button>
+        </div>
+      )}
 
       {isModalOpen && (
         <EmployeeModal

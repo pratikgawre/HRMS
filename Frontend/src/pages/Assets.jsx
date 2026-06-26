@@ -32,6 +32,7 @@ function Assets() {
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [assignedEmployeeQuery, setAssignedEmployeeQuery] = useState('');
   const [isEmployeePickerOpen, setIsEmployeePickerOpen] = useState(false);
+  const [editingAssetId, setEditingAssetId] = useState('');
   const [assetForm, setAssetForm] = useState({
     assetName: '',
     category: 'Laptop',
@@ -39,31 +40,56 @@ function Assets() {
     status: 'Available',
     condition: 'Good',
     location: 'Store',
+    currentDate: getTodayInputValue(),
+    dueDate: '',
   });
   const [assetMessage, setAssetMessage] = useState('');
 
   useEffect(() => {
     let active = true;
 
-    Promise.all([
-      apiRequest('/assets').catch(() => []),
-      apiRequest('/employees').catch(() => []),
-    ]).then(([assetRows, employeeRows]) => {
-      if (!active) {
-        return;
-      }
+    const refreshAssets = async () => {
+      try {
+        const [assetRows, employeeRows] = await Promise.all([
+          apiRequest('/assets').catch(() => []),
+          apiRequest('/employees').catch(() => []),
+        ]);
 
-      setAssets(normalizeAssetRows(Array.isArray(assetRows) ? assetRows : []));
-      setEmployees(Array.isArray(employeeRows) ? employeeRows : []);
-    }).catch(() => {
-      if (active) {
-        setAssets([]);
-        setEmployees([]);
+        if (!active) {
+          return;
+        }
+
+        const normalizedEmployees = Array.isArray(employeeRows) ? employeeRows : [];
+        console.info('[Assets] fetch response', {
+          assetCount: Array.isArray(assetRows) ? assetRows.length : 0,
+          sampleDates: Array.isArray(assetRows)
+            ? assetRows.slice(0, 3).map((asset) => ({
+                id: asset?.id,
+                currentDate: asset?.currentDate || asset?.current_date || asset?.assignedDate || asset?.assignmentDate,
+                dueDate: asset?.dueDate || asset?.due_date || asset?.returnDate || asset?.return_date,
+              }))
+            : [],
+        });
+        setAssets(normalizeAssetRows(Array.isArray(assetRows) ? assetRows : [], normalizedEmployees));
+        setEmployees(normalizedEmployees);
+      } catch {
+        if (active) {
+          setAssets([]);
+          setEmployees([]);
+        }
       }
-    });
+    };
+
+    refreshAssets();
+    window.addEventListener('focus', refreshAssets);
+    window.addEventListener('kavyaAssetsChanged', refreshAssets);
+    window.addEventListener('kavyaAssetAssignmentsChanged', refreshAssets);
 
     return () => {
       active = false;
+      window.removeEventListener('focus', refreshAssets);
+      window.removeEventListener('kavyaAssetsChanged', refreshAssets);
+      window.removeEventListener('kavyaAssetAssignmentsChanged', refreshAssets);
     };
   }, []);
 
@@ -229,13 +255,30 @@ function Assets() {
     }
 
     const nextAsset = { ...currentAsset, ...patch };
+    console.info('[Assets] update payload', {
+      assetId,
+      currentDate: nextAsset.currentDate,
+      dueDate: nextAsset.dueDate,
+      assignedToEmployeeId: nextAsset.assignedToEmployeeId,
+      assignedTo: nextAsset.assignedTo,
+      status: nextAsset.status,
+    });
     apiRequest(`/assets/${assetId}`, {
       method: 'PUT',
       body: JSON.stringify(serializeAssetForApi(nextAsset)),
     })
       .then((savedAsset) => {
-        const normalizedSavedAsset = normalizeAssetRows([savedAsset], employees)[0] || nextAsset;
+        console.info('[Assets] update response', {
+          assetId: savedAsset?.id,
+          currentDate: savedAsset?.currentDate,
+          dueDate: savedAsset?.dueDate,
+          assignedToEmployeeId: savedAsset?.assignedToEmployeeId,
+          assignedTo: savedAsset?.assignedTo,
+          status: savedAsset?.status,
+        });
+        const normalizedSavedAsset = normalizeAssetRows([{ ...savedAsset, ...nextAsset }], employees)[0] || nextAsset;
         setAssets((current) => current.map((asset) => (asset.id === assetId ? normalizedSavedAsset : asset)));
+        window.dispatchEvent(new Event('kavyaAssetsChanged'));
       })
       .catch(() => {});
   };
@@ -258,6 +301,33 @@ function Assets() {
 
   const markReturned = (assetId) => {
     updateAsset(assetId, { assignedTo: '-', assignedToEmployeeId: '', status: 'Available', location: 'Store' });
+  };
+
+  const startAssetEdit = (asset) => {
+    if (!canManage || !asset) {
+      return;
+    }
+
+    setSelectedAsset(null);
+    setEditingAssetId(asset.id);
+    setAssetMessage('');
+    setAssetForm({
+      assetName: asset.assetName || '',
+      category: asset.category || 'Laptop',
+      assignedTo: asset.assignedToEmployeeId || asset.assignedTo || '',
+      status: asset.status || 'Available',
+      condition: asset.condition || 'Good',
+      location: asset.location || 'Store',
+      currentDate: formatDateForInput(asset.currentDate) || getTodayInputValue(),
+      dueDate: formatDateForInput(asset.dueDate) || '',
+    });
+    setAssignedEmployeeQuery(
+      asset.assignedToEmployeeId
+        ? (employeeLookup.get(String(asset.assignedToEmployeeId).toLowerCase())?.label || asset.assignedTo || asset.assignedToEmployeeId || '')
+        : (asset.assignedTo || ''),
+    );
+    setIsEmployeePickerOpen(false);
+    scrollToSection('manage-assets');
   };
 
   const scrollToSection = (targetId) => {
@@ -292,35 +362,58 @@ function Assets() {
       return;
     }
 
-    const nextAssetCode = getNextAssetCode(assets);
     const selectedEmployee = employeeLookup.get(String(assetForm.assignedTo || '').trim().toLowerCase());
-    const assignedTo = assetForm.status === 'Available'
-      ? '-'
-      : (selectedEmployee?.employeeId || assetForm.assignedTo || assignedEmployeeQuery.trim() || 'Unassigned');
+    const enteredEmployeeValue = selectedEmployee?.employeeId || assetForm.assignedTo || assignedEmployeeQuery.trim();
+    const assignedTo = enteredEmployeeValue || '-';
+    const isAssignedAsset = assetForm.status === 'Assigned' || Boolean(enteredEmployeeValue);
+    const isEditingAsset = Boolean(editingAssetId);
+    const assetId = isEditingAsset ? editingAssetId : getNextAssetCode(assets);
 
     const nextAsset = {
-      id: nextAssetCode,
-      assetCode: nextAssetCode,
+      id: assetId,
+      assetCode: assetId,
       assetName: name,
       category: assetForm.category.trim() || 'Other',
       brand: '',
       model: '',
       serialNo: '',
       purchaseDate: '',
+      currentDate: isAssignedAsset ? getTodayInputValue() : (assetForm.currentDate || ''),
+      dueDate: assetForm.dueDate || '',
       status: assetForm.status,
       assignedTo,
-      assignedToEmployeeId: assetForm.status === 'Available' ? '' : (selectedEmployee?.employeeId || assetForm.assignedTo),
+      assignedToEmployeeId: enteredEmployeeValue,
       condition: assetForm.condition.trim() || 'Good',
       location: assetForm.location.trim() || 'Store',
     };
 
-    apiRequest('/assets', {
-      method: 'POST',
+    console.info(isEditingAsset ? '[Assets] update payload' : '[Assets] create payload', {
+      assetId: nextAsset.id,
+      currentDate: nextAsset.currentDate,
+      dueDate: nextAsset.dueDate,
+      assignedToEmployeeId: nextAsset.assignedToEmployeeId,
+      assignedTo: nextAsset.assignedTo,
+    });
+
+    apiRequest(isEditingAsset ? `/assets/${assetId}` : '/assets', {
+      method: isEditingAsset ? 'PUT' : 'POST',
       body: JSON.stringify(serializeAssetForApi(nextAsset)),
     })
       .then((savedAsset) => {
-        const normalizedSavedAsset = normalizeAssetRows([savedAsset], employees)[0] || nextAsset;
-        setAssets((current) => [normalizedSavedAsset, ...current]);
+        console.info(isEditingAsset ? '[Assets] update response' : '[Assets] create response', {
+          assetId: savedAsset?.id,
+          currentDate: savedAsset?.currentDate,
+          dueDate: savedAsset?.dueDate,
+          assignedToEmployeeId: savedAsset?.assignedToEmployeeId,
+          assignedTo: savedAsset?.assignedTo,
+        });
+        const normalizedSavedAsset = normalizeAssetRows([{ ...savedAsset, ...nextAsset }], employees)[0] || nextAsset;
+        setAssets((current) => (
+          isEditingAsset
+            ? current.map((asset) => (asset.id === assetId ? normalizedSavedAsset : asset))
+            : [normalizedSavedAsset, ...current]
+        ));
+        window.dispatchEvent(new Event('kavyaAssetsChanged'));
         setAssetForm({
           assetName: '',
           category: 'Laptop',
@@ -328,13 +421,20 @@ function Assets() {
           status: 'Available',
           condition: 'Good',
           location: 'Store',
+          currentDate: getTodayInputValue(),
+          dueDate: '',
         });
         setAssignedEmployeeQuery('');
         setIsEmployeePickerOpen(false);
-        setAssetMessage(`Added ${nextAsset.assetName} as ${nextAsset.id}.`);
+        setEditingAssetId('');
+        setAssetMessage(isEditingAsset
+          ? `Updated ${nextAsset.assetName} as ${nextAsset.id}.`
+          : `Added ${nextAsset.assetName} as ${nextAsset.id}.`);
       })
       .catch(() => {
-        setAssetMessage('Could not save asset to backend. Please try again.');
+        setAssetMessage(isEditingAsset
+          ? 'Could not update asset in backend. Please try again.'
+          : 'Could not save asset to backend. Please try again.');
       });
   };
 
@@ -383,9 +483,24 @@ function Assets() {
     { key: 'assetName', label: 'Asset' },
     { key: 'category', label: 'Category' },
     {
+      key: 'currentDate',
+      label: 'Current Date',
+      render: (asset) => <span>{formatDateForDisplay(asset.currentDate)}</span>,
+    },
+    {
+      key: 'dueDate',
+      label: 'Due Date',
+      render: (asset) => <span>{formatDateForDisplay(asset.dueDate)}</span>,
+    },
+    {
       key: 'assignedTo',
-      label: 'Assigned To',
-      render: (asset) => <span>{asset.assignedTo}</span>,
+      label: 'Employee ID',
+      render: (asset) => <span>{asset.assignedToEmployeeId || asset.assignedTo || 'N/A'}</span>,
+    },
+    {
+      key: 'employeeName',
+      label: 'Employee Name',
+      render: (asset) => <span>{asset.employeeName || 'N/A'}</span>,
     },
     {
       key: 'status',
@@ -393,6 +508,17 @@ function Assets() {
       render: (asset) => <span className={`status status-${asset.status.toLowerCase().replaceAll(' ', '-')}`}>{asset.status}</span>,
     },
     { key: 'location', label: 'Location' },
+    ...(canManage ? [{
+      key: 'update',
+      label: 'Update',
+      render: (asset) => (
+        <div className="table-actions">
+          <button type="button" onClick={() => startAssetEdit(asset)}>
+            Update
+          </button>
+        </div>
+      ),
+    }] : []),
     ...(canManage ? [{
       key: 'actions',
       label: 'Actions',
@@ -405,6 +531,8 @@ function Assets() {
               : {
                   assignedTo: employeeOptions[0]?.employeeName || employeeOptions[0]?.label || 'Assigned User',
                   assignedToEmployeeId: employeeOptions[0]?.employeeId || employeeOptions[0]?.value || '',
+                  currentDate: getTodayInputValue(),
+                  dueDate: asset.dueDate || '',
                   status: 'Assigned',
                 }
           )}>
@@ -425,6 +553,16 @@ function Assets() {
     { key: 'id', label: 'Asset ID' },
     { key: 'assetName', label: 'Asset' },
     { key: 'category', label: 'Category' },
+    {
+      key: 'currentDate',
+      label: 'Current Date',
+      render: (asset) => <span>{formatDateForDisplay(asset.currentDate)}</span>,
+    },
+    {
+      key: 'dueDate',
+      label: 'Due Date',
+      render: (asset) => <span>{formatDateForDisplay(asset.dueDate)}</span>,
+    },
     { key: 'assignedTo', label: 'Assigned To' },
     { key: 'status', label: 'Status' },
     { key: 'location', label: 'Location' },
@@ -443,8 +581,20 @@ function Assets() {
   const requestColumns = [
     { key: 'id', label: 'Asset ID' },
     { key: 'assetName', label: 'Asset' },
+    { key: 'category', label: 'Category' },
+    {
+      key: 'currentDate',
+      label: 'Current Date',
+      render: (asset) => <span>{formatDateForDisplay(asset.currentDate)}</span>,
+    },
+    {
+      key: 'dueDate',
+      label: 'Due Date',
+      render: (asset) => <span>{formatDateForDisplay(asset.dueDate)}</span>,
+    },
     { key: 'assignedTo', label: 'Assigned To' },
     { key: 'status', label: 'Request Status' },
+    { key: 'location', label: 'Location' },
   ];
 
   const filteredAssets = useMemo(() => {
@@ -466,8 +616,11 @@ function Assets() {
     return rows.filter((asset) => {
       const employeeId = String(asset.assignedToEmployeeId || '').toLowerCase();
       const assignedTo = String(asset.assignedTo || '').toLowerCase();
+      const employeeName = asset.assignedToEmployeeId
+        ? (employeeLookup.get(String(asset.assignedToEmployeeId).toLowerCase())?.employeeName || '')
+        : (employeeLookup.get(String(asset.assignedTo).toLowerCase())?.employeeName || '');
       const assetName = String(asset.assetName || '').toLowerCase();
-      return assetName.includes(query) || assignedTo.includes(query) || employeeId.includes(query);
+      return assetName.includes(query) || assignedTo.includes(query) || employeeId.includes(query) || String(employeeName || '').toLowerCase().includes(query);
     });
   }, [assetView, scopedAssets, searchText]);
 
@@ -477,9 +630,9 @@ function Assets() {
   const returnAssets = filteredAssets.filter((asset) => asset.status === 'Pending Return');
   const displayedAssets = filteredAssets.map((asset) => ({
     ...asset,
-    assignedTo: asset.assignedToEmployeeId
+    employeeName: asset.assignedToEmployeeId
       ? (employeeLookup.get(String(asset.assignedToEmployeeId).toLowerCase())?.employeeName || asset.assignedTo)
-      : asset.assignedTo,
+      : (employeeLookup.get(String(asset.assignedTo).toLowerCase())?.employeeName || asset.assignedTo || '-'),
   }));
 
   return (
@@ -529,6 +682,14 @@ function Assets() {
             <label>
               <span>Category</span>
               <input value={assetForm.category} onChange={(event) => updateAssetForm('category', event.target.value)} placeholder="Laptop, Monitor, Phone..." />
+            </label>
+            <label>
+              <span>Current Date</span>
+              <input type="date" value={assetForm.currentDate} onChange={(event) => updateAssetForm('currentDate', event.target.value)} />
+            </label>
+            <label>
+              <span>Due Date</span>
+              <input type="date" value={assetForm.dueDate} onChange={(event) => updateAssetForm('dueDate', event.target.value)} />
             </label>
             <label>
               <span>Status</span>
@@ -597,14 +758,17 @@ function Assets() {
                   status: 'Available',
                   condition: 'Good',
                   location: 'Store',
+                  currentDate: getTodayInputValue(),
+                  dueDate: '',
                 });
                 setAssignedEmployeeQuery('');
                 setIsEmployeePickerOpen(false);
+                setEditingAssetId('');
                 setAssetMessage('');
               }}>
                 Reset
               </button>
-              <button type="submit">Add Asset</button>
+              <button type="submit">{editingAssetId ? 'Update Asset' : 'Add Asset'}</button>
             </div>
           </form>
         )}
@@ -677,6 +841,16 @@ function EmployeeAssetsView() {
         }
 
         const normalizedAssets = normalizeEmployeeAssetRows(Array.isArray(assetRows) ? assetRows : []);
+        console.info('[Assets] employee fetch response', {
+          assetCount: Array.isArray(assetRows) ? assetRows.length : 0,
+          sampleDates: Array.isArray(assetRows)
+            ? assetRows.slice(0, 3).map((asset) => ({
+                id: asset?.id,
+                currentDate: asset?.currentDate || asset?.current_date || asset?.assignedDate || asset?.assignmentDate,
+                dueDate: asset?.dueDate || asset?.due_date || asset?.returnDate || asset?.return_date,
+              }))
+            : [],
+        });
         setAssets(normalizedAssets);
       } catch {
         if (active) {
@@ -1346,7 +1520,9 @@ function normalizeEmployeeAssetRows(rows) {
     category: asset.category || '-',
     brand: asset.brand || '',
     model: asset.model || '',
-    assignedDate: asset.assigned_date || asset.assignedDate || '',
+    assignedDate: formatDateForDisplay(asset.assigned_date || asset.assignedDate || asset.currentDate || asset.assignmentDate || asset.assignment_date || ''),
+    currentDate: formatDateForDisplay(asset.currentDate || asset.current_date || asset.assignedDate || asset.assigned_date || asset.assignmentDate || asset.assignment_date || ''),
+    dueDate: formatDateForDisplay(asset.dueDate || asset.due_date || asset.returnDate || asset.return_date || ''),
     condition: asset.condition || 'Good',
     status: asset.status || 'Assigned',
     assignedToEmployeeId: asset.employee_id || asset.employeeId || asset.assignedToEmployeeId || '',
@@ -1366,8 +1542,10 @@ function normalizeAssetAssignments(rows) {
       assetName: assignment.assetName || '-',
       employeeId: assignment.employeeId || '',
       employeeName: assignment.employeeName || '',
-      assignedDate: assignment.assignedDate || '',
-      returnDate: assignment.returnDate || '',
+      assignedDate: formatDateForDisplay(assignment.assignedDate || assignment.currentDate || assignment.assignmentDate || ''),
+      currentDate: formatDateForDisplay(assignment.currentDate || assignment.assignedDate || assignment.assignmentDate || ''),
+      dueDate: formatDateForDisplay(assignment.dueDate || assignment.returnDate || ''),
+      returnDate: formatDateForDisplay(assignment.returnDate || assignment.dueDate || ''),
       condition: assignment.condition || 'Good',
       status: assignment.status || 'Assigned',
       dispatchReason: assignment.dispatchReason || '',
@@ -1485,15 +1663,21 @@ function normalizeAssetRows(rows, employees = []) {
 
   return rows.map((asset, index) => {
     const assetCode = asset.assetCode || asset.id || `AST-${String(101 + index)}`;
+    const currentDate = formatDateForDisplay(asset.currentDate || asset.current_date || asset.assignedDate || asset.assigned_date || asset.assignmentDate || asset.assignment_date || '');
+    const dueDate = formatDateForDisplay(asset.dueDate || asset.due_date || asset.returnDate || asset.return_date || '');
+    const assignedToEmployeeIdValue = asset.assignedToEmployeeId || asset.employee_id || asset.employeeId || '';
+    const assignedToValue = asset.assignedTo || asset.employee_name || asset.employeeName || '';
     const employeeByAssetId = asset.assignedToEmployeeId
       ? employeeById.get(String(asset.assignedToEmployeeId).toLowerCase())
+      : assignedToEmployeeIdValue
+        ? employeeById.get(String(assignedToEmployeeIdValue).toLowerCase())
+        : null;
+    const employeeByAssetValue = !employeeByAssetId && assignedToValue
+      ? employeeByName.get(String(assignedToValue).toLowerCase()) || employeeById.get(String(assignedToValue).toLowerCase())
       : null;
-    const employeeByAssetName = !employeeByAssetId && asset.assignedTo
-      ? employeeByName.get(String(asset.assignedTo).toLowerCase())
-      : null;
-    const matchedEmployee = employeeByAssetId || employeeByAssetName;
-    const assignedToEmployeeId = matchedEmployee?.employeeId || asset.assignedToEmployeeId || '';
-    const assignedToEmployeeName = matchedEmployee?.employeeName || asset.assignedTo || '-';
+    const matchedEmployee = employeeByAssetId || employeeByAssetValue;
+    const assignedToEmployeeId = matchedEmployee?.employeeId || assignedToEmployeeIdValue || '';
+    const assignedToEmployeeName = matchedEmployee?.employeeName || assignedToValue || '-';
     return {
       id: asset.id || assetCode,
       assetCode,
@@ -1503,6 +1687,9 @@ function normalizeAssetRows(rows, employees = []) {
       model: asset.model || '',
       serialNo: asset.serialNo || '',
       purchaseDate: asset.purchaseDate || '',
+      currentDate,
+      dueDate,
+      assignedDate: formatDateForDisplay(asset.assignedDate || asset.assigned_date || currentDate),
       status: asset.status || 'Available',
       assignedTo: assignedToEmployeeName,
       assignedToEmployeeId,
@@ -1523,12 +1710,166 @@ function serializeAssetForApi(asset) {
     brand: asset.brand || '',
     model: asset.model || '',
     serialNo: asset.serialNo || '',
-    purchaseDate: asset.purchaseDate || '',
+      purchaseDate: asset.purchaseDate || '',
+    currentDate: asset.currentDate || '',
+    dueDate: asset.dueDate || '',
+    assignedDate: asset.assignedDate || asset.currentDate || '',
+    assignmentDate: asset.assignmentDate || asset.currentDate || '',
+    returnDate: asset.returnDate || asset.dueDate || '',
+    current_date: asset.currentDate || '',
+    due_date: asset.dueDate || '',
+    assigned_date: asset.assignedDate || asset.currentDate || '',
+    assignment_date: asset.assignmentDate || asset.currentDate || '',
+    return_date: asset.returnDate || asset.dueDate || '',
     status: asset.status,
-    assignedTo: assignedToEmployeeId || '-',
-    condition: asset.condition || 'Good',
-    location: asset.location || 'Store',
-  };
+      assignedTo: assignedToEmployeeId || '-',
+      condition: asset.condition || 'Good',
+      location: asset.location || 'Store',
+    };
+}
+
+function getTodayInputValue(referenceDate = new Date()) {
+  const year = referenceDate.getFullYear();
+  const month = String(referenceDate.getMonth() + 1).padStart(2, '0');
+  const day = String(referenceDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateForInput(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return '';
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  const slashMatch = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (slashMatch) {
+    return `${slashMatch[3]}-${slashMatch[2]}-${slashMatch[1]}`;
+  }
+
+  const shortMonthMatch = text.match(/^(\d{2})\s([A-Za-z]{3})\s(\d{4})$/);
+  if (shortMonthMatch) {
+    const monthMap = {
+      Jan: '01',
+      Feb: '02',
+      Mar: '03',
+      Apr: '04',
+      May: '05',
+      Jun: '06',
+      Jul: '07',
+      Aug: '08',
+      Sep: '09',
+      Oct: '10',
+      Nov: '11',
+      Dec: '12',
+    };
+    const month = monthMap[shortMonthMatch[2]];
+    if (month) {
+      return `${shortMonthMatch[3]}-${month}-${shortMonthMatch[1]}`;
+    }
+  }
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    return getTodayInputValue(parsed);
+  }
+
+  return '';
+}
+
+function formatDateForDisplay(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return 'N/A';
+  }
+
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const date = new Date(`${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}T00:00:00`);
+    if (!Number.isNaN(date.getTime())) {
+      return new Intl.DateTimeFormat('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }).format(date);
+    }
+  }
+
+  const slashMatch = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (slashMatch) {
+    const date = new Date(`${slashMatch[3]}-${slashMatch[2]}-${slashMatch[1]}T00:00:00`);
+    if (!Number.isNaN(date.getTime())) {
+      return new Intl.DateTimeFormat('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }).format(date);
+    }
+  }
+
+  return text;
+}
+
+function parseDateForSort(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return null;
+  }
+
+  const formats = [
+    /^(\d{4})-(\d{2})-(\d{2})$/,
+    /^(\d{2})\/(\d{2})\/(\d{4})$/,
+    /^(\d{2})\s([A-Za-z]{3})\s(\d{4})$/,
+  ];
+
+  for (const format of formats) {
+    const match = text.match(format);
+    if (!match) {
+      continue;
+    }
+
+    if (format === formats[0]) {
+      const date = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00`);
+      if (!Number.isNaN(date.getTime())) {
+        return date.getTime();
+      }
+    } else if (format === formats[1]) {
+      const date = new Date(`${match[3]}-${match[2]}-${match[1]}T00:00:00`);
+      if (!Number.isNaN(date.getTime())) {
+        return date.getTime();
+      }
+    } else {
+      const date = new Date(`${match[3]} ${match[2]} ${match[1]} 00:00:00`);
+      if (!Number.isNaN(date.getTime())) {
+        return date.getTime();
+      }
+    }
+  }
+
+  const fallback = new Date(text);
+  return Number.isNaN(fallback.getTime()) ? null : fallback.getTime();
+}
+
+function sortByLatestDateDesc(rows, pickDate) {
+  return [...rows].sort((left, right) => {
+    const rightValue = parseDateForSort(pickDate(right));
+    const leftValue = parseDateForSort(pickDate(left));
+
+    if (leftValue === null && rightValue === null) {
+      return 0;
+    }
+    if (leftValue === null) {
+      return 1;
+    }
+    if (rightValue === null) {
+      return -1;
+    }
+
+    return rightValue - leftValue;
+  });
 }
 
 function getNextAssetCode(assets) {
