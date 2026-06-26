@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/users")
+@SuppressWarnings("null")
 public class UserController {
   private final AppUserRepository appUserRepository;
 
@@ -28,6 +29,7 @@ public class UserController {
   }
 
   @PostMapping("/bulk")
+  @SuppressWarnings("null")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
     return appUserRepository.saveAll(new ArrayList<>(dedupeUsers(users)));
   }
@@ -80,7 +82,8 @@ public class UserController {
     merged.setEmail(firstNonBlank(current.getEmail(), next.getEmail()));
     merged.setPassword(firstNonBlank(current.getPassword(), next.getPassword()));
     merged.setPasswordHash(firstNonBlank(current.getPasswordHash(), next.getPasswordHash()));
-    merged.setTwoFactorEnabled(Boolean.TRUE.equals(current.getTwoFactorEnabled()) || Boolean.TRUE.equals(next.getTwoFactorEnabled()));
+    merged.setTwoFactorEnabled(
+        Boolean.TRUE.equals(current.getTwoFactorEnabled()) || Boolean.TRUE.equals(next.getTwoFactorEnabled()));
     merged.setTwoFactorSecret(firstNonBlank(current.getTwoFactorSecret(), next.getTwoFactorSecret()));
     merged.setRole(firstNonBlank(current.getRole(), next.getRole()));
     merged.setIsActive(Boolean.TRUE.equals(current.getIsActive()) || Boolean.TRUE.equals(next.getIsActive()));

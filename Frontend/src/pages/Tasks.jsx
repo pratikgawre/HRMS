@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
@@ -8,7 +8,7 @@ import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitials } from '../utils/user-management.js';
-import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
+import { getNextTaskCode, loadTasksWithSeed } from '../utils/taskStorage.js';
 import {
   getEmployeeId,
   getEmployeeName,
@@ -17,7 +17,16 @@ import {
 } from '../utils/teamLeadAssignments.js';
 import { taskColumns } from './taskColumns.js';
 
-const employeeTaskColumns = [
+export const taskColumns = [
+  { key: 'id', label: 'Task ID' },
+  { key: 'title', label: 'Task' },
+  { key: 'owner', label: 'Assignee' },
+  { key: 'priority', label: 'Priority' },
+  { key: 'due', label: 'Due' },
+  { key: 'status', label: 'Status' },
+];
+
+export const employeeTaskColumns = [
   { key: 'id', label: 'Task ID' },
   { key: 'title', label: 'Task Title' },
   { key: 'owner', label: 'Assigned By' },
@@ -44,6 +53,7 @@ function Tasks() {
   }
   const isTeamLead = role === 'teamLead';
   const canAssignTasks = taskAssignableRoles.includes(role);
+  const showTaskActionColumns = role !== 'hr';
   const [taskRows, setTaskRows] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -54,10 +64,10 @@ function Tasks() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(getEmptyTaskForm());
   const [taskFormMode, setTaskFormMode] = useState('create');
-  const [editingTask, setEditingTask] = useState(null);
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
   const currentTeamLeadIdentity = {
@@ -188,8 +198,6 @@ function Tasks() {
     taskRows.filter((task) => role !== 'employee' || isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee))
   ), [currentEmployeeId, employeeIdentity.employee, role, taskRows]);
   const openTaskModal = () => {
-    setTaskFormMode('create');
-    setEditingTask(null);
     setForm(getEmptyTaskForm({
       teamLeadMode: isTeamLead,
       projectId: selectedProject?.id || teamLeadProjects[0]?.id || '',
@@ -298,26 +306,54 @@ function Tasks() {
   },
 },
     {
-      key: 'edit',
-      label: 'Edit',
+      key: 'owner',
+      label: 'Assign',
       render: (row) => (
-        <div className="table-actions table-actions-inline">
-          <button type="button" className="section-action" onClick={() => openTaskEditModal(row)}>
-            Edit
-          </button>
+        <div className="employee-cell">
+          <span>{getInitials(row.owner)}</span>
+          <div>
+            <strong>{row.owner}</strong>
+            <small>{row.assignedToId || row.assignedToName || '-'}</small>
+          </div>
         </div>
       ),
     },
     {
-      key: 'delete',
-      label: 'Delete',
+      key: 'title',
+      label: 'Module',
+      render: (row) => (
+        <div>
+          <strong>{row.title}</strong>
+          <small style={{ display: 'block', color: 'var(--muted-text, #667085)' }}>{row.projectName || row.projectCode || '-'}</small>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (row) => {
+        const value = String(row.status || '').trim() || 'Pending';
+        const styles = {
+          Pending: { color: '#d88a12', bg: 'rgba(216,138,18,0.08)' },
+          Active: { color: '#0f9f9a', bg: 'rgba(15,159,154,0.08)' },
+          Approved: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+          Completed: { color: '#485666', bg: 'rgba(72,86,102,0.08)' },
+        };
+        const style = styles[value] || { color: '#485666', bg: 'rgba(72,86,102,0.06)' };
+        return (
+          <span style={{ padding: '0.18rem 0.6rem', borderRadius: 999, background: style.bg, color: style.color, fontWeight: 800, fontSize: '0.86rem' }}>{value}</span>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
       render: (row) => (
         <div className="table-actions table-actions-inline">
-          <button
-            type="button"
-            className="section-action danger"
-            onClick={() => deleteTaskAssignment(row)}
-          >
+          <button type="button" onClick={() => openTaskEditModal(row)}>
+            Edit
+          </button>
+          <button type="button" className="danger" onClick={() => deleteTask(row)}>
             Delete
           </button>
         </div>
@@ -329,6 +365,7 @@ function Tasks() {
     event.preventDefault();
 
     try {
+      const isEditing = Boolean(editingTask);
       if (isTeamLead) {
         const project = teamLeadProjects.find((item) => item.id === form.projectId) || null;
         if (!project) {
@@ -338,7 +375,7 @@ function Tasks() {
 
         const title = form.title.trim();
         if (!title) {
-          setMessage('Please enter a task title.');
+          setMessage('Please enter a module name.');
           return;
         }
 
@@ -352,7 +389,7 @@ function Tasks() {
         const assigneeId = getEmployeeId(assignee);
         const assigneeName = getEmployeeName(assignee);
         const payload = {
-          id: getNextTaskCode(taskRows),
+          id: `TSK-${Date.now()}`,
           title,
           description: form.description.trim(),
           owner: assigneeName,
@@ -369,24 +406,27 @@ function Tasks() {
           projectId: project.id,
           projectName: project.name || '',
           projectCode: project.projectCode || project.id || '',
+          createdDateTime: editingTask?.createdDateTime || '',
         };
 
-        const saved = await apiRequest('/tasks', {
-          method: 'POST',
+        const saved = await apiRequest(editingTask ? `/tasks/${editingTask.id}` : '/tasks', {
+          method: editingTask ? 'PUT' : 'POST',
           body: JSON.stringify(payload),
         });
         const nextTask = normalizeTaskRow(saved || payload);
-        setTaskRows((current) => [nextTask, ...current]);
+        setTaskRows((current) => (editingTask
+          ? current.map((task) => (task.id === nextTask.id ? nextTask : task))
+          : [nextTask, ...current]));
         window.dispatchEvent(new Event('kavyaTasksChanged'));
-        window.dispatchEvent(new Event('kavyaProjectsChanged'));
-        closeTaskModal();
+        setIsTaskModalOpen(false);
+        setForm(getEmptyTaskForm({ teamLeadMode: true, projectId: project.id }));
         setMessage('Task assigned successfully.');
         return;
       }
 
       const title = form.title.trim();
       if (!title) {
-        setMessage('Please enter a task title.');
+        setMessage('Please enter a module name.');
         return;
       }
 
@@ -397,7 +437,7 @@ function Tasks() {
       }
 
       const payload = {
-        id: getNextTaskCode(taskRows),
+        id: `TSK-${Date.now()}`,
         title,
         description: form.description.trim(),
         owner: getEmployeeName(assignee),
@@ -412,130 +452,24 @@ function Tasks() {
         dueDate: form.dueDate,
         status: form.status,
         projectId: form.projectId || '',
+        createdDateTime: editingTask?.createdDateTime || '',
       };
 
-      const saved = await apiRequest('/tasks', {
-        method: 'POST',
+      const saved = await apiRequest(editingTask ? `/tasks/${editingTask.id}` : '/tasks', {
+        method: editingTask ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
       });
       const nextTask = normalizeTaskRow(saved || payload);
-      setTaskRows((current) => [nextTask, ...current]);
+      setTaskRows((current) => (editingTask
+        ? current.map((task) => (task.id === nextTask.id ? nextTask : task))
+        : [nextTask, ...current]));
       window.dispatchEvent(new Event('kavyaTasksChanged'));
-      window.dispatchEvent(new Event('kavyaProjectsChanged'));
-      closeTaskModal();
+      setIsTaskModalOpen(false);
       setMessage('Task assigned successfully.');
     } catch {
-      setMessage('Task could not be assigned right now.');
+      setMessage(isEditing ? 'Task could not be updated right now.' : 'Task could not be assigned right now.');
     }
   };
-
-  const updateTaskAssignment = async (event) => {
-    event.preventDefault();
-
-    if (!editingTask) {
-      setMessage('Please select a task first.');
-      return;
-    }
-
-    try {
-      if (isTeamLead) {
-        const project = teamLeadProjects.find((item) => item.id === form.projectId) || null;
-        if (!project) {
-          setMessage('Please select a project first.');
-          return;
-        }
-
-        const allowedEmployees = getProjectAssigneeOptions(project, employees, currentTeamLeadIdentity);
-        const assignee = allowedEmployees.find((employee) => getEmployeeId(employee) === form.assignedToId) || null;
-        if (!assignee) {
-          setMessage('Please select a valid employee for the selected project.');
-          return;
-        }
-
-        const payload = buildTaskAssignmentPayload({
-          taskId: editingTask.id,
-          existingTask: editingTask,
-          form,
-          assignee,
-          project,
-          role,
-          currentEmployeeId,
-          employeeIdentity,
-        });
-
-        const saved = await apiRequest(`/tasks/${editingTask.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
-        const normalized = normalizeTaskRow(saved || payload);
-        setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
-        window.dispatchEvent(new Event('kavyaTasksChanged'));
-        window.dispatchEvent(new Event('kavyaProjectsChanged'));
-        closeTaskModal();
-        setMessage('Task updated successfully.');
-        return;
-      }
-
-      const assignee = assigneeOptions.find((employee) => getEmployeeId(employee) === form.assignedToId) || assigneeOptions[0];
-      if (!assignee) {
-        setMessage('Please choose an assignee first.');
-        return;
-      }
-
-      const payload = buildTaskAssignmentPayload({
-        taskId: editingTask.id,
-        existingTask: editingTask,
-        form,
-        assignee,
-        project: null,
-        role,
-        currentEmployeeId,
-        employeeIdentity,
-      });
-
-      const saved = await apiRequest(`/tasks/${editingTask.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
-      const normalized = normalizeTaskRow(saved || payload);
-      setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
-      window.dispatchEvent(new Event('kavyaTasksChanged'));
-      window.dispatchEvent(new Event('kavyaProjectsChanged'));
-      closeTaskModal();
-      setMessage('Task updated successfully.');
-    } catch {
-      setMessage('Task could not be updated right now.');
-    }
-  };
-
-  function deleteTaskAssignment(task) {
-    if (!task) {
-      return;
-    }
-
-    if (!canAssignTasks) {
-      setMessage('You do not have permission to delete task assignments.');
-      return;
-    }
-
-    const confirmDelete = window.confirm(`Delete task "${task.title || task.id}"?`);
-    if (!confirmDelete) {
-      return;
-    }
-
-    apiRequest(`/tasks/${task.id}`, {
-      method: 'DELETE',
-    })
-      .then(() => {
-        setTaskRows((current) => current.filter((row) => row.id !== task.id));
-        window.dispatchEvent(new Event('kavyaTasksChanged'));
-        window.dispatchEvent(new Event('kavyaProjectsChanged'));
-        setMessage('Task deleted successfully.');
-      })
-      .catch(() => {
-        setMessage('Task could not be deleted right now.');
-      });
-  }
 
   const updateTaskStatus = async (event) => {
     event.preventDefault();
@@ -556,9 +490,9 @@ function Tasks() {
     };
 
     try {
-      const saved = await apiRequest(`/tasks/${selectedTask.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(serializeTaskForApi(nextTask)),
+      const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextTask.status }),
       });
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
@@ -575,7 +509,7 @@ function Tasks() {
   return (
     <>
       <Hero
-        title={role === 'employee' ? 'My Tasks' : isTeamLead || role === 'projectManager' ? 'Task Assignment' : 'Task Management'}
+        title={role === 'employee' ? 'My Tasks' : isTeamLead || role === 'projectManager' || role === 'admin' ? 'Task Assignment' : 'Task Management'}
         copy={role === 'employee'
           ? 'Track your assigned tasks, update the current status, and stay on top of due dates.'
           : 'Assign tasks, track priority and due date, and keep delivery moving across the team.'}
@@ -647,17 +581,9 @@ function Tasks() {
                 </button>
               </div>
               <DataTable
-                columns={taskColumns}
+                columns={taskAssignmentColumns}
                 rows={assignableTasks}
                 emptyMessage="No tasks available."
-                onRowClick={(task) => {
-                  if (canAssignTasks) {
-                    setSelectedTask(task);
-                    setActiveTab('status');
-                    setIsStatusModalOpen(true);
-                    setForm((current) => ({ ...current, status: task.status || 'Pending' }));
-                  }
-                }}
               />
             </div>
           )}
@@ -694,8 +620,8 @@ function Tasks() {
           projectOptions={teamLeadProjects}
           selectedProject={selectedProject}
           isTeamLead={isTeamLead}
-          onClose={closeTaskModal}
-          onSubmit={taskFormMode === 'edit' ? updateTaskAssignment : createTask}
+          onClose={() => setIsTaskModalOpen(false)}
+          onSubmit={createTask}
         />
       )}
 
@@ -724,6 +650,8 @@ function EmployeeTasksView() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedDetailsTask, setSelectedDetailsTask] = useState(null);
   const [message, setMessage] = useState('');
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
   const [form, setForm] = useState(getEmptyTaskForm());
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
@@ -757,6 +685,26 @@ function EmployeeTasksView() {
       window.removeEventListener('kavyaTasksChanged', refreshData);
     };
   }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+    }, 2400);
+
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, [toast]);
 
   const filteredRows = useMemo(() => {
     let rows = taskRows.filter((task) => isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee));
@@ -891,9 +839,9 @@ function EmployeeTasksView() {
     };
 
     try {
-      const saved = await apiRequest(`/tasks/${selectedTask.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(serializeTaskForApi(nextTask)),
+      const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextTask.status }),
       });
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
@@ -901,6 +849,10 @@ function EmployeeTasksView() {
       setIsStatusModalOpen(false);
       setSelectedTask(null);
       setMessage('Task status updated successfully.');
+      setToast({
+        message: 'Task status updated successfully.',
+        type: 'success',
+      });
     } catch {
       setMessage('Task status could not be updated right now.');
     }
@@ -916,6 +868,21 @@ function EmployeeTasksView() {
         <div className="user-alert" role="status">
           <i className="ri-checkbox-circle-line" aria-hidden="true" />
           <span>{message}</span>
+        </div>
+      )}
+      {toast && (
+        <div className={`project-toast is-${toast.type || 'success'}`} role="status" aria-live="polite">
+          <span className="project-toast__icon" aria-hidden="true">
+            <i className="ri-checkbox-circle-fill" />
+          </span>
+          <div className="project-toast__copy">
+            <span>Success</span>
+            <strong>{toast.message}</strong>
+          </div>
+          <button type="button" className="project-toast__close" onClick={() => setToast(null)} aria-label="Dismiss notification">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+          <span className="project-toast__accent" aria-hidden="true" />
         </div>
       )}
       <section className="dashboard-card-grid" style={{ marginBottom: '0.9rem' }}>
@@ -1001,7 +968,7 @@ function EmployeeTasksView() {
   );
 }
 
-function TaskAssignmentModal({ mode, form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
+function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
   const teamLeadMode = Boolean(isTeamLead);
   const isEditMode = mode === 'edit';
 
@@ -1010,7 +977,7 @@ function TaskAssignmentModal({ mode, form, setForm, assigneeOptions, projectOpti
       return {
         ...current,
         projectId: nextProjectId,
-        title: '',
+        title: isEditMode ? current.title : '',
         assignedToId: '',
       };
     });
@@ -1018,7 +985,7 @@ function TaskAssignmentModal({ mode, form, setForm, assigneeOptions, projectOpti
 
   return (
     <div className="payroll-modal-backdrop" role="presentation">
-      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Assign task">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label={isEditMode ? 'Edit task' : 'Assign task'}>
         <div className="payroll-modal-head">
           <h3>{isEditMode ? 'Edit Task' : 'Assign Task'}</h3>
           <button type="button" onClick={onClose} aria-label="Close task modal"><i className="ri-close-line" aria-hidden="true" /></button>
@@ -1052,22 +1019,22 @@ function TaskAssignmentModal({ mode, form, setForm, assigneeOptions, projectOpti
                 <div className="task-assignment-stack">
                   {form.projectId ? (
                     <label className="field">
-                      <span>Task Title</span>
+                      <span>Module</span>
                       <input
                         required
                         value={form.title}
                         onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                        placeholder="Enter task title"
+                        placeholder="Enter module name"
                       />
                     </label>
                   ) : (
                     <p className="project-empty-state task-empty-inline">
-                      Select a project to enter a task title and load eligible assignees.
+                      Select a project to enter a module name and load eligible assignees.
                     </p>
                   )}
 
                   <label className="field">
-                    <span>Assignee</span>
+                    <span>Assign</span>
                     <select
                       value={form.assignedToId || ''}
                       disabled={!form.projectId}
@@ -1089,11 +1056,11 @@ function TaskAssignmentModal({ mode, form, setForm, assigneeOptions, projectOpti
           ) : (
             <>
               <label className="field">
-                <span>Task Title</span>
-                <input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter task title" />
+                <span>Module</span>
+                <input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter module name" />
               </label>
               <label className="field">
-                <span>Assignee</span>
+                <span>Assign</span>
                 <select value={form.assignedToId} onChange={(event) => setForm((current) => ({ ...current, assignedToId: event.target.value }))}>
                   {assigneeOptions.map((employee) => {
                     const employeeId = getEmployeeId(employee);
@@ -1138,7 +1105,7 @@ function TaskAssignmentModal({ mode, form, setForm, assigneeOptions, projectOpti
           </label>
 
           <div className="salary-form-actions">
-            <button className="payroll-primary" type="submit">{isEditMode ? 'Update Task' : 'Save Task'}</button>
+            <button className="payroll-primary" type="submit">Save Task</button>
             <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
           </div>
         </form>
@@ -1147,7 +1114,58 @@ function TaskAssignmentModal({ mode, form, setForm, assigneeOptions, projectOpti
   );
 }
 
+function TaskDetailsModal({ task, onClose }) {
+  if (!task) {
+    return null;
+  }
+
+  const dueIndicator = getDueIndicator(task);
+
+  return (
+    <div className="payroll-modal-backdrop" role="presentation">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Task details">
+        <div className="payroll-modal-head">
+          <h3>Task Details</h3>
+          <button type="button" onClick={onClose} aria-label="Close task details">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="task-summary-card" style={{ display: 'grid', gap: '0.75rem' }}>
+          <div>
+            <p className="eyebrow">{task.id}</p>
+            <strong>{task.title}</strong>
+          </div>
+          <small>Assigned by: {task.owner || '-'}</small>
+          <small>Priority: {task.priority || 'Medium'}</small>
+          <small>Status: {task.status || 'Pending'}</small>
+          <small>Due date: {task.dueDate || task.due || '-'}</small>
+          {dueIndicator ? (
+            <small>
+              Deadline: {dueIndicator.label}
+            </small>
+          ) : null}
+          {task.projectName || task.projectCode ? (
+            <small>Project: {task.projectName || '-'}{task.projectCode ? ` (${task.projectCode})` : ''}</small>
+          ) : null}
+          {task.description ? <p style={{ margin: 0, color: 'var(--muted-text, #667085)' }}>{task.description}</p> : null}
+        </div>
+
+        <div className="salary-form-actions">
+          <button className="payroll-primary" type="button" onClick={onClose}>Close</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
+  const statusOptions = taskStatusOptions.filter((item) => item !== 'Approved');
+  const handleSubmit = (event) => {
+    event?.preventDefault?.();
+    onSubmit(event);
+  };
+
   return (
     <div className="payroll-modal-backdrop" role="presentation">
       <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Update task status">
@@ -1156,7 +1174,7 @@ function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
           <button type="button" onClick={onClose} aria-label="Close status modal"><i className="ri-close-line" aria-hidden="true" /></button>
         </div>
 
-        <form className="salary-form" onSubmit={onSubmit}>
+        <form className="salary-form" onSubmit={handleSubmit}>
           <div className="task-summary-card">
             <p className="eyebrow">{task.id}</p>
             <strong>{task.title}</strong>
@@ -1166,7 +1184,7 @@ function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
           <label className="field">
             <span>Status</span>
             <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-              {taskStatusOptions.map((item) => <option key={item}>{item}</option>)}
+              {statusOptions.map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
           <div className="salary-form-actions">

@@ -233,7 +233,7 @@ function EmployeeDashboard() {
       </div>
 
       <div className="dashboard-grid" style={{ display: 'block', marginTop: '16px' }}>
-        <Section title="Latest Announcements" action="Read all">
+        <Section title="Latest Announcements" action="Read all" actionTo="/employee/announcements">
           <div
             className="announcement-list"
             style={{

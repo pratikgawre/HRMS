@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/projects")
+@SuppressWarnings("null")
 public class ProjectController {
   private final ProjectRepository projectRepository;
   private final NotificationService notificationService;
@@ -54,6 +55,7 @@ public class ProjectController {
   }
 
   @PostMapping
+  @SuppressWarnings("null")
   public Project create(
       @RequestBody Project project,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -76,6 +78,7 @@ public class ProjectController {
       @RequestBody List<Project> projects,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    List<Project> safeProjects = projects == null ? List.of() : projects;
     long existingCount = projectRepository.count();
     projectRepository.deleteAll();
     List<Project> saved = projectRepository.saveAll(new java.util.ArrayList<>(Objects.requireNonNull(projects)));
@@ -114,6 +117,7 @@ public class ProjectController {
   }
 
   @DeleteMapping("/{id}")
+  @SuppressWarnings("null")
   public void delete(
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,

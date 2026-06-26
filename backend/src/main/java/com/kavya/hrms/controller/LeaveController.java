@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/leaves")
+@SuppressWarnings("null")
 public class LeaveController {
   private final LeaveRequestRepository leaveRequestRepository;
   private final AppUserRepository appUserRepository;
@@ -43,15 +44,17 @@ public class LeaveController {
       @RequestBody LeaveRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    LeaveRequest safeRequest = request == null ? new LeaveRequest() : request;
     if (accessRole != null && !accessRole.isBlank()) {
-      request.setOwnerRole(accessRole);
+      safeRequest.setOwnerRole(accessRole);
     }
-    LeaveRequest saved = leaveRequestRepository.save(Objects.requireNonNull(request));
+    LeaveRequest saved = leaveRequestRepository.save(safeRequest);
     notifyLeaveChange(saved, "Leave request submitted", accessRole, userId, "submitted");
     return saved;
   }
 
   @PostMapping("/bulk")
+  @SuppressWarnings("null")
   public List<LeaveRequest> bulkSave(@RequestBody List<LeaveRequest> requests) {
     long existingCount = leaveRequestRepository.count();
     leaveRequestRepository.deleteAll();

@@ -20,6 +20,7 @@ import com.kavya.hrms.repository.SupportTicketRepository;
 
 @RestController
 @RequestMapping("/api/support")
+@SuppressWarnings("null")
 public class SupportController {
   private final SupportTicketRepository repository;
 
@@ -51,6 +52,7 @@ public class SupportController {
   }
 
   @PatchMapping("/{id}/status")
+  @SuppressWarnings("null")
   public ResponseEntity<SupportTicket> updateStatus(@PathVariable String id, @RequestBody StatusUpdateRequest request) {
     String ticketId = Objects.requireNonNull(id, "id must not be null");
     return repository.findById(ticketId)
@@ -63,7 +65,13 @@ public class SupportController {
 
   public static class StatusUpdateRequest {
     private String status;
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+
+    public String getStatus() {
+      return status;
+    }
+
+    public void setStatus(String status) {
+      this.status = status;
+    }
   }
 }

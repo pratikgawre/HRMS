@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/announcements")
+@SuppressWarnings("null")
 public class AnnouncementController {
   private final AnnouncementRepository announcementRepository;
   private final NotificationService notificationService;
@@ -55,7 +56,8 @@ public class AnnouncementController {
       @RequestBody Announcement announcement,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Announcement saved = announcementRepository.save(Objects.requireNonNull(announcement));
+    Announcement saved = announcementRepository
+        .save(Objects.requireNonNull(announcement, "announcement must not be null"));
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "New announcement posted",
@@ -69,6 +71,7 @@ public class AnnouncementController {
   }
 
   @PostMapping("/bulk")
+  @SuppressWarnings("null")
   public List<Announcement> bulkSave(@RequestBody List<Announcement> announcements) {
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
@@ -112,20 +115,59 @@ public class AnnouncementController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String announcementId = Objects.requireNonNull(id, "id must not be null");
-    Announcement current = announcementRepository.findById(announcementId).orElse(null);
-    announcementRepository.deleteById(announcementId);
+    String nonNullId = id;
+    Announcement current = announcementRepository.findById(nonNullId).orElse(null);
+    announcementRepository.deleteById(nonNullId);
+    String title = "An announcement";
+    if (current != null) {
+      String currentTitle = current.getTitle();
+      if (currentTitle != null && !currentTitle.isBlank()) {
+        title = currentTitle;
+      }
+    }
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "Announcement removed",
-        (current != null ? current.getTitle() : "An announcement") + " was removed.",
+        title + " was removed.",
         "announcement",
         announcementId,
         accessRole,
         "System",
         userId);
   }
+  private String asString(Object value) {
+    return value == null ? "" : String.valueOf(value).trim();
+  }
 
+  private boolean equalsIgnoreCase(String left, String right) {
+    return asString(left).equalsIgnoreCase(asString(right));
+  }
+
+  private List<Announcement> readAnnouncementsFromDocuments() {
+    List<Document> documents = mongoTemplate.findAll(Document.class, "announcements");
+    List<Announcement> announcements = new ArrayList<>();
+    for (Document document : documents) {
+      announcements.add(fromDocument(document));
+    }
+    return announcements;
+  }
+
+  private List<Announcement> loadAnnouncementsSafely() {
+    try {
+      List<Announcement> announcements = announcementRepository.findAll();
+      if (announcements != null) {
+        return announcements;
+      }
+    } catch (RuntimeException ex) {
+      // Fall back to raw BSON documents if Mongo entity mapping fails.
+    }
+
+    try {
+      return readAnnouncementsFromDocuments();
+    } catch (RuntimeException ex) {
+      return List.of();
+    }
+  }
   private Announcement fromDocument(Document document) {
     Announcement announcement = new Announcement();
     if (document == null) {
@@ -143,26 +185,5 @@ public class AnnouncementController {
     announcement.setOwnerRole(asString(document.get("ownerRole")));
     announcement.setStatus(asString(document.get("status")));
     return announcement;
-  }
-
-  private List<Announcement> loadAnnouncementsSafely() {
-    try {
-      List<Document> documents = mongoTemplate.findAll(Document.class, "announcements");
-      List<Announcement> announcements = new ArrayList<>();
-      for (Document document : documents) {
-        announcements.add(fromDocument(document));
-      }
-      return announcements;
-    } catch (RuntimeException ex) {
-      return List.of();
-    }
-  }
-
-  private String asString(Object value) {
-    return value == null ? "" : String.valueOf(value).trim();
-  }
-
-  private boolean equalsIgnoreCase(String left, String right) {
-    return asString(left).equalsIgnoreCase(asString(right));
   }
 }

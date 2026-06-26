@@ -1,5 +1,6 @@
 package com.kavya.hrms.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -12,7 +13,11 @@ public class AssetAssignment {
   private String assetName;
   private String employeeId;
   private String employeeName;
+  @JsonAlias({"currentDate", "current_date", "assignmentDate", "assignment_date"})
   private String assignedDate;
+  @JsonAlias({"dueDate", "due_date", "returnDate", "return_date"})
+  private String dueDate;
+  @JsonAlias({"returnDate", "return_date", "dueDate", "due_date"})
   private String returnDate;
   private String condition;
   private String status;
@@ -33,6 +38,8 @@ public class AssetAssignment {
   public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
   public String getAssignedDate() { return assignedDate; }
   public void setAssignedDate(String assignedDate) { this.assignedDate = assignedDate; }
+  public String getDueDate() { return dueDate; }
+  public void setDueDate(String dueDate) { this.dueDate = dueDate; }
   public String getReturnDate() { return returnDate; }
   public void setReturnDate(String returnDate) { this.returnDate = returnDate; }
   public String getCondition() { return condition; }

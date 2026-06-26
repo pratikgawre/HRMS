@@ -22,6 +22,7 @@ import org.mockito.stubbing.Answer;
 import org.springframework.http.ResponseEntity;
 
 @ExtendWith(MockitoExtension.class)
+@SuppressWarnings("null")
 class AuthControllerTest {
     @Mock
     private AppUserRepository appUserRepository;
@@ -54,6 +55,12 @@ class AuthControllerTest {
         request.setPassword("admin123");
 
         ResponseEntity<LoginResponse> response = authController.login(request);
+        assertNotNull(response, "Response should not be null");
+
+        LoginResponse loginResponse = response.getBody();
+        if (loginResponse == null) {
+            throw new AssertionError("Response body should not be null");
+        }
 
         assertEquals(200, response.getStatusCode().value());
         LoginResponse body = response.getBody();

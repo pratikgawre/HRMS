@@ -27,6 +27,7 @@ import com.kavya.hrms.repository.AuthSessionRepository;
 
 @RestController
 @RequestMapping("/api/auth")
+@SuppressWarnings("null")
 public class AuthController {
   private final AppUserRepository appUserRepository;
   private final AuthSessionRepository authSessionRepository;
@@ -38,26 +39,28 @@ public class AuthController {
   }
 
   @PostMapping("/login")
-  public ResponseEntity<LoginResponse> login(@RequestBody(required = false) @Nullable LoginRequest request) {
-    if (request == null) {
-      return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(failed("Email and password are required"));
-    }
-
+  public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
+    Objects.requireNonNull(request, "request");
     String email = normalizeEmail(request.getEmail());
-    String password = String.valueOf(request.getPassword());
+    String password = request.getPassword() == null ? "" : request.getPassword();
 
-    AppUser user = appUserRepository.findAllByEmailIgnoreCase(email).stream().findFirst().orElse(null);
-    if (user == null || !passwordMatches(password, user)) {
-      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials"));
-    }
+    return appUserRepository.findAllByEmailIgnoreCase(email).stream()
+        .findFirst()
+        .map(user -> {
+          if (!passwordMatches(password, user)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials"));
+          }
 
-    String now = Instant.now().toString();
-    user.setLastLogin(now);
-    appUserRepository.save(Objects.requireNonNull(user));
+          String now = Instant.now().toString();
+          user.setLastLogin(now);
+          appUserRepository.save(user);
 
-    String token = UUID.randomUUID().toString();
-    authSessionRepository.save(Objects.requireNonNull(buildSession(user, token, now)));
-    return ResponseEntity.ok(okResponse(Objects.requireNonNull(user), token, now));
+          String token = UUID.randomUUID().toString();
+          AuthSession session = buildSession(user, token, now);
+          authSessionRepository.save(Objects.requireNonNull(session, "session"));
+          return ResponseEntity.ok(okResponse(user, token, now));
+        })
+        .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials")));
   }
 
   @GetMapping("/session")
@@ -117,30 +120,19 @@ public class AuthController {
     return response;
   }
 
-  private String normalizeRole(@Nullable String role) {
-    if (role == null)
+  private String normalizeRole(String role) {
+    if (role == null) {
       return "Employee";
-    String normalized = role.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
-    switch (normalized) {
-      case "superadmin":
-      case "admin":
-        return "Super Admin";
-      case "hrmanager":
-      case "hr":
-        return "HR Manager";
-      case "projectmanager":
-      case "manager":
-      case "projectmanagerrole":
-        return "Project Manager";
-      case "teamlead":
-      case "teamleader":
-        return "Team Lead";
-      case "employee":
-      case "staff":
-        return "Employee";
-      default:
-        return normalized.isEmpty() ? "Employee" : role.trim();
     }
+    String normalized = role.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+    return switch (normalized) {
+      case "superadmin", "admin" -> "Super Admin";
+      case "hrmanager", "hr" -> "HR Manager";
+      case "projectmanager", "manager", "projectmanagerrole" -> "Project Manager";
+      case "teamlead", "teamleader" -> "Team Lead";
+      case "employee", "staff" -> "Employee";
+      default -> role.trim();
+    };
   }
 
   private boolean passwordMatches(@Nullable String rawPassword, @NonNull AppUser user) {

@@ -50,6 +50,7 @@ function App() {
             <Route path="/admin/projects" element={<Projects />} />
             <Route path="/admin/users" element={<UserManagement />} />
             <Route path="/admin/employees" element={<Employees />} />
+            <Route path="/admin/tasks" element={<Tasks />} />
             <Route path="/admin/team-attendance" element={<TeamAttendance />} />
             <Route path="/admin/attendance" element={<Navigate to="/admin/team-attendance" replace />} />
             <Route path="/admin/leave-management" element={<LeaveRequests />} />
