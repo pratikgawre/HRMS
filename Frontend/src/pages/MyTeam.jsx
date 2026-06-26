@@ -76,6 +76,8 @@ function TeamLeadMyTeamView({ role }) {
   const assignmentData = useMemo(
     () => buildTeamLeadAssignmentGroups(projects, employees, currentTeamLeadIdentity),
     [currentTeamLeadIdentity, employees, projects],
+    () => buildTeamLeadAssignmentGroups(projects, [], currentEmployeeId),
+    [currentEmployeeId, projects],
   );
 
   const taskAssignmentData = useMemo(

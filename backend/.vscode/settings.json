@@ -1,5 +1,4 @@
 {
-  "java.compile.nullAnalysis.mode": "disabled",
   "java.configuration.updateBuildConfiguration": "automatic",
   "java.import.maven.enabled": true,
   "java.jdt.ls.java.home": "C:\\Program Files\\Java\\jdk-17",

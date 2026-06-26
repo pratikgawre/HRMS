@@ -7,6 +7,7 @@ const menus = {
     { label: 'Dashboard', to: '/admin/dashboard', icon: 'ri-dashboard-line' },
     { label: 'Announcements', to: '/admin/announcements', icon: 'ri-megaphone-line' },
     { label: 'Assets', to: '/admin/assets', icon: 'ri-briefcase-4-line' },
+    { label: 'Task Assignment', to: '/admin/tasks', icon: 'ri-task-line' },
     { label: 'Team Attendance', to: '/admin/team-attendance', icon: 'ri-team-line' },
     { label: 'Employees', to: '/admin/employees', icon: 'ri-team-line' },
     { label: 'Leave Management', to: '/admin/leave-management', icon: 'ri-calendar-check-line' },

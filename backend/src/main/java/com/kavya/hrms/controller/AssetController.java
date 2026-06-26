@@ -7,8 +7,12 @@ import com.kavya.hrms.repository.AssetAssignmentRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
+import java.util.Locale;
 import java.util.logging.Logger;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/assets")
+@SuppressWarnings("null")
 public class AssetController {
   private static final Logger LOGGER = Logger.getLogger(AssetController.class.getName());
   private final AssetRepository assetRepository;
@@ -43,14 +48,21 @@ public class AssetController {
 
   @GetMapping
   public List<Asset> list() {
-    return assetRepository.findAll();
+    List<AssetAssignment> assignments = assetAssignmentRepository.findAll();
+    List<Asset> assets = assetRepository.findAll().stream()
+      .map((asset) -> normalizeAssetResponse(mergeAssignmentDates(asset, assignments)))
+      .toList();
+    long assetsWithDates = assets.stream()
+      .filter((asset) -> !normalize(asset.getCurrentDate()).isBlank() || !normalize(asset.getDueDate()).isBlank())
+      .count();
+    LOGGER.info(() -> "[AssetController] list returned=" + assets.size() + ", withDates=" + assetsWithDates);
+    return assets;
   }
 
   @GetMapping("/my-assets")
   public List<Asset> myAssets(
-    @RequestParam(required = false) String employeeId,
-    @RequestHeader(value = "X-Kavya-Employee-Id", required = false) String employeeHeader
-  ) {
+      @RequestParam(required = false) String employeeId,
+      @RequestHeader(value = "X-Kavya-Employee-Id", required = false) String employeeHeader) {
     String resolvedEmployeeId = normalize(employeeId != null && !employeeId.isBlank() ? employeeId : employeeHeader);
     LOGGER.info(() -> "[AssetController] my-assets requested for employeeId=" + resolvedEmployeeId);
 
@@ -60,33 +72,47 @@ public class AssetController {
     }
 
     String resolvedEmployeeName = resolveEmployeeName(resolvedEmployeeId);
+    
     List<Asset> allAssets = assetRepository.findAll();
     List<AssetAssignment> matchingAssignments = assetAssignmentRepository.findAll().stream()
-      .filter((assignment) -> isAssignmentForEmployee(assignment, resolvedEmployeeId, resolvedEmployeeName))
-      .toList();
+        .filter((assignment) -> isAssignmentForEmployee(assignment, resolvedEmployeeId, resolvedEmployeeName))
+        .toList();
 
     List<Asset> response = allAssets.stream()
-      .filter((asset) -> isAssignedToEmployee(asset, resolvedEmployeeId, resolvedEmployeeName) || hasMatchingAssignment(asset, matchingAssignments))
-      .map((asset) -> mergeAssignment(asset, matchingAssignments))
-      .toList();
+        .filter((asset) -> isAssignedToEmployee(asset, resolvedEmployeeId, resolvedEmployeeName)
+            || hasMatchingAssignment(asset, matchingAssignments))
+        .map((asset) -> mergeAssignment(asset, matchingAssignments))
+        .toList();
 
     List<Asset> assignmentOnlyAssets = matchingAssignments.stream()
-      .filter((assignment) -> !containsAsset(response, assignment))
-      .map(this::toAsset)
-      .toList();
+        .filter((assignment) -> !containsAsset(response, assignment))
+        .map(this::toAsset)
+        .toList();
 
-    List<Asset> finalResponse = java.util.stream.Stream.concat(response.stream(), assignmentOnlyAssets.stream()).toList();
+    List<Asset> finalResponse = java.util.stream.Stream.concat(response.stream(), assignmentOnlyAssets.stream())
+        .toList();
 
     LOGGER.info(() -> "[AssetController] my-assets returning=" + finalResponse.size());
     return finalResponse;
   }
 
   @PostMapping
+  @SuppressWarnings("null")
   public Asset create(
       @RequestBody Asset asset,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Asset saved = assetRepository.save(asset);
+    LOGGER.info(() -> "[AssetController] create payload id=" + asset.getId()
+      + ", currentDate=" + asset.getCurrentDate()
+      + ", dueDate=" + asset.getDueDate()
+      + ", assignedToEmployeeId=" + asset.getAssignedToEmployeeId()
+      + ", assignedTo=" + asset.getAssignedTo());
+    Asset saved = assetRepository.save(normalizeAssetResponse(asset));
+    LOGGER.info(() -> "[AssetController] create saved id=" + saved.getId()
+      + ", currentDate=" + saved.getCurrentDate()
+      + ", dueDate=" + saved.getDueDate()
+      + ", assignedToEmployeeId=" + saved.getAssignedToEmployeeId()
+      + ", assignedTo=" + saved.getAssignedTo());
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset created",
@@ -96,7 +122,7 @@ public class AssetController {
         accessRole,
         "System",
         userId);
-    return saved;
+    return normalizeAssetResponse(saved);
   }
 
   @PostMapping("/bulk")
@@ -104,9 +130,10 @@ public class AssetController {
       @RequestBody List<Asset> assets,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    List<Asset> safeAssets = assets == null ? List.of() : assets;
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
-    List<Asset> saved = assetRepository.saveAll(assets);
+    List<Asset> saved = assetRepository.saveAll(assets.stream().map(this::normalizeAssetResponse).toList());
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -118,17 +145,30 @@ public class AssetController {
           "System",
           userId);
     }
-    return saved;
+    return saved.stream().map(this::normalizeAssetResponse).toList();
   }
 
   @PutMapping("/{id}")
+  @SuppressWarnings("null")
   public Asset update(
       @PathVariable String id,
       @RequestBody Asset asset,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     asset.setId(id);
-    Asset saved = assetRepository.save(asset);
+    LOGGER.info(() -> "[AssetController] update payload id=" + id
+      + ", currentDate=" + asset.getCurrentDate()
+      + ", dueDate=" + asset.getDueDate()
+      + ", assignedToEmployeeId=" + asset.getAssignedToEmployeeId()
+      + ", assignedTo=" + asset.getAssignedTo()
+      + ", status=" + asset.getStatus());
+    Asset saved = assetRepository.save(normalizeAssetResponse(asset));
+    LOGGER.info(() -> "[AssetController] update saved id=" + saved.getId()
+      + ", currentDate=" + saved.getCurrentDate()
+      + ", dueDate=" + saved.getDueDate()
+      + ", assignedToEmployeeId=" + saved.getAssignedToEmployeeId()
+      + ", assignedTo=" + saved.getAssignedTo()
+      + ", status=" + saved.getStatus());
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset updated",
@@ -138,10 +178,11 @@ public class AssetController {
         accessRole,
         "System",
         userId);
-    return saved;
+    return normalizeAssetResponse(saved);
   }
 
   @DeleteMapping("/{id}")
+  @SuppressWarnings("null")
   public void delete(
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -169,12 +210,82 @@ public class AssetController {
     return value == null ? "" : value.trim();
   }
 
-  private String resolveEmployeeName(String employeeId) {
+  private Asset normalizeAssetResponse(Asset asset) {
+    if (asset == null) {
+      return null;
+    }
+
+    String currentDate = firstNonBlank(asset.getCurrentDate(), "");
+    String dueDate = firstNonBlank(asset.getDueDate(), "");
+    String assignedDate = firstNonBlank(asset.getAssignedDate(), currentDate);
+    String assignmentDate = firstNonBlank(asset.getAssignmentDate(), currentDate);
+    String returnDate = firstNonBlank(asset.getReturnDate(), dueDate);
+
+    currentDate = firstNonBlank(currentDate, assignedDate, assignmentDate);
+    dueDate = firstNonBlank(dueDate, returnDate);
+    String assignedToEmployeeId = firstNonBlank(asset.getAssignedToEmployeeId(), resolveEmployeeId(asset.getAssignedTo()));
+    String assignedTo = firstNonBlank(asset.getAssignedTo(), resolveEmployeeName(assignedToEmployeeId));
+
+    asset.setCurrentDate(formatDisplayDate(currentDate));
+    asset.setDueDate(formatDisplayDate(dueDate));
+    asset.setAssignedDate(formatDisplayDate(firstNonBlank(assignedDate, currentDate)));
+    asset.setAssignmentDate(formatDisplayDate(firstNonBlank(assignmentDate, currentDate)));
+    asset.setReturnDate(formatDisplayDate(firstNonBlank(returnDate, dueDate)));
+    asset.setAssignedToEmployeeId(assignedToEmployeeId);
+    asset.setAssignedTo(assignedTo);
+    return asset;
+  }
+
+  private String resolveEmployeeId(String value) {
+    String normalizedValue = normalize(value);
+    if (normalizedValue.isBlank() || "-".equals(normalizedValue)) {
+      return "";
+    }
+
     return employeeRepository.findAll().stream()
-      .filter(employee -> employeeId.equals(employee.getEmployeeCode()) || employeeId.equals(employee.getEmployeeId()) || employeeId.equals(employee.getId()))
-      .map(employee -> Optional.ofNullable(employee.getDisplayName()).orElse(employee.getName()))
+      .filter(employee -> matchesEmployee(employee, normalizedValue))
+      .map(employee -> firstNonBlank(employee.getEmployeeCode(), employee.getEmployeeId(), employee.getId()))
       .findFirst()
-      .orElse(employeeId);
+      .orElse(normalizedValue);
+  }
+
+  private String resolveEmployeeName(String employeeId) {
+    String normalizedEmployeeId = normalize(employeeId);
+    if (normalizedEmployeeId.isBlank() || "-".equals(normalizedEmployeeId)) {
+      return "";
+    }
+
+    return employeeRepository.findAll().stream()
+      .filter(employee -> matchesEmployee(employee, normalizedEmployeeId))
+      .map(employee -> firstNonBlank(employee.getDisplayName(), employee.getName(), normalizedEmployeeId))
+      .findFirst()
+      .orElse(normalizedEmployeeId);
+  }
+
+  private boolean matchesEmployee(com.kavya.hrms.model.Employee employee, String value) {
+    if (employee == null || value == null || value.isBlank()) {
+      return false;
+    }
+
+    return value.equals(employee.getEmployeeCode())
+        || value.equals(employee.getEmployeeId())
+        || value.equals(employee.getId())
+        || value.equalsIgnoreCase(Optional.ofNullable(employee.getDisplayName()).orElse(""))
+        || value.equalsIgnoreCase(Optional.ofNullable(employee.getName()).orElse(""));
+  }
+
+  private String firstNonBlank(String... values) {
+    if (values == null) {
+      return "";
+    }
+
+    for (String value : values) {
+      if (value != null && !value.trim().isBlank()) {
+        return value.trim();
+      }
+    }
+
+    return "";
   }
 
   private boolean isAssignedToEmployee(Asset asset, String employeeId, String employeeName) {
@@ -210,10 +321,7 @@ public class AssetController {
 
     String assetId = normalize(asset.getId());
     String assetCode = normalize(asset.getAssetCode());
-    AssetAssignment matched = assignments.stream()
-      .filter((assignment) -> matchesAsset(assetId, assetCode, assignment))
-      .findFirst()
-      .orElse(null);
+    AssetAssignment matched = resolveLatestAssignment(assetId, assetCode, assignments);
 
     if (matched == null) {
       return asset;
@@ -232,7 +340,107 @@ public class AssetController {
       asset.setStatus(matched.getStatus());
     }
 
+    if (normalize(asset.getCurrentDate()).isBlank()) {
+      asset.setCurrentDate(firstNonBlank(matched.getAssignedDate(), asset.getAssignedDate(), asset.getAssignmentDate()));
+    }
+    if (normalize(asset.getDueDate()).isBlank()) {
+      asset.setDueDate(firstNonBlank(matched.getDueDate(), matched.getReturnDate()));
+    }
+    if (normalize(asset.getAssignedDate()).isBlank()) {
+      asset.setAssignedDate(firstNonBlank(matched.getAssignedDate(), asset.getCurrentDate()));
+    }
+    if (normalize(asset.getAssignmentDate()).isBlank()) {
+      asset.setAssignmentDate(firstNonBlank(matched.getAssignedDate(), asset.getCurrentDate()));
+    }
+    if (normalize(asset.getReturnDate()).isBlank()) {
+      asset.setReturnDate(firstNonBlank(matched.getDueDate(), matched.getReturnDate(), asset.getDueDate()));
+    }
+
     return asset;
+  }
+
+  private Asset mergeAssignmentDates(Asset asset, List<AssetAssignment> assignments) {
+    if (asset == null || assignments == null || assignments.isEmpty()) {
+      return asset;
+    }
+
+    String assetId = normalize(asset.getId());
+    String assetCode = normalize(asset.getAssetCode());
+    AssetAssignment matched = resolveLatestAssignment(assetId, assetCode, assignments);
+
+    if (matched == null) {
+      return asset;
+    }
+
+    if (normalize(asset.getCurrentDate()).isBlank()) {
+      asset.setCurrentDate(firstNonBlank(matched.getAssignedDate(), asset.getAssignedDate(), asset.getAssignmentDate()));
+    }
+    if (normalize(asset.getDueDate()).isBlank()) {
+      asset.setDueDate(firstNonBlank(matched.getDueDate(), matched.getReturnDate()));
+    }
+    if (normalize(asset.getAssignedDate()).isBlank()) {
+      asset.setAssignedDate(firstNonBlank(matched.getAssignedDate(), asset.getCurrentDate()));
+    }
+    if (normalize(asset.getAssignmentDate()).isBlank()) {
+      asset.setAssignmentDate(firstNonBlank(matched.getAssignedDate(), asset.getCurrentDate()));
+    }
+    if (normalize(asset.getReturnDate()).isBlank()) {
+      asset.setReturnDate(firstNonBlank(matched.getDueDate(), matched.getReturnDate(), asset.getDueDate()));
+    }
+
+    if (!normalize(matched.getEmployeeId()).isBlank()) {
+      asset.setAssignedToEmployeeId(matched.getEmployeeId());
+    }
+    if (!normalize(matched.getEmployeeName()).isBlank()) {
+      asset.setAssignedTo(matched.getEmployeeName());
+    }
+    if (!normalize(matched.getStatus()).isBlank()) {
+      asset.setStatus(matched.getStatus());
+    }
+
+    return asset;
+  }
+
+  private AssetAssignment resolveLatestAssignment(String assetId, String assetCode, List<AssetAssignment> assignments) {
+    if (assignments == null || assignments.isEmpty()) {
+      return null;
+    }
+
+    return assignments.stream()
+      .filter((assignment) -> matchesAsset(assetId, assetCode, assignment))
+      .max((left, right) -> compareAssignments(left, right))
+      .orElse(null);
+  }
+
+  private int compareAssignments(AssetAssignment left, AssetAssignment right) {
+    LocalDate leftDate = parseDate(firstNonBlank(
+      left == null ? "" : left.getAssignedDate(),
+      left == null ? "" : left.getDueDate(),
+      left == null ? "" : left.getReturnDate()));
+    LocalDate rightDate = parseDate(firstNonBlank(
+      right == null ? "" : right.getAssignedDate(),
+      right == null ? "" : right.getDueDate(),
+      right == null ? "" : right.getReturnDate()));
+
+    if (leftDate != null && rightDate != null) {
+      return leftDate.compareTo(rightDate);
+    }
+    if (leftDate != null) {
+      return 1;
+    }
+    if (rightDate != null) {
+      return -1;
+    }
+
+    String leftRaw = firstNonBlank(
+      left == null ? "" : left.getAssignedDate(),
+      left == null ? "" : left.getDueDate(),
+      left == null ? "" : left.getReturnDate());
+    String rightRaw = firstNonBlank(
+      right == null ? "" : right.getAssignedDate(),
+      right == null ? "" : right.getDueDate(),
+      right == null ? "" : right.getReturnDate());
+    return leftRaw.compareToIgnoreCase(rightRaw);
   }
 
   private boolean hasMatchingAssignment(Asset asset, List<AssetAssignment> assignments) {
@@ -263,12 +471,19 @@ public class AssetController {
   private Asset toAsset(AssetAssignment assignment) {
     Asset asset = new Asset();
     asset.setId(!normalize(assignment.getAssetId()).isBlank() ? assignment.getAssetId() : assignment.getId());
-    asset.setAssetCode(!normalize(assignment.getAssetCode()).isBlank() ? assignment.getAssetCode() : assignment.getAssetId());
+    asset.setAssetCode(
+        !normalize(assignment.getAssetCode()).isBlank() ? assignment.getAssetCode() : assignment.getAssetId());
     asset.setAssetName(!normalize(assignment.getAssetName()).isBlank() ? assignment.getAssetName() : "Asset");
     asset.setStatus(!normalize(assignment.getStatus()).isBlank() ? assignment.getStatus() : "Assigned");
     asset.setAssignedTo(!normalize(assignment.getEmployeeName()).isBlank() ? assignment.getEmployeeName() : assignment.getEmployeeId());
     asset.setEmployeeName(!normalize(assignment.getEmployeeName()).isBlank() ? assignment.getEmployeeName() : assignment.getEmployeeId());
     asset.setAssignedDate(assignment.getAssignedDate());
+    asset.setAssignedToEmployeeId(!normalize(assignment.getEmployeeId()).isBlank() ? assignment.getEmployeeId() : "");
+    asset.setCurrentDate(firstNonBlank(assignment.getAssignedDate()));
+    asset.setDueDate(firstNonBlank(assignment.getDueDate(), assignment.getReturnDate()));
+    asset.setAssignedDate(firstNonBlank(assignment.getAssignedDate(), asset.getCurrentDate()));
+    asset.setAssignmentDate(firstNonBlank(assignment.getAssignedDate(), asset.getCurrentDate()));
+    asset.setReturnDate(firstNonBlank(assignment.getDueDate(), assignment.getReturnDate(), asset.getDueDate()));
     asset.setCondition(!normalize(assignment.getCondition()).isBlank() ? assignment.getCondition() : "Good");
     return asset;
   }
@@ -283,5 +498,42 @@ public class AssetController {
 
     return (!assetId.isBlank() && (assetId.equals(assignmentAssetId) || assetId.equals(assignmentAssetCode)))
         || (!assetCode.isBlank() && (assetCode.equals(assignmentAssetId) || assetCode.equals(assignmentAssetCode)));
+  }
+
+  private String formatDisplayDate(String value) {
+    String normalized = normalize(value);
+    if (normalized.isBlank()) {
+      return "";
+    }
+
+    LocalDate parsed = parseDate(normalized);
+    if (parsed == null) {
+      return normalized;
+    }
+
+    return parsed.format(DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH));
+  }
+
+  private LocalDate parseDate(String value) {
+    String normalized = normalize(value);
+    if (normalized.isBlank()) {
+      return null;
+    }
+
+    DateTimeFormatter[] formatters = new DateTimeFormatter[] {
+      DateTimeFormatter.ISO_LOCAL_DATE,
+      DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH),
+      DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH),
+    };
+
+    for (DateTimeFormatter formatter : formatters) {
+      try {
+        return LocalDate.parse(normalized, formatter);
+      } catch (DateTimeParseException ignored) {
+        // Try the next supported format.
+      }
+    }
+
+    return null;
   }
 }

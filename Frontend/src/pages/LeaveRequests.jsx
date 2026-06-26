@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
-import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
+import { Hero, Section } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
@@ -32,6 +32,7 @@ function LeaveRequests() {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [queueFilter, setQueueFilter] = useState('all');
   const tableRef = useRef(null);
+  const isAdminOrHr = role === 'admin' || role === 'hr';
   const leaveSummary = useMemo(
     () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee)),
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
@@ -159,21 +160,30 @@ function LeaveRequests() {
   }, []);
 
   const columns = [
-    ...leaveColumns,
-    ...(role === 'admin' || role === 'hr' ? [{
+    { key: 'employee', label: 'Employee' },
+    { key: 'type', label: 'Type' },
+    { key: 'days', label: 'Days' },
+    { key: 'from', label: 'From Date' },
+    { key: 'to', label: 'To Date' },
+    { key: 'status', label: 'Status' },
+    ...(isAdminOrHr ? [{
       key: 'ownerRole',
       label: 'Requested By',
       render: (row) => formatRequesterRole(row.ownerRole),
     }, {
-      key: 'medicalReport',
-      label: 'Medical Report',
-      render: (row) => row.medicalReport?.name || 'Not attached',
+      key: 'leaveDetails',
+      label: 'Leave Details',
+      render: (row) => (
+        <button type="button" className="payroll-secondary" onClick={() => setSelectedRequest(row)}>
+          View Details
+        </button>
+      ),
     }] : []),
     ...(canReviewRequests ? [{
       key: 'actions',
       label: 'Actions',
       render: (row) => (
-        <div className="table-actions">
+        <div className="table-actions" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
           <button
             type="button"
             onClick={() => updateLeaveStatus(row.id, isAdminOrHr ? 'Approved' : 'Recommended')}
@@ -181,7 +191,12 @@ function LeaveRequests() {
             <i className="ri-checkbox-circle-line" aria-hidden="true" />
             {isAdminOrHr ? 'Approve' : 'Recommend'}
           </button>
-          {isAdminOrHr && row.status === 'Pending' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
+          {isAdminOrHr && (
+            <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}>
+              <i className="ri-close-circle-line" aria-hidden="true" />
+              Reject
+            </button>
+          )}
         </div>
       ),
     }] : []),
@@ -481,7 +496,7 @@ function LeaveRequests() {
             columns={columns}
             rows={filteredLeaveRequests}
             emptyMessage={queueEmptyMessage}
-            onRowClick={setSelectedRequest}
+            onRowClick={isAdminOrHr ? undefined : setSelectedRequest}
           />
         </div>
       </div>

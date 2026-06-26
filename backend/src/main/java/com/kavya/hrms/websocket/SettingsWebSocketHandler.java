@@ -1,6 +1,7 @@
 package com.kavya.hrms.websocket;
 
 import java.io.IOException;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -16,7 +17,7 @@ public class SettingsWebSocketHandler extends TextWebSocketHandler {
   }
 
   @Override
-  public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+  public void afterConnectionEstablished(@NonNull WebSocketSession session) throws Exception {
     broadcastService.register(session);
     try {
       if (session.isOpen()) {
@@ -33,12 +34,12 @@ public class SettingsWebSocketHandler extends TextWebSocketHandler {
   }
 
   @Override
-  public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+  public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) throws Exception {
     broadcastService.unregister(session);
   }
 
   @Override
-  public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+  public void handleTransportError(@NonNull WebSocketSession session, @NonNull Throwable exception) throws Exception {
     broadcastService.unregister(session);
     try {
       session.close();
