@@ -19,6 +19,7 @@ import java.util.List;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.NonNull;
 
 @Configuration
 @SuppressWarnings("null")
@@ -80,8 +81,10 @@ public class DataSeeder {
       }
 
       if (taskRepository.count() == 0) {
-        taskRepository.save(buildTask("TSK-101", "Finalize sprint board", "Kabir Khan", "High", "25 Apr 2026", "Pending"));
-        taskRepository.save(buildTask("TSK-104", "Design handoff audit", "Aarav Sharma", "Low", "28 Apr 2026", "Completed"));
+        taskRepository
+            .save(buildTask("TSK-101", "Finalize sprint board", "Kabir Khan", "High", "25 Apr 2026", "Pending"));
+        taskRepository
+            .save(buildTask("TSK-104", "Design handoff audit", "Aarav Sharma", "Low", "28 Apr 2026", "Completed"));
       }
 
       if (projectRepository.count() == 0) {
@@ -132,7 +135,8 @@ public class DataSeeder {
         settings.setWeekOff("Sunday");
         settings.setPayrollCutoff("25th of every month");
         settings.setDepartments(java.util.List.of("HR", "Engineering", "Finance", "Operations", "Sales", "Support"));
-        settings.setDesignations(java.util.List.of("HR Manager", "Software Engineer", "Product Designer", "Accountant", "Sales Executive", "Support Executive"));
+        settings.setDesignations(java.util.List.of("HR Manager", "Software Engineer", "Product Designer", "Accountant",
+            "Sales Executive", "Support Executive"));
         SystemSettings.LeaveTypeSetting casual = new SystemSettings.LeaveTypeSetting();
         casual.setName("Casual Leave");
         casual.setDays(12);
@@ -147,7 +151,8 @@ public class DataSeeder {
         wfh.setDays(0);
         settings.setLeaveTypes(java.util.List.of(casual, sick, earned, wfh));
         settings.setPermissionMatrix(java.util.Map.of(
-            "Super Admin", java.util.List.of("company", "departments", "designations", "leaveTypes", "rolePermissions", "payroll"),
+            "Super Admin",
+            java.util.List.of("company", "departments", "designations", "leaveTypes", "rolePermissions", "payroll"),
             "HR Manager", java.util.List.of("company", "departments", "designations", "leaveTypes", "payroll"),
             "Project Manager", java.util.List.of(),
             "Team Lead", java.util.List.of(),
@@ -199,7 +204,8 @@ public class DataSeeder {
       String role,
       String employeeId,
       String employeeName) {
-    List<AppUser> usersWithEmail = new ArrayList<>(appUserRepository.findAllByEmailIgnoreCase(email));
+    List<AppUser> foundUsers = appUserRepository.findAllByEmailIgnoreCase(email);
+    List<AppUser> usersWithEmail = new ArrayList<>(foundUsers == null ? List.of() : foundUsers);
     AppUser user = usersWithEmail.isEmpty() ? new AppUser() : usersWithEmail.get(0);
 
     if (usersWithEmail.size() > 1) {
@@ -220,6 +226,7 @@ public class DataSeeder {
     appUserRepository.save(user);
   }
 
+  @NonNull
   private TaskItem buildTask(String id, String title, String owner, String priority, String dueDate, String status) {
     TaskItem task = new TaskItem();
     task.setId(id);
@@ -231,6 +238,7 @@ public class DataSeeder {
     return task;
   }
 
+  @NonNull
   private Project buildProject(
       String id,
       String name,

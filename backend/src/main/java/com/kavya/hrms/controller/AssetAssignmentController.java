@@ -40,11 +40,11 @@ public class AssetAssignmentController {
   @PostMapping
   public AssetAssignment create(@RequestBody AssetAssignment assignment) {
     System.out.println("[AssetAssignmentController] create payload assetId=" + assignment.getAssetId()
-      + ", assignedDate=" + assignment.getAssignedDate()
-      + ", dueDate=" + assignment.getDueDate()
-      + ", returnDate=" + assignment.getReturnDate()
-      + ", employeeId=" + assignment.getEmployeeId()
-      + ", employeeName=" + assignment.getEmployeeName());
+        + ", assignedDate=" + assignment.getAssignedDate()
+        + ", dueDate=" + assignment.getDueDate()
+        + ", returnDate=" + assignment.getReturnDate()
+        + ", employeeId=" + assignment.getEmployeeId()
+        + ", employeeName=" + assignment.getEmployeeName());
     if (assignment.getAssignedDate() == null || assignment.getAssignedDate().isBlank()) {
       assignment.setAssignedDate(ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu")));
     }
@@ -68,37 +68,38 @@ public class AssetAssignmentController {
     }
     AssetAssignment saved = repository.save(assignment);
     System.out.println("[AssetAssignmentController] create saved assetId=" + saved.getAssetId()
-      + ", assignedDate=" + saved.getAssignedDate()
-      + ", dueDate=" + saved.getDueDate()
-      + ", returnDate=" + saved.getReturnDate()
-      + ", employeeId=" + saved.getEmployeeId()
-      + ", employeeName=" + saved.getEmployeeName());
+        + ", assignedDate=" + saved.getAssignedDate()
+        + ", dueDate=" + saved.getDueDate()
+        + ", returnDate=" + saved.getReturnDate()
+        + ", employeeId=" + saved.getEmployeeId()
+        + ", employeeName=" + saved.getEmployeeName());
     return saved;
   }
 
   @PatchMapping("/{id}/return")
   public ResponseEntity<AssetAssignment> returnAsset(@PathVariable String id, @RequestBody ReturnAssetRequest request) {
+    ReturnAssetRequest safeRequest = request == null ? new ReturnAssetRequest() : request;
     return repository.findById(id)
-      .map((assignment) -> {
-        System.out.println("[AssetAssignmentController] return payload id=" + id
-          + ", returnDate=" + request.getReturnDate()
-          + ", condition=" + request.getCondition());
-        String resolvedReturnDate = request.getReturnDate() == null || request.getReturnDate().isBlank()
-          ? ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"))
-          : request.getReturnDate();
-        String formattedReturnDate = formatDisplayDate(resolvedReturnDate);
-        assignment.setReturnDate(formattedReturnDate);
-        assignment.setDueDate(formattedReturnDate);
-        assignment.setCondition(request.getCondition());
-        assignment.setStatus("Returned");
-        AssetAssignment saved = repository.save(assignment);
-        System.out.println("[AssetAssignmentController] return saved id=" + saved.getId()
-          + ", returnDate=" + saved.getReturnDate()
-          + ", dueDate=" + saved.getDueDate()
-          + ", condition=" + saved.getCondition());
-        return ResponseEntity.ok(saved);
-      })
-      .orElse(ResponseEntity.notFound().build());
+        .map((assignment) -> {
+          System.out.println("[AssetAssignmentController] return payload id=" + id
+              + ", returnDate=" + request.getReturnDate()
+              + ", condition=" + request.getCondition());
+          String returnDate = safeRequest.getReturnDate();
+          if (returnDate == null || returnDate.isBlank()) {
+            returnDate = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"));
+          }
+          assignment.setReturnDate(returnDate);
+          String condition = safeRequest.getCondition();
+          assignment.setCondition(condition == null ? "" : condition);
+          assignment.setStatus("Returned");
+          AssetAssignment saved = repository.save(assignment);
+          System.out.println("[AssetAssignmentController] return saved id=" + saved.getId()
+              + ", returnDate=" + saved.getReturnDate()
+              + ", dueDate=" + saved.getDueDate()
+              + ", condition=" + saved.getCondition());
+          return ResponseEntity.ok(saved);
+        })
+        .orElse(ResponseEntity.notFound().build());
   }
 
   @DeleteMapping("/{id}")
@@ -110,10 +111,21 @@ public class AssetAssignmentController {
     private String returnDate;
     private String condition;
 
-    public String getReturnDate() { return returnDate; }
-    public void setReturnDate(String returnDate) { this.returnDate = returnDate; }
-    public String getCondition() { return condition; }
-    public void setCondition(String condition) { this.condition = condition; }
+    public String getReturnDate() {
+      return returnDate;
+    }
+
+    public void setReturnDate(String returnDate) {
+      this.returnDate = returnDate;
+    }
+
+    public String getCondition() {
+      return condition;
+    }
+
+    public void setCondition(String condition) {
+      this.condition = condition;
+    }
   }
 
   private LocalDate parseDate(String value) {
@@ -127,9 +139,9 @@ public class AssetAssignmentController {
     }
 
     DateTimeFormatter[] formatters = new DateTimeFormatter[] {
-      DateTimeFormatter.ISO_LOCAL_DATE,
-      DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH),
-      DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
+        DateTimeFormatter.ISO_LOCAL_DATE,
+        DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH),
+        DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
     };
 
     for (DateTimeFormatter formatter : formatters) {
