@@ -3,6 +3,7 @@ package com.kavya.hrms.controller;
 import java.time.format.DateTimeFormatter;
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,7 +20,6 @@ import com.kavya.hrms.repository.SupportTicketRepository;
 
 @RestController
 @RequestMapping("/api/support")
-@SuppressWarnings("null")
 public class SupportController {
   private final SupportTicketRepository repository;
 
@@ -37,24 +37,27 @@ public class SupportController {
 
   @PostMapping
   public SupportTicket createTicket(@RequestBody SupportTicket payload) {
+    SupportTicket safePayload = payload == null ? new SupportTicket() : payload;
     long count = repository.count();
     String ticketId = String.format("SUP-%d", 1000 + count + 1);
-    payload.setTicketId(ticketId);
+    safePayload.setTicketId(ticketId);
 
     String created = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"));
-    payload.setCreatedDate(created);
-    if (payload.getStatus() == null) {
-      payload.setStatus("Pending");
+    safePayload.setCreatedDate(created);
+    if (safePayload.getStatus() == null) {
+      safePayload.setStatus("Pending");
     }
 
-    return repository.save(payload);
+    return repository.save(safePayload);
   }
 
   @PatchMapping("/{id}/status")
   public ResponseEntity<SupportTicket> updateStatus(@PathVariable String id, @RequestBody StatusUpdateRequest request) {
-    return repository.findById(id)
+    String safeId = id == null ? "" : id;
+    StatusUpdateRequest safeRequest = request == null ? new StatusUpdateRequest() : request;
+    return repository.findById(safeId)
         .map((ticket) -> {
-          ticket.setStatus(request.getStatus());
+          ticket.setStatus(safeRequest.getStatus());
           return ResponseEntity.ok(repository.save(ticket));
         })
         .orElse(ResponseEntity.notFound().build());

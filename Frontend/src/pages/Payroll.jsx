@@ -455,6 +455,7 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
     <>
       <Hero title="Payroll Management" copy="Manage employee salary records, generate payslips, and track paid or unpaid payroll status." />
 
+      <Section title="Payslip Filter" action={role === 'teamLead' ? '' : 'Employee'}>
       {role === 'hr' && (
         <>
       <Section
@@ -1012,7 +1013,7 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
         </div>
       )}
 
-      <Section title="Payslip Filter" action={roleLabels[role] || 'Employee'}>
+      <Section title="Payslip Filter" action={role === 'teamLead' ? '' : (roleLabels[role] || 'Employee')}>
         <div className="payslip-filter">
           <label className="field">
             <span>Month</span>

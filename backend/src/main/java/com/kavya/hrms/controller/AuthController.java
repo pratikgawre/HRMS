@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -68,13 +70,14 @@ public class AuthController {
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found"));
     }
 
-    return authSessionRepository.findById(token)
-        .map(session -> {
-          session.setLastSeenAt(Instant.now().toString());
-          authSessionRepository.save(session);
-          return ResponseEntity.ok(okResponse(session));
-        })
-        .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found")));
+    AuthSession session = authSessionRepository.findById(token).orElse(null);
+    if (session == null) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found"));
+    }
+
+    session.setLastSeenAt(Instant.now().toString());
+    authSessionRepository.save(session);
+    return ResponseEntity.ok(okResponse(session));
   }
 
   @DeleteMapping("/session")
@@ -97,12 +100,17 @@ public class AuthController {
     response.setEmail(user.getEmail());
     response.setEmployeeId(user.getEmployeeId());
     response.setEmployeeName(user.getEmployeeName());
+    response.setAvatar(user.getAvatar());
+    response.setProfilePicture(user.getProfilePicture());
     response.setToken(token);
     response.setMessage("Login successful");
     return response;
   }
 
   private LoginResponse okResponse(AuthSession session) {
+    AppUser user = appUserRepository.findByUserId(session.getUserId())
+        .or(() -> appUserRepository.findByEmailIgnoreCase(session.getEmail()))
+        .orElse(null);
     LoginResponse response = new LoginResponse();
     response.setOk(true);
     response.setUserId(session.getUserId());
@@ -111,6 +119,8 @@ public class AuthController {
     response.setEmail(session.getEmail());
     response.setEmployeeId(session.getEmployeeId());
     response.setEmployeeName(session.getEmployeeName());
+    response.setAvatar(user == null ? "" : user.getAvatar());
+    response.setProfilePicture(user == null ? "" : user.getProfilePicture());
     response.setToken(session.getToken());
     response.setMessage("Session active");
     return response;
@@ -131,7 +141,7 @@ public class AuthController {
     };
   }
 
-  private boolean passwordMatches(String rawPassword, AppUser user) {
+  private boolean passwordMatches(@Nullable String rawPassword, @NonNull AppUser user) {
     String entered = rawPassword == null ? "" : rawPassword;
     String storedPassword = user.getPassword() == null ? "" : user.getPassword();
     String storedHash = user.getPasswordHash() == null ? "" : user.getPasswordHash();
@@ -169,14 +179,14 @@ public class AuthController {
     return session;
   }
 
-  private String normalizeEmail(String email) {
+  private String normalizeEmail(@Nullable String email) {
     if (email == null) {
       return "";
     }
     return email.trim().toLowerCase(Locale.ROOT);
   }
 
-  private String extractToken(String authorization) {
+  private String extractToken(@Nullable String authorization) {
     if (authorization == null) {
       return "";
     }

@@ -7,8 +7,9 @@ export async function apiRequest(path, options = {}) {
   const accessRole = getSessionValue('kavyaAccessRole') || getSessionValue('kavyaRole');
   const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId');
   const employeeId = getSessionValue('kavyaEmployeeId');
+  const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
+    ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(accessRole ? { 'X-Kavya-Access-Role': accessRole } : {}),
     ...(userId ? { 'X-Kavya-User-Id': userId } : {}),
@@ -76,6 +77,19 @@ export async function safeApiRequest(path, fallback, options = {}) {
 
 export async function deleteEmployee(employeeId) {
   return apiRequest(`/employees/${employeeId}`, { method: 'DELETE' });
+}
+
+export async function uploadEmployeeProfilePhoto(employeeId, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiRequest(`/employees/${employeeId}/profile-photo`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export async function removeEmployeeProfilePhoto(employeeId) {
+  return apiRequest(`/employees/${employeeId}/profile-photo`, { method: 'DELETE' });
 }
 
 export async function deleteUser(userId) {

@@ -182,12 +182,8 @@ public class DashboardController {
     int allocated = systemSettingsRepository.findAll().stream()
         .filter(Objects::nonNull)
         .findFirst()
-        .map(settings -> settings != null ? settings.getLeaveTypes() : null)
-        .map(types -> types == null ? 0
-            : types.stream()
-                .filter(type -> type != null)
-                .mapToInt(type -> safeDays(type.getDays()))
-                .sum())
+        .map(settings -> settings.getLeaveTypes())
+        .map(types -> types == null ? 0 : types.stream().mapToInt(type -> type.getDays() != null ? type.getDays() : 0).sum())
         .orElse(0);
 
     int remaining = Math.max(allocated - used, 0);

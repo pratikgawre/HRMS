@@ -6,9 +6,11 @@ import com.kavya.hrms.service.PayrollGenerationService;
 import com.kavya.hrms.service.PayrollValidationService;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,7 +26,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/payroll")
-@SuppressWarnings("null")
 public class PayrollController {
   private static final String CURRENT_MONTH_LIMIT_MESSAGE = "Current month salary can only be marked as paid between the 1st and 15th.";
   private static final String FUTURE_PERIOD_LIMIT_MESSAGE = "Salary payments cannot be processed for future payroll periods.";
@@ -135,9 +136,10 @@ public class PayrollController {
   }
 
   @PostMapping("/bulk")
+  @SuppressWarnings("null")
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
-    List<PayrollRecord> safeRecords = records == null ? List.of() : records;
+    List<PayrollRecord> safeRecords = safeList(records);
     List<PayrollRecord> saved = payrollRecordRepository.saveAll(safeRecords);
     return saved;
   }
@@ -195,5 +197,9 @@ public class PayrollController {
 
   private boolean isBlank(String value) {
     return value == null || value.trim().isEmpty();
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }
