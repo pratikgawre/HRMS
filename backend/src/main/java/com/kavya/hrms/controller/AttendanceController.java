@@ -9,6 +9,7 @@ import com.kavya.hrms.service.NotificationService;
 import java.util.List;
 import java.util.Set;
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,7 +21,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/attendance")
-@SuppressWarnings("null")
 public class AttendanceController {
   private final AttendanceRecordRepository attendanceRecordRepository;
   private final AppUserRepository appUserRepository;
@@ -50,13 +50,12 @@ public class AttendanceController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public AttendanceRecord save(
       @RequestBody AttendanceRecord record,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     attendanceAutoCheckoutService.finalizeOpenAttendanceRecords();
-    AttendanceRecord saved = attendanceRecordRepository.save(record);
+    AttendanceRecord saved = attendanceRecordRepository.save(record == null ? new AttendanceRecord() : record);
     notifyAttendanceChange(List.of(saved), "Attendance updated", accessRole, userId, "updated");
     return saved;
   }
@@ -68,9 +67,10 @@ public class AttendanceController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     attendanceAutoCheckoutService.finalizeOpenAttendanceRecords();
+    List<AttendanceRecord> safeRecords = safeList(records);
     long existingCount = attendanceRecordRepository.count();
     attendanceRecordRepository.deleteAll();
-    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(records);
+    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(safeRecords);
     if (existingCount > 0) {
       notifyAttendanceChange(saved, "Attendance updated", accessRole, userId, "updated");
     }
@@ -80,7 +80,8 @@ public class AttendanceController {
   private void notifyAttendanceChange(List<AttendanceRecord> records, String title, String accessRole, String userId,
       String verb) {
     Set<String> employeeIds = records.stream()
-        .map(AttendanceRecord::getEmployeeId)
+        .filter(record -> record != null)
+        .map(record -> record.getEmployeeId())
         .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.toCollection(LinkedHashSet::new));
 
@@ -118,5 +119,9 @@ public class AttendanceController {
     String employee = first.getEmployeeName() != null ? first.getEmployeeName() : "employee";
     String date = first.getDateLabel() != null ? first.getDateLabel() : first.getDate();
     return employee + "'s attendance was " + verb + " for " + (date == null ? "selected records" : date) + ".";
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

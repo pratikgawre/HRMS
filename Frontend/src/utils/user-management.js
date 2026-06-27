@@ -4,6 +4,19 @@ import { apiRequest } from './api.js';
 export const USERS_STORAGE_KEY = 'kavyaUsers';
 let usersCache = [];
 
+function sanitizeProfilePicture(value) {
+  const normalizedValue = String(value || '').trim();
+  if (!normalizedValue) {
+    return '';
+  }
+
+  if (normalizedValue.startsWith('data:image/') || normalizedValue.startsWith('blob:')) {
+    return '';
+  }
+
+  return normalizedValue;
+}
+
 export function getUsers() {
   return usersCache;
 }
@@ -24,6 +37,8 @@ export function saveUsers(users) {
     role: String(user.role || '').toLowerCase().replaceAll(' ', ''),
     employeeId: user.employeeId,
     employeeName: user.employeeName,
+    avatar: user.avatar || '',
+    profilePicture: sanitizeProfilePicture(user.profilePicture),
     status: user.status,
     lastLogin: user.lastLogin,
     twoFactorEnabled: Boolean(user.twoFactorEnabled),
@@ -47,7 +62,7 @@ export function buildUserAccess({ employee, accessRole, status = 'Active', exist
     permissions: getPermissions(accessRole),
     password: existingUser?.password || 'employee123',
     avatar: employee.avatar || existingUser?.avatar || getInitials(employee.displayName || employee.name || ''),
-    profilePicture: employee.profilePicture || existingUser?.profilePicture || '',
+    profilePicture: sanitizeProfilePicture(employee.profilePicture || existingUser?.profilePicture),
     department: employee.department || existingUser?.department || '',
     designation: employee.jobTitle || employee.role || existingUser?.designation || '',
     createdAt: existingUser?.createdAt || new Date().toISOString(),
@@ -109,6 +124,8 @@ function normalizeUser(user) {
     role,
     status: user.status || 'Active',
     permissions: user.permissions || getPermissions(role),
+    avatar: user.avatar || getInitials(user.employeeName || email || 'User'),
+    profilePicture: sanitizeProfilePicture(user.profilePicture),
     twoFactorEnabled: Boolean(user.twoFactorEnabled),
     twoFactorSecret: user.twoFactorSecret || '',
   };
@@ -170,7 +187,7 @@ function getPreferredDuplicateUser(currentUser, nextUser) {
     status: currentUser.status || nextUser.status || 'Active',
     permissions: currentUser.permissions || nextUser.permissions || getPermissions(currentUser.role || nextUser.role || 'Employee'),
     avatar: currentUser.avatar || nextUser.avatar || '',
-    profilePicture: currentUser.profilePicture || nextUser.profilePicture || '',
+    profilePicture: sanitizeProfilePicture(currentUser.profilePicture || nextUser.profilePicture),
     department: currentUser.department || nextUser.department || '',
     designation: currentUser.designation || nextUser.designation || '',
     lastLogin: currentUser.lastLogin || nextUser.lastLogin || '-',
