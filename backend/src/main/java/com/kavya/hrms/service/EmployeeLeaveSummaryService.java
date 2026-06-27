@@ -43,7 +43,7 @@ public class EmployeeLeaveSummaryService {
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Employee identity not found"));
 
     Optional<AppUser> user = appUserRepository.findByEmployeeId(resolvedEmployeeId);
-    String employeeName = user.map(foundUser -> foundUser == null ? null : foundUser.getEmployeeName()).orElse("");
+    String employeeName = user.map(appUser -> appUser.getEmployeeName()).orElse("");
 
     long totalAllotted = resolveTotalAllottedLeaves();
     long totalTaken = calculateTotalTakenLeaves(resolvedEmployeeId);
@@ -64,7 +64,7 @@ public class EmployeeLeaveSummaryService {
     }
 
     if (userId != null && !userId.isBlank()) {
-      return appUserRepository.findByUserId(userId.trim()).map(foundUser -> foundUser.getEmployeeId());
+      return appUserRepository.findByUserId(userId.trim()).map(appUser -> appUser.getEmployeeId());
     }
 
     return Optional.empty();
@@ -77,7 +77,7 @@ public class EmployeeLeaveSummaryService {
       .orElseGet(this::buildDefaultLeaveTypes);
 
     return leaveTypes.stream()
-      .map(leaveType -> leaveType == null ? null : leaveType.getDays())
+      .map(leaveType -> leaveType.getDays())
       .mapToLong(this::normalizeDays)
       .sum();
   }
@@ -106,7 +106,7 @@ public class EmployeeLeaveSummaryService {
     List<LeaveRequest> requests = leaveRequestRepository.findByEmployeeId(employeeId);
     return requests.stream()
       .filter(request -> isApproved(request.getStatus()))
-      .map(request -> request == null ? null : request.getDays())
+      .map(request -> request.getDays())
       .mapToLong(this::normalizeDays)
       .sum();
   }

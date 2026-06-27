@@ -32,7 +32,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
 
 @Configuration
-@SuppressWarnings("null")
 public class DataSeeder {
   @Bean
   @SuppressWarnings("unused")
@@ -220,7 +219,8 @@ public class DataSeeder {
     AppUser user = usersWithEmail.isEmpty() ? new AppUser() : usersWithEmail.get(0);
 
     if (usersWithEmail.size() > 1) {
-      appUserRepository.deleteAll(new ArrayList<>(usersWithEmail.subList(1, usersWithEmail.size())));
+      List<AppUser> duplicateUsers = new ArrayList<>(usersWithEmail.subList(1, usersWithEmail.size()));
+      appUserRepository.deleteAll(duplicateUsers);
     }
 
     user.setEmail(email);

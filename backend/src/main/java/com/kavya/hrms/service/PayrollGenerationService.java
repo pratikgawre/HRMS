@@ -57,12 +57,9 @@ public class PayrollGenerationService {
     List<Employee> employees = employeeRepository.findAll();
     List<AttendanceRecord> attendanceRecords = attendanceRecordRepository.findAll();
     List<LeaveRequest> leaveRequests = leaveRequestRepository.findAll();
-    Map<String, PayrollRecord> existingRecords = new HashMap<>();
-    for (PayrollRecord record : payrollRecordRepository.findByMonthAndYear(normalizedMonth, normalizedYear)) {
-      if (record != null && record.getEmployeeId() != null && !record.getEmployeeId().isBlank()) {
-        existingRecords.put(record.getEmployeeId(), record);
-      }
-    }
+    Map<String, PayrollRecord> existingRecords = payrollRecordRepository.findByMonthAndYear(normalizedMonth, normalizedYear).stream()
+        .filter(record -> record.getEmployeeId() != null && !record.getEmployeeId().isBlank())
+        .collect(HashMap::new, (map, record) -> map.put(record.getEmployeeId(), record), (left, right) -> left.putAll(right));
 
     List<PayrollRecord> generatedRecords = new ArrayList<>();
     for (Employee employee : employees) {

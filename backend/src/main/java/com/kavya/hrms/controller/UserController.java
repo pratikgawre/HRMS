@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/users")
-@SuppressWarnings("null")
 public class UserController {
   private final AppUserRepository appUserRepository;
 
@@ -30,10 +29,12 @@ public class UserController {
 
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
-    return appUserRepository.saveAll(new ArrayList<>(dedupeUsers(users)));
+    List<AppUser> safeUsers = safeList(users);
+    List<AppUser> deduplicatedUsers = new ArrayList<>(deduplicateUsers(safeUsers));
+    return appUserRepository.saveAll(deduplicatedUsers);
   }
 
-  private List<AppUser> dedupeUsers(List<AppUser> users) {
+  private List<AppUser> deduplicateUsers(List<AppUser> users) {
     Map<String, Integer> identityIndexes = new LinkedHashMap<>();
     List<AppUser> uniqueUsers = new ArrayList<>();
 
@@ -69,6 +70,8 @@ public class UserController {
     normalized.setIsActive(user.getIsActive());
     normalized.setEmployeeId(trimToNull(user.getEmployeeId()));
     normalized.setEmployeeName(trimToNull(user.getEmployeeName()));
+    normalized.setAvatar(trimToNull(user.getAvatar()));
+    normalized.setProfilePicture(trimToNull(user.getProfilePicture()));
     normalized.setStatus(user.getStatus());
     normalized.setLastLogin(user.getLastLogin());
     return normalized;
@@ -88,6 +91,8 @@ public class UserController {
     merged.setIsActive(Boolean.TRUE.equals(current.getIsActive()) || Boolean.TRUE.equals(next.getIsActive()));
     merged.setEmployeeId(firstNonBlank(current.getEmployeeId(), next.getEmployeeId()));
     merged.setEmployeeName(firstNonBlank(current.getEmployeeName(), next.getEmployeeName()));
+    merged.setAvatar(firstNonBlank(current.getAvatar(), next.getAvatar()));
+    merged.setProfilePicture(firstNonBlank(current.getProfilePicture(), next.getProfilePicture()));
     merged.setStatus(firstNonBlank(current.getStatus(), next.getStatus()));
     merged.setLastLogin(firstNonBlank(current.getLastLogin(), next.getLastLogin()));
     return merged;
@@ -152,5 +157,9 @@ public class UserController {
       }
     }
     return null;
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

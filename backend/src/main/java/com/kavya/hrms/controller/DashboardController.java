@@ -182,7 +182,7 @@ public class DashboardController {
     int allocated = systemSettingsRepository.findAll().stream()
         .filter(Objects::nonNull)
         .findFirst()
-        .map(settings -> settings == null ? null : settings.getLeaveTypes())
+        .map(settings -> settings.getLeaveTypes())
         .map(types -> types == null ? 0 : types.stream().mapToInt(type -> type.getDays() != null ? type.getDays() : 0).sum())
         .orElse(0);
 
