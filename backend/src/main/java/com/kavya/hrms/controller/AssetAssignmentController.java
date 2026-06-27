@@ -105,7 +105,7 @@ public class AssetAssignmentController {
 
   @DeleteMapping("/{id}")
   public void delete(@PathVariable String id) {
-    repository.deleteById(id == null ? "" : id);
+    repository.deleteById(Objects.requireNonNull(id, "id must not be null"));
   }
 
   public static class ReturnAssetRequest {

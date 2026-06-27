@@ -24,7 +24,7 @@ public class UserController {
 
   @GetMapping
   public List<AppUser> list() {
-    return appUserRepository.findAll();
+    return new ArrayList<>(appUserRepository.findAll());
   }
 
   @PostMapping("/bulk")

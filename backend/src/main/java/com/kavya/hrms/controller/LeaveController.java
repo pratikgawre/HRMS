@@ -7,6 +7,7 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -53,7 +54,6 @@ public class LeaveController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<LeaveRequest> bulkSave(@RequestBody List<LeaveRequest> requests) {
     List<LeaveRequest> safeRequests = safeList(requests);
     long existingCount = leaveRequestRepository.count();

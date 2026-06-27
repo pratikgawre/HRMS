@@ -1198,62 +1198,64 @@ function EmployeeAssetsView() {
         {dashboardCards.map((item) => <MyAssetSummaryCard key={item.label} {...item} />)}
       </section>
 
-      <Section title="My Assets">
-        {isLoading && <p className="notification-empty">Loading your assigned assets...</p>}
-        {!isLoading && loadError && <p className="notification-empty">{loadError}</p>}
-        <AnnouncementStrip
-          title=""
-          items={announcementBuckets.assets}
-          emptyMessage=""
-        />
-        {!isLoading && !loadError && (
-          <MyAssetsTable
-            rows={myAssets}
-            onViewDetails={handleViewDetails}
-            onRequestReplacement={(asset) => openRequestModal('replacement', asset)}
-            onRequestRepair={(asset) => openRequestModal('repair', asset)}
-            onRequestReturn={(asset) => openRequestModal('return', asset)}
+      <div className="employee-assets-scroll-scope">
+        <Section title="My Assets">
+          {isLoading && <p className="notification-empty">Loading your assigned assets...</p>}
+          {!isLoading && loadError && <p className="notification-empty">{loadError}</p>}
+          <AnnouncementStrip
+            title=""
+            items={announcementBuckets.assets}
+            emptyMessage=""
           />
-        )}
-      </Section>
+          {!isLoading && !loadError && (
+            <MyAssetsTable
+              rows={myAssets}
+              onViewDetails={handleViewDetails}
+              onRequestReplacement={(asset) => openRequestModal('replacement', asset)}
+              onRequestRepair={(asset) => openRequestModal('repair', asset)}
+              onRequestReturn={(asset) => openRequestModal('return', asset)}
+            />
+          )}
+        </Section>
 
-      <div className="assets-stack">
-        <Section title="Replacement Requests">
-          <AnnouncementStrip
-            title=""
-            items={announcementBuckets.replacement}
-            emptyMessage=""
-          />
-          <ReplacementRequestTable
-            rows={replacementRequests}
-            emptyMessage="No replacement requests found."
-            renderAsset={(request) => renderAssetCell(request)}
-          />
-        </Section>
-        <Section title="Repair Requests">
-          <AnnouncementStrip
-            title=""
-            items={announcementBuckets.repair}
-            emptyMessage=""
-          />
-          <RepairRequestTable
-            rows={repairRequests}
-            emptyMessage="No repair requests found."
-            renderAsset={(request) => renderAssetCell(request)}
-          />
-        </Section>
-        <Section title="Return Requests">
-          <AnnouncementStrip
-            title=""
-            items={announcementBuckets.return}
-            emptyMessage=""
-          />
-          <ReturnRequestTable
-            rows={returnRequests}
-            emptyMessage="No return requests found."
-            renderAsset={(request) => renderAssetCell(request)}
-          />
-        </Section>
+        <div className="assets-stack">
+          <Section title="Replacement Requests">
+            <AnnouncementStrip
+              title=""
+              items={announcementBuckets.replacement}
+              emptyMessage=""
+            />
+            <ReplacementRequestTable
+              rows={replacementRequests}
+              emptyMessage="No replacement requests found."
+              renderAsset={(request) => renderAssetCell(request)}
+            />
+          </Section>
+          <Section title="Repair Requests">
+            <AnnouncementStrip
+              title=""
+              items={announcementBuckets.repair}
+              emptyMessage=""
+            />
+            <RepairRequestTable
+              rows={repairRequests}
+              emptyMessage="No repair requests found."
+              renderAsset={(request) => renderAssetCell(request)}
+            />
+          </Section>
+          <Section title="Return Requests">
+            <AnnouncementStrip
+              title=""
+              items={announcementBuckets.return}
+              emptyMessage=""
+            />
+            <ReturnRequestTable
+              rows={returnRequests}
+              emptyMessage="No return requests found."
+              renderAsset={(request) => renderAssetCell(request)}
+            />
+          </Section>
+        </div>
       </div>
 
       {selectedAsset && (
@@ -1525,6 +1527,7 @@ function normalizeEmployeeAssetRows(rows) {
     status: asset.status || 'Assigned',
     assignedToEmployeeId: asset.employee_id || asset.employeeId || asset.assignedToEmployeeId || '',
     assignedTo: asset.employee_name || asset.employeeName || asset.assignedTo || '',
+    employeeName: asset.employee_name || asset.employeeName || asset.assignedTo || '',
     imageUrl: asset.imageUrl || createPlaceholderAssetImage(asset.asset_name || asset.assetName || 'Asset', '#0f9f9a'),
   }));
 }

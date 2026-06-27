@@ -1,12 +1,5 @@
 package com.kavya.hrms.controller;
 
-import com.kavya.hrms.model.Asset;
-import com.kavya.hrms.model.AssetAssignment;
-import com.kavya.hrms.repository.AssetRepository;
-import com.kavya.hrms.repository.AssetAssignmentRepository;
-import com.kavya.hrms.repository.EmployeeRepository;
-import com.kavya.hrms.service.NotificationAudience;
-import com.kavya.hrms.service.NotificationService;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -14,17 +7,27 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.logging.Logger;
+
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.kavya.hrms.model.Asset;
+import com.kavya.hrms.model.AssetAssignment;
+import com.kavya.hrms.repository.AssetAssignmentRepository;
+import com.kavya.hrms.repository.AssetRepository;
+import com.kavya.hrms.repository.EmployeeRepository;
+import com.kavya.hrms.service.NotificationAudience;
+import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/assets")
@@ -50,11 +53,11 @@ public class AssetController {
   public List<Asset> list() {
     List<AssetAssignment> assignments = assetAssignmentRepository.findAll();
     List<Asset> assets = assetRepository.findAll().stream()
-      .map((asset) -> normalizeAssetResponse(mergeAssignmentDates(asset, assignments)))
-      .toList();
+        .map((asset) -> normalizeAssetResponse(mergeAssignmentDates(asset, assignments)))
+        .toList();
     long assetsWithDates = assets.stream()
-      .filter((asset) -> !normalize(asset.getCurrentDate()).isBlank() || !normalize(asset.getDueDate()).isBlank())
-      .count();
+        .filter((asset) -> !normalize(asset.getCurrentDate()).isBlank() || !normalize(asset.getDueDate()).isBlank())
+        .count();
     LOGGER.info(() -> "[AssetController] list returned=" + assets.size() + ", withDates=" + assetsWithDates);
     return assets;
   }
@@ -72,7 +75,7 @@ public class AssetController {
     }
 
     String resolvedEmployeeName = resolveEmployeeName(resolvedEmployeeId);
-    
+
     List<Asset> allAssets = assetRepository.findAll();
     List<AssetAssignment> matchingAssignments = assetAssignmentRepository.findAll().stream()
         .filter((assignment) -> isAssignmentForEmployee(assignment, resolvedEmployeeId, resolvedEmployeeName))
@@ -109,10 +112,10 @@ public class AssetController {
       + ", assignedTo=" + safeAsset.getAssignedTo());
     Asset saved = assetRepository.save(Objects.requireNonNull(normalizeAssetResponse(safeAsset)));
     LOGGER.info(() -> "[AssetController] create saved id=" + saved.getId()
-      + ", currentDate=" + saved.getCurrentDate()
-      + ", dueDate=" + saved.getDueDate()
-      + ", assignedToEmployeeId=" + saved.getAssignedToEmployeeId()
-      + ", assignedTo=" + saved.getAssignedTo());
+        + ", currentDate=" + saved.getCurrentDate()
+        + ", dueDate=" + saved.getDueDate()
+        + ", assignedToEmployeeId=" + saved.getAssignedToEmployeeId()
+        + ", assignedTo=" + saved.getAssignedTo());
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset created",
@@ -169,11 +172,11 @@ public class AssetController {
       + ", status=" + safeAsset.getStatus());
     Asset saved = assetRepository.save(Objects.requireNonNull(normalizeAssetResponse(safeAsset)));
     LOGGER.info(() -> "[AssetController] update saved id=" + saved.getId()
-      + ", currentDate=" + saved.getCurrentDate()
-      + ", dueDate=" + saved.getDueDate()
-      + ", assignedToEmployeeId=" + saved.getAssignedToEmployeeId()
-      + ", assignedTo=" + saved.getAssignedTo()
-      + ", status=" + saved.getStatus());
+        + ", currentDate=" + saved.getCurrentDate()
+        + ", dueDate=" + saved.getDueDate()
+        + ", assignedToEmployeeId=" + saved.getAssignedToEmployeeId()
+        + ", assignedTo=" + saved.getAssignedTo()
+        + ", status=" + saved.getStatus());
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset updated",
@@ -228,7 +231,8 @@ public class AssetController {
 
     currentDate = firstNonBlank(currentDate, assignedDate, assignmentDate);
     dueDate = firstNonBlank(dueDate, returnDate);
-    String assignedToEmployeeId = firstNonBlank(asset.getAssignedToEmployeeId(), resolveEmployeeId(asset.getAssignedTo()));
+    String assignedToEmployeeId = firstNonBlank(asset.getAssignedToEmployeeId(),
+        resolveEmployeeId(asset.getAssignedTo()));
     String assignedTo = firstNonBlank(asset.getAssignedTo(), resolveEmployeeName(assignedToEmployeeId));
 
     asset.setCurrentDate(formatDisplayDate(currentDate));
@@ -248,10 +252,10 @@ public class AssetController {
     }
 
     return employeeRepository.findAll().stream()
-      .filter(employee -> matchesEmployee(employee, normalizedValue))
-      .map(employee -> firstNonBlank(employee.getEmployeeCode(), employee.getEmployeeId(), employee.getId()))
-      .findFirst()
-      .orElse(normalizedValue);
+        .filter(employee -> matchesEmployee(employee, normalizedValue))
+        .map(employee -> firstNonBlank(employee.getEmployeeCode(), employee.getEmployeeId(), employee.getId()))
+        .findFirst()
+        .orElse(normalizedValue);
   }
 
   private String resolveEmployeeName(String employeeId) {
@@ -261,10 +265,10 @@ public class AssetController {
     }
 
     return employeeRepository.findAll().stream()
-      .filter(employee -> matchesEmployee(employee, normalizedEmployeeId))
-      .map(employee -> firstNonBlank(employee.getDisplayName(), employee.getName(), normalizedEmployeeId))
-      .findFirst()
-      .orElse(normalizedEmployeeId);
+        .filter(employee -> matchesEmployee(employee, normalizedEmployeeId))
+        .map(employee -> firstNonBlank(employee.getDisplayName(), employee.getName(), normalizedEmployeeId))
+        .findFirst()
+        .orElse(normalizedEmployeeId);
   }
 
   private boolean matchesEmployee(com.kavya.hrms.model.Employee employee, String value) {
@@ -338,12 +342,17 @@ public class AssetController {
       asset.setAssignedTo(matched.getEmployeeName());
     }
 
+    asset.setEmployeeName(
+        !normalize(matched.getEmployeeName()).isBlank() ? matched.getEmployeeName() : matched.getEmployeeId());
+    asset.setAssignedDate(matched.getAssignedDate());
+
     if (!normalize(matched.getStatus()).isBlank()) {
       asset.setStatus(matched.getStatus());
     }
 
     if (normalize(asset.getCurrentDate()).isBlank()) {
-      asset.setCurrentDate(firstNonBlank(matched.getAssignedDate(), asset.getAssignedDate(), asset.getAssignmentDate()));
+      asset
+          .setCurrentDate(firstNonBlank(matched.getAssignedDate(), asset.getAssignedDate(), asset.getAssignmentDate()));
     }
     if (normalize(asset.getDueDate()).isBlank()) {
       asset.setDueDate(firstNonBlank(matched.getDueDate(), matched.getReturnDate()));
@@ -375,7 +384,8 @@ public class AssetController {
     }
 
     if (normalize(asset.getCurrentDate()).isBlank()) {
-      asset.setCurrentDate(firstNonBlank(matched.getAssignedDate(), asset.getAssignedDate(), asset.getAssignmentDate()));
+      asset
+          .setCurrentDate(firstNonBlank(matched.getAssignedDate(), asset.getAssignedDate(), asset.getAssignmentDate()));
     }
     if (normalize(asset.getDueDate()).isBlank()) {
       asset.setDueDate(firstNonBlank(matched.getDueDate(), matched.getReturnDate()));
@@ -409,20 +419,20 @@ public class AssetController {
     }
 
     return assignments.stream()
-      .filter((assignment) -> matchesAsset(assetId, assetCode, assignment))
-      .max((left, right) -> compareAssignments(left, right))
-      .orElse(null);
+        .filter((assignment) -> matchesAsset(assetId, assetCode, assignment))
+        .max((left, right) -> compareAssignments(left, right))
+        .orElse(null);
   }
 
   private int compareAssignments(AssetAssignment left, AssetAssignment right) {
     LocalDate leftDate = parseDate(firstNonBlank(
-      left == null ? "" : left.getAssignedDate(),
-      left == null ? "" : left.getDueDate(),
-      left == null ? "" : left.getReturnDate()));
+        left == null ? "" : left.getAssignedDate(),
+        left == null ? "" : left.getDueDate(),
+        left == null ? "" : left.getReturnDate()));
     LocalDate rightDate = parseDate(firstNonBlank(
-      right == null ? "" : right.getAssignedDate(),
-      right == null ? "" : right.getDueDate(),
-      right == null ? "" : right.getReturnDate()));
+        right == null ? "" : right.getAssignedDate(),
+        right == null ? "" : right.getDueDate(),
+        right == null ? "" : right.getReturnDate()));
 
     if (leftDate != null && rightDate != null) {
       return leftDate.compareTo(rightDate);
@@ -435,13 +445,13 @@ public class AssetController {
     }
 
     String leftRaw = firstNonBlank(
-      left == null ? "" : left.getAssignedDate(),
-      left == null ? "" : left.getDueDate(),
-      left == null ? "" : left.getReturnDate());
+        left == null ? "" : left.getAssignedDate(),
+        left == null ? "" : left.getDueDate(),
+        left == null ? "" : left.getReturnDate());
     String rightRaw = firstNonBlank(
-      right == null ? "" : right.getAssignedDate(),
-      right == null ? "" : right.getDueDate(),
-      right == null ? "" : right.getReturnDate());
+        right == null ? "" : right.getAssignedDate(),
+        right == null ? "" : right.getDueDate(),
+        right == null ? "" : right.getReturnDate());
     return leftRaw.compareToIgnoreCase(rightRaw);
   }
 
@@ -477,7 +487,11 @@ public class AssetController {
         !normalize(assignment.getAssetCode()).isBlank() ? assignment.getAssetCode() : assignment.getAssetId());
     asset.setAssetName(!normalize(assignment.getAssetName()).isBlank() ? assignment.getAssetName() : "Asset");
     asset.setStatus(!normalize(assignment.getStatus()).isBlank() ? assignment.getStatus() : "Assigned");
-    asset.setAssignedTo(!normalize(assignment.getEmployeeName()).isBlank() ? assignment.getEmployeeName() : assignment.getEmployeeId());
+    asset.setAssignedTo(
+        !normalize(assignment.getEmployeeName()).isBlank() ? assignment.getEmployeeName() : assignment.getEmployeeId());
+    asset.setEmployeeName(
+        !normalize(assignment.getEmployeeName()).isBlank() ? assignment.getEmployeeName() : assignment.getEmployeeId());
+    asset.setAssignedDate(assignment.getAssignedDate());
     asset.setAssignedToEmployeeId(!normalize(assignment.getEmployeeId()).isBlank() ? assignment.getEmployeeId() : "");
     asset.setCurrentDate(firstNonBlank(assignment.getAssignedDate()));
     asset.setDueDate(firstNonBlank(assignment.getDueDate(), assignment.getReturnDate()));
@@ -521,9 +535,9 @@ public class AssetController {
     }
 
     DateTimeFormatter[] formatters = new DateTimeFormatter[] {
-      DateTimeFormatter.ISO_LOCAL_DATE,
-      DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH),
-      DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH),
+        DateTimeFormatter.ISO_LOCAL_DATE,
+        DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH),
+        DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH),
     };
 
     for (DateTimeFormatter formatter : formatters) {

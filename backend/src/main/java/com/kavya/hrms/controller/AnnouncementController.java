@@ -70,7 +70,6 @@ public class AnnouncementController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<Announcement> bulkSave(@RequestBody List<Announcement> announcements) {
     List<Announcement> safeAnnouncements = safeList(announcements);
     long existingCount = announcementRepository.count();

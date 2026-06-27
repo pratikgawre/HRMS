@@ -181,7 +181,7 @@ function EmployeeAttendance({ viewMode = 'auto' }) {
         </div>
       )}
 
-      <Section title="My Attendance Calendar" action="Live">
+      <Section title="My Attendance Calendar">
         {canUseSelfAttendance && (
           <div className="attendance-action-panel">
             <div>
