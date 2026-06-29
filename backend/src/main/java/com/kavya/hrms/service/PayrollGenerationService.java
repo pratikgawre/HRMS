@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -57,7 +59,11 @@ public class PayrollGenerationService {
     List<LeaveRequest> leaveRequests = leaveRequestRepository.findAll();
     Map<String, PayrollRecord> existingRecords = payrollRecordRepository.findByMonthAndYear(normalizedMonth, normalizedYear).stream()
         .filter(record -> record.getEmployeeId() != null && !record.getEmployeeId().isBlank())
-        .collect(HashMap::new, (map, record) -> map.put(record.getEmployeeId(), record), Map::putAll);
+        .collect(Collectors.toMap(
+            PayrollRecord::getEmployeeId,
+            record -> record,
+            (left, right) -> right,
+            HashMap::new));
 
     List<PayrollRecord> generatedRecords = new ArrayList<>();
     for (Employee employee : employees) {
@@ -75,6 +81,7 @@ public class PayrollGenerationService {
     return payrollRecordRepository.saveAll(generatedRecords);
   }
 
+  @Nullable
   private PayrollRecord buildPayrollRecord(
       Employee employee,
       List<AttendanceRecord> attendanceRecords,
@@ -252,6 +259,7 @@ public class PayrollGenerationService {
     return !employeeId.isBlank() && employeeId.equals(requestEmployeeId.trim());
   }
 
+  @Nullable
   private LocalDate parseAttendanceDate(AttendanceRecord record) {
     if (record == null) {
       return null;
@@ -265,6 +273,7 @@ public class PayrollGenerationService {
     return parseFlexibleDate(record.getDateLabel(), null);
   }
 
+  @Nullable
   private LocalDate parseFlexibleDate(String value, Integer fallbackYear) {
     if (value == null || value.isBlank()) {
       return null;
@@ -402,7 +411,8 @@ public class PayrollGenerationService {
   }
 
   @SafeVarargs
-  private final <T> T firstNonBlank(T... values) {
+  @Nullable
+  private <T> T firstNonBlank(T... values) {
     for (T value : values) {
       if (value == null) {
         continue;

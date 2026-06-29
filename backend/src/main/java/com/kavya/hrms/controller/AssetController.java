@@ -13,7 +13,9 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.logging.Logger;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,7 +29,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/assets")
-@SuppressWarnings("null")
 public class AssetController {
   private static final Logger LOGGER = Logger.getLogger(AssetController.class.getName());
   private final AssetRepository assetRepository;
@@ -97,7 +98,6 @@ public class AssetController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public Asset create(
       @RequestBody Asset asset,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -130,10 +130,10 @@ public class AssetController {
       @RequestBody List<Asset> assets,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    List<Asset> safeAssets = assets == null ? List.of() : assets;
+    List<Asset> safeAssets = assets == null ? List.of() : assets.stream().filter(Objects::nonNull).toList();
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
-    List<Asset> saved = assetRepository.saveAll(assets.stream().map(this::normalizeAssetResponse).toList());
+    List<Asset> saved = assetRepository.saveAll(safeAssets.stream().map(this::normalizeAssetResponse).toList());
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -149,7 +149,6 @@ public class AssetController {
   }
 
   @PutMapping("/{id}")
-  @SuppressWarnings("null")
   public Asset update(
       @PathVariable String id,
       @RequestBody Asset asset,
@@ -182,12 +181,11 @@ public class AssetController {
   }
 
   @DeleteMapping("/{id}")
-  @SuppressWarnings("null")
   public void delete(
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Asset current = assetRepository.findById(id).orElse(null);
+    Asset current = assetRepository.findById(id).orElseGet(Asset::new);
     assetRepository.deleteById(id);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
@@ -210,6 +208,7 @@ public class AssetController {
     return value == null ? "" : value.trim();
   }
 
+  @Nullable
   private Asset normalizeAssetResponse(Asset asset) {
     if (asset == null) {
       return null;
@@ -398,15 +397,20 @@ public class AssetController {
     return asset;
   }
 
+  @Nullable
   private AssetAssignment resolveLatestAssignment(String assetId, String assetCode, List<AssetAssignment> assignments) {
     if (assignments == null || assignments.isEmpty()) {
       return null;
     }
 
-    return assignments.stream()
+    Optional<AssetAssignment> latestAssignment = assignments.stream()
       .filter((assignment) -> matchesAsset(assetId, assetCode, assignment))
-      .max((left, right) -> compareAssignments(left, right))
-      .orElse(null);
+      .max((left, right) -> compareAssignments(left, right));
+    if (latestAssignment.isEmpty()) {
+      return null;
+    }
+
+    return latestAssignment.get();
   }
 
   private int compareAssignments(AssetAssignment left, AssetAssignment right) {
@@ -509,6 +513,7 @@ public class AssetController {
     return parsed.format(DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH));
   }
 
+  @Nullable
   private LocalDate parseDate(String value) {
     String normalized = normalize(value);
     if (normalized.isBlank()) {

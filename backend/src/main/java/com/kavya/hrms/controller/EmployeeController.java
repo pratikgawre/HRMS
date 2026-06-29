@@ -5,6 +5,7 @@ import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/employees")
-@SuppressWarnings("null")
 public class EmployeeController {
   private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
@@ -33,12 +33,11 @@ public class EmployeeController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public Employee create(
       @RequestBody Employee employee,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Employee saved = employeeRepository.save(employee);
+    Employee saved = employeeRepository.save(Objects.requireNonNull(employee, "employee must not be null"));
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Employee profile saved",
@@ -52,13 +51,15 @@ public class EmployeeController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<Employee> bulkSave(
       @RequestBody List<Employee> employees,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     long existingCount = employeeRepository.count();
-    List<Employee> saved = employeeRepository.saveAll(employees);
+    List<Employee> safeEmployees = employees == null
+        ? List.<Employee>of()
+        : employees.stream().filter(Objects::nonNull).toList();
+    List<Employee> saved = employeeRepository.saveAll(safeEmployees);
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -94,20 +95,19 @@ public class EmployeeController {
   }
 
   @DeleteMapping("/{employeeId}")
-  @SuppressWarnings("null")
   public void delete(
       @PathVariable String employeeId,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Employee current = employeeRepository.findById(employeeId).orElse(null);
+    Employee current = employeeRepository.findById(employeeId).orElseGet(Employee::new);
     employeeRepository.deleteById(employeeId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Employee profile removed",
         buildEmployeeMessage(current, "removed"),
         "employee",
-        employeeId,
-        accessRole,
+        Objects.toString(employeeId, ""),
+        Objects.toString(accessRole, ""),
         "System",
         userId);
   }

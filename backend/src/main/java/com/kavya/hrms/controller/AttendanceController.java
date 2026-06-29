@@ -7,6 +7,7 @@ import com.kavya.hrms.service.AttendanceAutoCheckoutService;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
@@ -20,7 +21,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/attendance")
-@SuppressWarnings("null")
 public class AttendanceController {
   private final AttendanceRecordRepository attendanceRecordRepository;
   private final AppUserRepository appUserRepository;
@@ -50,7 +50,6 @@ public class AttendanceController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public AttendanceRecord save(
       @RequestBody AttendanceRecord record,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -62,7 +61,6 @@ public class AttendanceController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<AttendanceRecord> bulkSave(
       @RequestBody List<AttendanceRecord> records,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -70,7 +68,8 @@ public class AttendanceController {
     attendanceAutoCheckoutService.finalizeOpenAttendanceRecords();
     long existingCount = attendanceRecordRepository.count();
     attendanceRecordRepository.deleteAll();
-    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(records);
+    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(
+        records == null ? List.of() : records.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
       notifyAttendanceChange(saved, "Attendance updated", accessRole, userId, "updated");
     }
@@ -79,7 +78,9 @@ public class AttendanceController {
 
   private void notifyAttendanceChange(List<AttendanceRecord> records, String title, String accessRole, String userId,
       String verb) {
-    Set<String> employeeIds = records.stream()
+    List<AttendanceRecord> safeRecords = records == null ? List.<AttendanceRecord>of() : records;
+    Set<String> employeeIds = safeRecords.stream()
+        .filter(Objects::nonNull)
         .map(AttendanceRecord::getEmployeeId)
         .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.toCollection(LinkedHashSet::new));

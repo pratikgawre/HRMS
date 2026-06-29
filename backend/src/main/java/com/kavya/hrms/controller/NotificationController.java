@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.lang.Nullable;
 
 @RestController
 @RequestMapping("/api/notifications")
@@ -102,6 +103,7 @@ public class NotificationController {
     return value == null ? "" : String.valueOf(value).trim();
   }
 
+  @Nullable
   private Boolean asBoolean(Object value) {
     if (value instanceof Boolean booleanValue) {
       return booleanValue;

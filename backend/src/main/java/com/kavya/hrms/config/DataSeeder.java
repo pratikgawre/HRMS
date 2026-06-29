@@ -22,7 +22,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
 
 @Configuration
-@SuppressWarnings("null")
 public class DataSeeder {
   @Bean
   CommandLineRunner seedData(
@@ -204,8 +203,7 @@ public class DataSeeder {
       String role,
       String employeeId,
       String employeeName) {
-    List<AppUser> foundUsers = appUserRepository.findAllByEmailIgnoreCase(email);
-    List<AppUser> usersWithEmail = new ArrayList<>(foundUsers == null ? List.of() : foundUsers);
+    List<AppUser> usersWithEmail = new ArrayList<>(appUserRepository.findAllByEmailIgnoreCase(email));
     AppUser user = usersWithEmail.isEmpty() ? new AppUser() : usersWithEmail.get(0);
 
     if (usersWithEmail.size() > 1) {

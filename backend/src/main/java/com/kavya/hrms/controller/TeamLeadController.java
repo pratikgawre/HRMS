@@ -10,8 +10,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -65,7 +65,13 @@ public class TeamLeadController {
     project.setStatus(source.getStatus());
 
     List<ProjectMember> members = resolveProjectMembers(source, teamLeadId, employeeIndex);
-    project.setTeamMembers(members.stream().map(ProjectMember::getId).filter(Objects::nonNull).collect(Collectors.toList()));
+    List<String> teamMemberIds = new ArrayList<>();
+    for (ProjectMember member : members) {
+      if (member != null && member.getId() != null) {
+        teamMemberIds.add(member.getId());
+      }
+    }
+    project.setTeamMembers(teamMemberIds);
     project.setTeamMemberDetails(members);
     return project;
   }
@@ -113,6 +119,7 @@ public class TeamLeadController {
         .collect(Collectors.toCollection(ArrayList::new));
   }
 
+  @Nullable
   private ProjectMember normalizeProjectMember(ProjectMember member, Map<String, Employee> employeeIndex) {
     if (member == null) {
       return null;

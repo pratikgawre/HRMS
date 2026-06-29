@@ -9,6 +9,7 @@ import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -55,21 +56,22 @@ public class EmployeeLeaveSummaryService {
     }
 
     if (userId != null && !userId.isBlank()) {
-      return appUserRepository.findByUserId(userId.trim()).map(AppUser::getEmployeeId);
+      return appUserRepository.findByUserId(userId.trim())
+          .map(AppUser::getEmployeeId);
     }
 
     return Optional.empty();
   }
 
   private long resolveTotalAllottedLeaves() {
-    SystemSettings settings = systemSettingsRepository.findById(DEFAULT_SETTINGS_ID).orElse(null);
-    List<SystemSettings.LeaveTypeSetting> leaveTypes = settings == null || settings.getLeaveTypes() == null || settings.getLeaveTypes().isEmpty()
-      ? buildDefaultLeaveTypes()
-      : settings.getLeaveTypes();
+    List<SystemSettings.LeaveTypeSetting> leaveTypes = systemSettingsRepository.findById(DEFAULT_SETTINGS_ID)
+      .map(SystemSettings::getLeaveTypes)
+      .filter(types -> types != null && !types.isEmpty())
+      .orElseGet(this::buildDefaultLeaveTypes);
 
     return leaveTypes.stream()
-      .map(SystemSettings.LeaveTypeSetting::getDays)
-      .mapToLong(this::normalizeDays)
+      .filter(Objects::nonNull)
+      .mapToLong(leaveType -> normalizeDays(leaveType.getDays()))
       .sum();
   }
 
@@ -96,9 +98,9 @@ public class EmployeeLeaveSummaryService {
   private long calculateTotalTakenLeaves(String employeeId) {
     List<LeaveRequest> requests = leaveRequestRepository.findByEmployeeId(employeeId);
     return requests.stream()
+      .filter(Objects::nonNull)
       .filter(request -> isApproved(request.getStatus()))
-      .map(LeaveRequest::getDays)
-      .mapToLong(this::normalizeDays)
+      .mapToLong(request -> normalizeDays(request.getDays()))
       .sum();
   }
 

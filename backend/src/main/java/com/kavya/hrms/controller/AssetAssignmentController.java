@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.lang.Nullable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,7 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/asset-assignments")
-@SuppressWarnings("null")
 public class AssetAssignmentController {
   private final AssetAssignmentRepository repository;
 
@@ -82,8 +82,8 @@ public class AssetAssignmentController {
     return repository.findById(id)
         .map((assignment) -> {
           System.out.println("[AssetAssignmentController] return payload id=" + id
-              + ", returnDate=" + request.getReturnDate()
-              + ", condition=" + request.getCondition());
+              + ", returnDate=" + safeRequest.getReturnDate()
+              + ", condition=" + safeRequest.getCondition());
           String returnDate = safeRequest.getReturnDate();
           if (returnDate == null || returnDate.isBlank()) {
             returnDate = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"));
@@ -128,6 +128,7 @@ public class AssetAssignmentController {
     }
   }
 
+  @Nullable
   private LocalDate parseDate(String value) {
     if (value == null) {
       return null;

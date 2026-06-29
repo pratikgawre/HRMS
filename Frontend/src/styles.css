@@ -4644,6 +4644,25 @@ button.attendance-summary-card.is-clickable:focus-visible {
   box-shadow: var(--shadow-soft);
 }
 
+.table-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+  box-shadow: none;
+}
+
+.table-actions button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.table-actions .leave-approve-action img,
+.table-actions .leave-reject-action img {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
 .task-panel .table-actions button.section-action:hover {
   color: var(--primary-dark);
   border-color: rgba(15, 159, 154, 0.22);
@@ -4838,8 +4857,48 @@ button.attendance-summary-card.is-clickable:focus-visible {
 }
 
 #manage-assets .table-card {
-  overflow-x: auto;
+  border-color: rgba(201, 221, 221, 0.92);
+  box-shadow: 0 18px 38px rgba(21, 46, 58, 0.06);
+  overflow-x: scroll;
   overflow-y: hidden;
+  scrollbar-width: auto;
+  scrollbar-color: var(--primary) rgba(15, 159, 154, 0.28);
+  scrollbar-gutter: stable;
+  padding-bottom: 10px;
+}
+
+#manage-assets .table-card::-webkit-scrollbar {
+  display: block;
+  height: 22px;
+}
+
+#manage-assets .table-card::-webkit-scrollbar-track {
+  background: rgba(15, 159, 154, 0.28);
+  border-radius: 999px;
+  margin: 0 4px 4px;
+}
+
+#manage-assets .table-card::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #0f9f9a, #2a6fdb);
+  border: 4px solid rgba(255, 255, 255, 0.98);
+  border-radius: 999px;
+  min-height: 40px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+#manage-assets .table-responsive {
+  overflow: visible;
+  min-width: max-content;
+}
+
+#manage-assets .table {
+  min-width: 1900px;
+  table-layout: auto;
+}
+
+#manage-assets .table th,
+#manage-assets .table td {
+  white-space: nowrap;
 }
 
 .asset-table-card .table {
@@ -7365,11 +7424,18 @@ img.profile-avatar.large {
 }
 
 .profile-delete-btn {
-  border-color: rgba(217, 77, 99, 0.18);
+  border-color: rgba(214, 65, 84, 0.22);
   background:
-    linear-gradient(135deg, rgba(217, 77, 99, 0.12), rgba(255, 181, 71, 0.08)),
-    rgba(255, 255, 255, 0.96);
-  color: #b92d48;
+    linear-gradient(135deg, rgba(214, 65, 84, 0.16), rgba(255, 255, 255, 0.96)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 244, 246, 0.96));
+  color: #c62846;
+  box-shadow:
+    0 10px 22px rgba(24, 35, 47, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.profile-delete-btn i {
+  color: currentColor;
 }
 
 .profile-action-btn:hover:not(:disabled) {
@@ -7387,7 +7453,25 @@ img.profile-avatar.large {
 }
 
 .profile-delete-btn:hover:not(:disabled) {
-  color: #9f213c;
+  border-color: rgba(198, 40, 70, 0.32);
+  background:
+    linear-gradient(135deg, rgba(214, 65, 84, 0.22), rgba(255, 255, 255, 0.98)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 236, 239, 0.98));
+  color: #a71d3a;
+  box-shadow:
+    0 16px 30px rgba(198, 40, 70, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.profile-delete-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow:
+    0 8px 18px rgba(198, 40, 70, 0.1),
+    inset 0 2px 6px rgba(198, 40, 70, 0.08);
+}
+
+.profile-delete-btn:focus-visible {
+  outline-color: rgba(214, 65, 84, 0.24);
 }
 
 .profile-action-btn:focus-visible {
@@ -7925,31 +8009,66 @@ img.profile-avatar.large {
 }
 
 .hr-support-status-select {
-  min-width: 126px;
-  height: 30px;
-  padding: 0 10px;
-  color: #111111;
-  border: 1px solid #8f8f8f;
-  border-radius: 2px;
-  background-color: #ffffff;
-  box-shadow: none;
-  font-size: 1rem;
-  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  min-width: 10rem;
+  max-width: 11.5rem;
+  height: 2.75rem;
+  padding: 0 2.55rem 0 1rem;
+  color: #1f2937;
+  border: 1px solid rgba(148, 163, 184, 0.48);
+  border-radius: 0.9rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(245, 248, 250, 0.97)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 6l4 4 4-4' stroke='%236b7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 0.9rem center;
+  background-size: auto, 0.85rem;
+  box-shadow:
+    0 1px 1px rgba(15, 23, 42, 0.02),
+    0 10px 24px rgba(15, 23, 42, 0.06);
+  font-size: 0.95rem;
+  font-weight: 700;
   line-height: 1.2;
-  appearance: auto;
-  -webkit-appearance: auto;
-  -moz-appearance: auto;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease;
+  box-sizing: border-box;
 }
 
 .hr-support-status-select:hover {
-  border-color: #6f6f6f;
+  border-color: rgba(15, 159, 154, 0.42);
+  box-shadow:
+    0 1px 1px rgba(15, 23, 42, 0.03),
+    0 12px 26px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
 }
 
 .hr-support-status-select:focus {
   outline: none;
-  border-color: #5d5d5d;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
+  border-color: rgba(15, 159, 154, 0.72);
+  box-shadow:
+    0 0 0 4px rgba(15, 159, 154, 0.12),
+    0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.hr-support-status-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+  transform: none;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.hr-support-status-select option {
+  color: #1f2937;
+  background: #ffffff;
+  font-weight: 600;
 }
 
 .payroll-alert {
@@ -8176,6 +8295,36 @@ img.profile-avatar.large {
 
 .payroll-table-card {
   max-width: 100%;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  scrollbar-width: auto;
+  scrollbar-color: var(--primary) rgba(15, 159, 154, 0.28);
+  scrollbar-gutter: stable;
+  padding-bottom: 10px;
+}
+
+.payroll-table-card::-webkit-scrollbar {
+  display: block;
+  height: 22px;
+}
+
+.payroll-table-card::-webkit-scrollbar-track {
+  background: rgba(15, 159, 154, 0.28);
+  border-radius: 999px;
+  margin: 0 4px 4px;
+}
+
+.payroll-table-card::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #0f9f9a, #2a6fdb);
+  border: 4px solid rgba(255, 255, 255, 0.98);
+  border-radius: 999px;
+  min-height: 40px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.payroll-table-card .table-responsive {
+  overflow: visible;
+  min-width: max-content;
 }
 
 .payroll-modal-backdrop {
