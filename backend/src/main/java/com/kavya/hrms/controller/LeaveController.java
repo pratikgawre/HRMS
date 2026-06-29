@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Objects;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -58,7 +59,8 @@ public class LeaveController {
     List<LeaveRequest> safeRequests = safeList(requests);
     long existingCount = leaveRequestRepository.count();
     leaveRequestRepository.deleteAll();
-    List<LeaveRequest> saved = leaveRequestRepository.saveAll(safeRequests);
+    List<LeaveRequest> saved = leaveRequestRepository.saveAll(
+        requests == null ? List.of() : requests.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.leaveRecipients("hr"),

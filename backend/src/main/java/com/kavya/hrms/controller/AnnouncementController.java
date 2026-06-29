@@ -74,6 +74,9 @@ public class AnnouncementController {
     List<Announcement> safeAnnouncements = safeList(announcements);
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
+    List<Announcement> safeAnnouncements = announcements == null
+        ? List.<Announcement>of()
+        : announcements.stream().filter(Objects::nonNull).toList();
     List<Announcement> saved = announcementRepository.saveAll(safeAnnouncements);
     if (existingCount > 0) {
       notificationService.notifyRoles(
@@ -95,15 +98,15 @@ public class AnnouncementController {
       @RequestBody Announcement announcement,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Announcement safeAnnouncement = announcement == null ? new Announcement() : announcement;
+    Announcement safeAnnouncement = Objects.requireNonNull(announcement, "announcement must not be null");
     safeAnnouncement.setId(id);
     Announcement saved = announcementRepository.save(safeAnnouncement);
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "Announcement updated",
-        saved.getTitle() + " was updated.",
+        asString(saved.getTitle()) + " was updated.",
         "announcement",
-        saved.getId(),
+        asString(saved.getId()),
         accessRole,
         "System",
         userId);
@@ -115,15 +118,13 @@ public class AnnouncementController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String nonNullId = id == null ? "" : id;
-    Announcement current = announcementRepository.findById(nonNullId).orElse(null);
+    String nonNullId = id;
+    Announcement current = announcementRepository.findById(nonNullId).orElseGet(Announcement::new);
     announcementRepository.deleteById(nonNullId);
     String title = "An announcement";
-    if (current != null) {
-      String currentTitle = current.getTitle();
-      if (currentTitle != null && !currentTitle.isBlank()) {
-        title = currentTitle;
-      }
+    String currentTitle = current.getTitle();
+    if (currentTitle != null && !currentTitle.isBlank()) {
+      title = currentTitle;
     }
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),

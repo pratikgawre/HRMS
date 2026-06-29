@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.time.LocalDate;
@@ -182,8 +183,17 @@ public class DashboardController {
     int allocated = systemSettingsRepository.findAll().stream()
         .filter(Objects::nonNull)
         .findFirst()
-        .map(settings -> settings.getLeaveTypes())
-        .map(types -> types == null ? 0 : types.stream().mapToInt(type -> type.getDays() != null ? type.getDays() : 0).sum())
+        .map(settings -> {
+          List<SystemSettings.LeaveTypeSetting> types = settings.getLeaveTypes();
+          if (types == null) {
+            return 0;
+          }
+
+          return types.stream()
+              .filter(Objects::nonNull)
+              .mapToInt(type -> type.getDays() != null ? type.getDays() : 0)
+              .sum();
+        })
         .orElse(0);
 
     int remaining = Math.max(allocated - used, 0);

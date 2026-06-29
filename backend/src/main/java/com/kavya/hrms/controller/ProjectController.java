@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Locale;
-
+import java.util.Objects;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -84,7 +84,7 @@ public class ProjectController {
       @RequestBody List<Project> projects,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    List<Project> safeProjects = safeList(projects);
+    List<Project> safeProjects = projects == null ? List.of() : projects.stream().filter(Objects::nonNull).toList();
     long existingCount = projectRepository.count();
     projectRepository.deleteAll();
     List<Project> saved = projectRepository.saveAll(safeProjects);
@@ -128,9 +128,8 @@ public class ProjectController {
       @PathVariable("id") String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String nonNullId = id == null ? "" : id;
-    Project current = projectRepository.findById(nonNullId).orElse(null);
-    projectRepository.deleteById(nonNullId);
+    Project current = projectRepository.findById(id).orElseGet(Project::new);
+    projectRepository.deleteById(id);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Project removed",

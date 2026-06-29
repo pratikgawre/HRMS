@@ -69,6 +69,7 @@ export async function authenticateUser(email, password) {
 
   if (response) {
     const isServerError = response.status >= 500;
+    const isUnauthorized = response.status === 401;
     const text = await response.text();
     let result = null;
     try {
@@ -93,6 +94,13 @@ export async function authenticateUser(email, password) {
         profilePicture: result.profilePicture || '',
       };
       return { ok: true, user };
+    }
+
+    if (isUnauthorized) {
+      const localUser = findLocalUser(normalizedEmail, password);
+      if (localUser) {
+        return { ok: true, user: localUser };
+      }
     }
 
     if (isServerError) {

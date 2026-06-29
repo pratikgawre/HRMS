@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.lang.Nullable;
 
 import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.Notification;
@@ -49,6 +50,10 @@ public class NotificationService {
       String createdByRole,
       String createdByName,
       String createdByUserId) {
+    if (roles == null || roles.isEmpty()) {
+      return List.of();
+    }
+
     Set<String> targetUserIds = new LinkedHashSet<>();
     if (roles != null) {
       for (String role : roles) {
@@ -77,18 +82,20 @@ public class NotificationService {
     return notifyUserIds(targetUserIds, title, message, sourceType, sourceId, createdByRole, createdByName);
   }
 
+  @Nullable
   public Notification markAsRead(String id, String userId) {
     if (isBlank(id) || isBlank(userId)) {
       return null;
     }
 
-    Notification notification = notificationRepository.findByIdAndUserId(id, userId).orElse(null);
-    if (notification == null) {
+    java.util.Optional<Notification> notification = notificationRepository.findByIdAndUserId(id, userId);
+    if (notification.isEmpty()) {
       return null;
     }
 
-    notification.setReadStatus(true);
-    return notificationRepository.save(notification);
+    Notification current = notification.get();
+    current.setReadStatus(true);
+    return notificationRepository.save(current);
   }
 
   public void clearForUser(String userId) {
@@ -143,8 +150,8 @@ public class NotificationService {
     String normalized = normalizeRole(role);
     if ("all".equals(normalized)) {
       return appUserRepository.findAll().stream()
-          .filter(this::isActiveUser)
-          .map(user -> user.getUserId())
+        .filter(this::isActiveUser)
+          .map(AppUser::getUserId)
           .filter(value -> !isBlank(value))
           .collect(Collectors.toCollection(LinkedHashSet::new));
     }

@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -34,11 +35,19 @@ public class UserController {
     return appUserRepository.saveAll(deduplicatedUsers);
   }
 
-  private List<AppUser> deduplicateUsers(List<AppUser> users) {
+  private List<AppUser> dedupeUsers(List<AppUser> users) {
+    if (users == null || users.isEmpty()) {
+      return List.of();
+    }
+
     Map<String, Integer> identityIndexes = new LinkedHashMap<>();
     List<AppUser> uniqueUsers = new ArrayList<>();
 
     for (AppUser user : users) {
+      if (user == null) {
+        continue;
+      }
+
       AppUser normalized = normalizeUser(user);
       Integer duplicateIndex = findDuplicateIndex(normalized, identityIndexes);
 
@@ -98,6 +107,7 @@ public class UserController {
     return merged;
   }
 
+  @Nullable
   private Integer findDuplicateIndex(AppUser user, Map<String, Integer> identityIndexes) {
     for (String key : getUserIdentityKeys(user)) {
       Integer duplicateIndex = identityIndexes.get(key);
@@ -136,6 +146,7 @@ public class UserController {
     return firstNonBlank(user.getEmployeeId(), user.getEmail(), "USR-" + System.currentTimeMillis());
   }
 
+  @Nullable
   private String trimToNull(String value) {
     if (value == null) {
       return null;
@@ -145,10 +156,12 @@ public class UserController {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
+  @Nullable
   private String lower(String value) {
     return value == null ? null : value.toLowerCase(Locale.ROOT);
   }
 
+  @Nullable
   private String firstNonBlank(String... values) {
     for (String value : values) {
       String trimmed = trimToNull(value);

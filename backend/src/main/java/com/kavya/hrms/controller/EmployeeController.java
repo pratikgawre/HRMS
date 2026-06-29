@@ -8,16 +8,7 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.io.IOException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -65,7 +56,7 @@ public class EmployeeController {
       @RequestBody Employee employee,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Employee saved = employeeRepository.save(employee == null ? new Employee() : employee);
+    Employee saved = employeeRepository.save(Objects.requireNonNull(employee, "employee must not be null"));
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Employee profile saved",
@@ -85,6 +76,9 @@ public class EmployeeController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     List<Employee> safeEmployees = safeList(employees);
     long existingCount = employeeRepository.count();
+    List<Employee> safeEmployees = employees == null
+        ? List.<Employee>of()
+        : employees.stream().filter(Objects::nonNull).toList();
     List<Employee> saved = employeeRepository.saveAll(safeEmployees);
     if (existingCount > 0) {
       notificationService.notifyRoles(
@@ -193,16 +187,15 @@ public class EmployeeController {
       @PathVariable String employeeId,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String nonNullEmployeeId = employeeId == null ? "" : employeeId;
-    Employee current = employeeRepository.findById(nonNullEmployeeId).orElse(null);
-    employeeRepository.deleteById(nonNullEmployeeId);
+    Employee current = employeeRepository.findById(employeeId).orElseGet(Employee::new);
+    employeeRepository.deleteById(employeeId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Employee profile removed",
         buildEmployeeMessage(current, "removed"),
         "employee",
-        nonNullEmployeeId,
-        accessRole,
+        Objects.toString(employeeId, ""),
+        Objects.toString(accessRole, ""),
         "System",
         userId);
   }
