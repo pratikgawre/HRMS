@@ -25,12 +25,14 @@ public class UserController {
 
   @GetMapping
   public List<AppUser> list() {
-    return appUserRepository.findAll();
+    return new ArrayList<>(appUserRepository.findAll());
   }
 
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
-    return appUserRepository.saveAll(dedupeUsers(users));
+    List<AppUser> safeUsers = safeList(users);
+    List<AppUser> deduplicatedUsers = new ArrayList<>(deduplicateUsers(safeUsers));
+    return appUserRepository.saveAll(deduplicatedUsers);
   }
 
   private List<AppUser> dedupeUsers(List<AppUser> users) {
@@ -77,6 +79,8 @@ public class UserController {
     normalized.setIsActive(user.getIsActive());
     normalized.setEmployeeId(trimToNull(user.getEmployeeId()));
     normalized.setEmployeeName(trimToNull(user.getEmployeeName()));
+    normalized.setAvatar(trimToNull(user.getAvatar()));
+    normalized.setProfilePicture(trimToNull(user.getProfilePicture()));
     normalized.setStatus(user.getStatus());
     normalized.setLastLogin(user.getLastLogin());
     return normalized;
@@ -96,6 +100,8 @@ public class UserController {
     merged.setIsActive(Boolean.TRUE.equals(current.getIsActive()) || Boolean.TRUE.equals(next.getIsActive()));
     merged.setEmployeeId(firstNonBlank(current.getEmployeeId(), next.getEmployeeId()));
     merged.setEmployeeName(firstNonBlank(current.getEmployeeName(), next.getEmployeeName()));
+    merged.setAvatar(firstNonBlank(current.getAvatar(), next.getAvatar()));
+    merged.setProfilePicture(firstNonBlank(current.getProfilePicture(), next.getProfilePicture()));
     merged.setStatus(firstNonBlank(current.getStatus(), next.getStatus()));
     merged.setLastLogin(firstNonBlank(current.getLastLogin(), next.getLastLogin()));
     return merged;
@@ -164,5 +170,9 @@ public class UserController {
       }
     }
     return null;
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

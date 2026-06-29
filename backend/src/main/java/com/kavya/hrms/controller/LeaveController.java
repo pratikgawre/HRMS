@@ -5,7 +5,9 @@ import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Objects;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -54,6 +56,7 @@ public class LeaveController {
 
   @PostMapping("/bulk")
   public List<LeaveRequest> bulkSave(@RequestBody List<LeaveRequest> requests) {
+    List<LeaveRequest> safeRequests = safeList(requests);
     long existingCount = leaveRequestRepository.count();
     leaveRequestRepository.deleteAll();
     List<LeaveRequest> saved = leaveRequestRepository.saveAll(
@@ -78,8 +81,9 @@ public class LeaveController {
       @RequestBody LeaveRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    request.setId(id);
-    LeaveRequest saved = leaveRequestRepository.save(request);
+    LeaveRequest safeRequest = request == null ? new LeaveRequest() : request;
+    safeRequest.setId(id);
+    LeaveRequest saved = leaveRequestRepository.save(safeRequest);
     notifyLeaveChange(saved, "Leave request updated", accessRole, userId, "updated");
     return saved;
   }
@@ -125,5 +129,9 @@ public class LeaveController {
     String fromDate = request.getFromDate() == null ? "-" : request.getFromDate();
     String toDate = request.getToDate() == null ? "-" : request.getToDate();
     return fromDate + " to " + toDate;
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

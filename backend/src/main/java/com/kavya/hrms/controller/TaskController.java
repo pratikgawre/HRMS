@@ -8,37 +8,45 @@ import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.TaskRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
+  private static final Logger log = LoggerFactory.getLogger(TaskController.class);
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
   private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
+  private final MongoTemplate mongoTemplate;
 
   public TaskController(
       TaskRepository taskRepository,
       ProjectRepository projectRepository,
       EmployeeRepository employeeRepository,
-      NotificationService notificationService) {
+      NotificationService notificationService,
+      MongoTemplate mongoTemplate) {
     this.taskRepository = taskRepository;
     this.projectRepository = projectRepository;
     this.employeeRepository = employeeRepository;
     this.notificationService = notificationService;
+    this.mongoTemplate = mongoTemplate;
   }
 
   @GetMapping
@@ -94,6 +102,7 @@ public class TaskController {
       @RequestBody List<TaskItem> tasks,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
     List<TaskItem> saved = taskRepository.saveAll(tasks == null ? List.of() : tasks.stream().filter(Objects::nonNull).toList());
@@ -137,6 +146,22 @@ public class TaskController {
     return saved;
   }
 
+  @PatchMapping("/{id}/status")
+  public TaskItem updateStatus(
+      @PathVariable String id,
+      @RequestBody TaskStatusRequest request,
+      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
+      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    TaskItem current = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    String nextStatus = firstNonBlank(request == null ? null : request.getStatus(), current.getStatus());
+    Query query = new Query(Criteria.where("id").is(id));
+    Update update = new Update().set("status", nextStatus);
+    mongoTemplate.updateFirst(query, update, TaskItem.class);
+    TaskItem saved = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
+    return saved;
+  }
+
   @DeleteMapping("/{id}")
   public void delete(
       @PathVariable String id,
@@ -149,7 +174,7 @@ public class TaskController {
         "Task removed",
         buildTaskMessage(current, "removed"),
         "task",
-        id,
+        nonNullId,
         accessRole,
         "System",
         userId);
@@ -307,5 +332,9 @@ public class TaskController {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim().toLowerCase();
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

@@ -18,8 +18,9 @@ public class WebSocketConfig implements WebSocketConfigurer {
   }
 
   @Override
-  public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+  public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry registry) {
     registry.addHandler(settingsWebSocketHandler, "/ws/settings")
+    registry.addHandler(java.util.Objects.requireNonNull(settingsWebSocketHandler), "/ws/settings")
         .setAllowedOrigins("http://127.0.0.1:5173", "http://localhost:5173");
   }
 }

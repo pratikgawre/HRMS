@@ -71,6 +71,7 @@ public class AnnouncementController {
 
   @PostMapping("/bulk")
   public List<Announcement> bulkSave(@RequestBody List<Announcement> announcements) {
+    List<Announcement> safeAnnouncements = safeList(announcements);
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
     List<Announcement> safeAnnouncements = announcements == null
@@ -130,7 +131,7 @@ public class AnnouncementController {
         "Announcement removed",
         title + " was removed.",
         "announcement",
-        id,
+        nonNullId,
         accessRole,
         "System",
         userId);
@@ -141,6 +142,10 @@ public class AnnouncementController {
 
   private boolean equalsIgnoreCase(String left, String right) {
     return asString(left).equalsIgnoreCase(asString(right));
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 
   private List<Announcement> readAnnouncementsFromDocuments() {

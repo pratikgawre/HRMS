@@ -4,7 +4,9 @@ import com.kavya.hrms.model.Project;
 import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Locale;
 import java.util.Objects;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -13,9 +15,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.kavya.hrms.model.Project;
+import com.kavya.hrms.repository.ProjectRepository;
+import com.kavya.hrms.service.NotificationAudience;
+import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/projects")
@@ -34,7 +41,7 @@ public class ProjectController {
   }
 
   @GetMapping("/team-lead/{teamLeadId}")
-  public List<Project> listByTeamLead(@PathVariable String teamLeadId) {
+  public List<Project> listByTeamLead(@PathVariable("teamLeadId") String teamLeadId) {
     String normalizedLeadId = normalize(teamLeadId);
     if (normalizedLeadId.isEmpty()) {
       return List.of();
@@ -58,7 +65,7 @@ public class ProjectController {
       @RequestBody Project project,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Project saved = projectRepository.save(project);
+    Project saved = projectRepository.save(project == null ? new Project() : project);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Project created",
@@ -72,6 +79,7 @@ public class ProjectController {
   }
 
   @PostMapping("/bulk")
+  @SuppressWarnings("null")
   public List<Project> bulkSave(
       @RequestBody List<Project> projects,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -96,12 +104,13 @@ public class ProjectController {
 
   @PutMapping("/{id}")
   public Project update(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestBody Project project,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    project.setId(id);
-    Project saved = projectRepository.save(project);
+    Project safeProject = project == null ? new Project() : project;
+    safeProject.setId(id);
+    Project saved = projectRepository.save(safeProject);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Project updated",
@@ -116,7 +125,7 @@ public class ProjectController {
 
   @DeleteMapping("/{id}")
   public void delete(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     Project current = projectRepository.findById(id).orElseGet(Project::new);
@@ -126,7 +135,7 @@ public class ProjectController {
         "Project removed",
         buildProjectMessage(current, "removed"),
         "project",
-        id,
+        nonNullId,
         accessRole,
         "System",
         userId);
@@ -191,5 +200,9 @@ public class ProjectController {
 
   private String normalize(String value) {
     return String.valueOf(value == null ? "" : value).trim().toLowerCase(Locale.ROOT);
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

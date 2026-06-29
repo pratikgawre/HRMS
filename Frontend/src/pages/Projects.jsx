@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
@@ -54,6 +54,7 @@ const PROJECT_REFRESH_MS = 10000;
 const PROJECT_SECTION_ID = 'project-create';
 const PROJECT_DETAILS_ID = 'project-selected-details';
 const PROJECT_INLINE_DETAILS_ID = 'project-inline-details';
+const PROJECT_DELETE_UNDO_MS = 6000;
 
 function Projects() {
   const navigate = useNavigate();
@@ -62,7 +63,8 @@ function Projects() {
   const isAdmin = role === 'admin';
   const isHrReadOnlyProjects = role === 'hr';
   const isProjectManager = role === 'projectManager';
-  const canManage = isAdmin || isProjectManager;
+  const isTeamLead = role === 'teamLead';
+  const canManage = isAdmin || isProjectManager || isTeamLead;
   const managerName = getSessionValue('kavyaEmployeeName') || (isAdmin ? 'Admin' : 'Project Manager');
   const managerId = getSessionValue('kavyaEmployeeId') || '';
 
@@ -82,7 +84,12 @@ function Projects() {
   const [selectedTeamMembers, setSelectedTeamMembers] = useState([]);
   const [isTeamDraftDirty, setIsTeamDraftDirty] = useState(false);
   const [isTeamRosterOpen, setIsTeamRosterOpen] = useState(false);
+  const [memberEditTarget, setMemberEditTarget] = useState(null);
+  const [memberEditValue, setMemberEditValue] = useState('');
   const [savePopup, setSavePopup] = useState(null);
+  const [deleteTargetProject, setDeleteTargetProject] = useState(null);
+  const [deleteUndoState, setDeleteUndoState] = useState(null);
+  const undoDeleteTimerRef = useRef(null);
 
   function showProjectToast(text, tone = 'success') {
     setSavePopup({ text, tone });
@@ -136,6 +143,10 @@ function Projects() {
       managerId: current.managerId || managerId,
     }));
   }, [managerId, managerName]);
+
+  useEffect(() => () => {
+    clearDeleteUndoTimer();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -317,12 +328,14 @@ function Projects() {
       render: (row) => (
         <div className="table-actions table-actions-inline">
           <button type="button" onClick={() => openProject(row, { scrollToDetails: true })}>
+            <i className="ri-eye-line" aria-hidden="true" />
             Open
           </button>
           <button type="button" onClick={() => startEditingProject(row)}>
+            <i className="ri-edit-line" aria-hidden="true" />
             Edit
           </button>
-          {isAdmin && (
+          {canManage && (
             <button type="button" className="danger" onClick={() => removeProject(row)}>
               Delete
             </button>
@@ -377,6 +390,8 @@ function Projects() {
 
   function closeTeamRoster() {
     setIsTeamRosterOpen(false);
+    setMemberEditTarget(null);
+    setMemberEditValue('');
   }
 
   function startEditingProject(project) {
@@ -387,6 +402,113 @@ function Projects() {
     setIsTeamDraftDirty(false);
     setMessage('');
     setActiveTab('create');
+  }
+
+  function openMemberEdit(member) {
+    if (!selectedProject || !member) {
+      return;
+    }
+
+    setMemberEditTarget(member);
+    setMemberEditValue(member.id || member.employeeCode || '');
+  }
+
+  async function saveMemberAssignment() {
+    if (!selectedProject || !memberEditTarget) {
+      return;
+    }
+
+    const nextMemberId = String(memberEditValue || '').trim();
+    if (!nextMemberId) {
+      showProjectToast('Please select a replacement assign.', 'error');
+      return;
+    }
+
+    if (!employeeLookup.has(nextMemberId)) {
+      showProjectToast('Selected employee was not found.', 'error');
+      return;
+    }
+
+    const targetKey = normalizeLookupValue(memberEditTarget.id || memberEditTarget.employeeCode);
+    const updatedTeamMembers = selectedTeamMembers.map((memberId) => (
+      normalizeLookupValue(memberId) === targetKey ? nextMemberId : memberId
+    ));
+
+    const payload = buildProjectPayload({
+      ...selectedProject,
+      teamMembers: updatedTeamMembers,
+      teamMemberDetails: buildTeamMemberDetails(updatedTeamMembers, employeeDirectory),
+      team: buildTeamLabel(updatedTeamMembers, employeeLookup),
+    });
+
+    try {
+      const savedProject = await apiRequest(`/projects/${selectedProject.backendId || selectedProject.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(serializeProjectForApi(payload)),
+      });
+      const normalized = normalizeProjectRows([savedProject || payload])[0];
+      setProjects((current) => current.map((project) => (
+        project.id === normalized.id || project.backendId === normalized.id
+          ? normalized
+          : project
+      )));
+      setSelectedProjectId(normalized.id);
+      setSelectedTeamMembers(Array.isArray(normalized.teamMembers) ? normalized.teamMembers : []);
+      setIsTeamDraftDirty(false);
+      setMemberEditTarget(null);
+      setMemberEditValue('');
+      setMessage('Assignment updated successfully.');
+      showProjectToast('Assignment updated successfully.', 'success');
+      await loadProjectsFromServer(setProjects, setSelectedProjectId);
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
+    } catch {
+      setMessage('Assignment could not be updated.');
+      showProjectToast('Assignment could not be updated.', 'error');
+    }
+  }
+
+  async function deleteMemberAssignment(member) {
+    if (!selectedProject || !member) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete assignment for ${member.name || member.displayName || member.id}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const targetKey = normalizeLookupValue(member.id || member.employeeCode);
+    const updatedTeamMembers = selectedTeamMembers.filter((memberId) => normalizeLookupValue(memberId) !== targetKey);
+
+    const payload = buildProjectPayload({
+      ...selectedProject,
+      teamMembers: updatedTeamMembers,
+      teamMemberDetails: buildTeamMemberDetails(updatedTeamMembers, employeeDirectory),
+      team: buildTeamLabel(updatedTeamMembers, employeeLookup),
+    });
+
+    try {
+      const savedProject = await apiRequest(`/projects/${selectedProject.backendId || selectedProject.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(serializeProjectForApi(payload)),
+      });
+      const normalized = normalizeProjectRows([savedProject || payload])[0];
+      setProjects((current) => current.map((project) => (
+        project.id === normalized.id || project.backendId === normalized.id
+          ? normalized
+          : project
+      )));
+      setSelectedProjectId(normalized.id);
+      setSelectedTeamMembers(Array.isArray(normalized.teamMembers) ? normalized.teamMembers : []);
+      setIsTeamDraftDirty(false);
+      setMessage('Assignment deleted successfully.');
+      showProjectToast('Assignment deleted successfully.', 'success');
+      await loadProjectsFromServer(setProjects, setSelectedProjectId);
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
+    } catch {
+      setMessage('Assignment could not be deleted.');
+      showProjectToast('Assignment could not be deleted.', 'error');
+    }
   }
 
   function resetProjectForm() {
@@ -520,24 +642,102 @@ function Projects() {
     }, 'Project status updated successfully.');
   }
 
-  async function removeProject(project) {
-    const confirmed = window.confirm(`Delete ${project.name}?`);
-    if (!confirmed) {
-      showProjectToast('Delete cancelled.', 'error');
+  function openDeleteProjectConfirm(project) {
+    setDeleteTargetProject(project);
+  }
+
+  function closeDeleteProjectConfirm() {
+    setDeleteTargetProject(null);
+  }
+
+  function clearDeleteUndoTimer() {
+    if (undoDeleteTimerRef.current) {
+      window.clearTimeout(undoDeleteTimerRef.current);
+      undoDeleteTimerRef.current = null;
+    }
+  }
+
+  async function handleDeleteProjectConfirm() {
+    if (!deleteTargetProject) {
       return;
     }
 
+    const projectToDelete = deleteTargetProject;
+    const projectName = projectToDelete.name || projectToDelete.projectCode || 'This project';
+    closeDeleteProjectConfirm();
+
     try {
-      await apiRequest(`/projects/${project.backendId || project.id}`, { method: 'DELETE' });
-      setProjects((current) => current.filter((item) => item.id !== project.id && item.backendId !== project.id));
-      setSelectedProjectId((current) => (current === project.id ? '' : current));
-      setMessage(`${project.name} deleted.`);
-      showProjectToast(`${project.name} deleted.`, 'success');
-      await loadProjectsFromServer(setProjects, setSelectedProjectId);
+      await apiRequest(`/projects/${projectToDelete.backendId || projectToDelete.id}`, { method: 'DELETE' });
+      const previousProjects = [...projects];
+      const nextProjects = previousProjects.filter((item) => item.id !== projectToDelete.id && item.backendId !== projectToDelete.id);
+      setProjects(nextProjects);
+      setSelectedProjectId((current) => (current === projectToDelete.id ? '' : current));
+      setMessage(`${projectName} deleted. Undo available for a short time.`);
+      clearDeleteUndoTimer();
+      setDeleteUndoState({
+        project: projectToDelete,
+        previousProjects,
+        projectName,
+      });
+      undoDeleteTimerRef.current = window.setTimeout(() => {
+        setDeleteUndoState(null);
+        undoDeleteTimerRef.current = null;
+      }, PROJECT_DELETE_UNDO_MS);
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Project could not be deleted.';
+      setMessage(errorMessage);
+      showProjectToast(errorMessage, 'error');
+    }
+  }
+
+  async function undoDeleteProject() {
+    const undoRecord = deleteUndoState;
+    if (!undoRecord?.project) {
+      return;
+    }
+
+    const projectToRestore = undoRecord.project;
+    const projectName = undoRecord.projectName || projectToRestore.name || projectToRestore.projectCode || 'This project';
+    clearDeleteUndoTimer();
+    setDeleteUndoState(null);
+
+    const restorePayload = serializeProjectForApi({
+      ...projectToRestore,
+      id: projectToRestore.backendId || projectToRestore.id,
+      name: projectToRestore.name || '',
+      description: projectToRestore.description || '',
+      manager: projectToRestore.manager || managerName,
+      managerId: projectToRestore.managerId || managerId,
+      teamLeadId: projectToRestore.teamLeadId || '',
+      teamLeadName: projectToRestore.teamLeadName || '',
+      teamLeadDesignation: projectToRestore.teamLeadDesignation || 'Team Lead',
+      teamMembers: Array.isArray(projectToRestore.teamMembers) ? projectToRestore.teamMembers : [],
+      teamMemberDetails: Array.isArray(projectToRestore.teamMemberDetails) ? projectToRestore.teamMemberDetails : [],
+      milestone: projectToRestore.milestone || 'Planning',
+      startDate: projectToRestore.startDate || '',
+      endDate: projectToRestore.endDate || '',
+      progress: normalizeProgress(projectToRestore.progress),
+      status: projectToRestore.status || 'Planning',
+    });
+
+    const normalized = normalizeProjectRows([projectToRestore])[0];
+    setProjects((current) => {
+      const withoutRestored = current.filter((item) => item.id !== normalized.id && item.backendId !== normalized.id && item.id !== (projectToRestore.backendId || projectToRestore.id));
+      return [normalized, ...withoutRestored];
+    });
+    setSelectedProjectId(normalized.id);
+    setMessage(`${projectName} restored successfully.`);
+    showProjectToast(`${projectName} restored successfully.`, 'success');
+
+    try {
+      await apiRequest('/projects', {
+        method: 'POST',
+        body: JSON.stringify(restorePayload),
+      });
       window.dispatchEvent(new Event('kavyaProjectsChanged'));
     } catch {
-      setMessage('Project could not be deleted.');
-      showProjectToast('Project could not be deleted.', 'error');
+      // Keep the local restoration intact even if the background sync fails.
     }
   }
 
@@ -993,19 +1193,81 @@ function Projects() {
             </div>
 
             <div className="project-team-modal-body">
-              {selectedProjectTeamMembers.length > 0 ? selectedProjectTeamMembers.map((member) => (
-                <div key={member.id} className="project-team-member-card">
-                  <div className="project-team-member-avatar">{member.avatar}</div>
-                  <div className="project-team-member-copy">
-                    <strong>{member.name}</strong>
-                    <span>{member.department}</span>
-                    <small>{member.role}</small>
-                    <code>{member.id}</code>
-                  </div>
-                </div>
-              )) : (
+              {selectedProjectTeamMembers.length > 0 ? (
+                <DataTable
+                  columns={[
+                    {
+                      key: 'assign',
+                      label: 'Assign',
+                      render: (row) => (
+                        <div className="employee-cell">
+                          <span>{row.avatar}</span>
+                          <div>
+                            <strong>{row.name}</strong>
+                            <small>{row.id}</small>
+                          </div>
+                        </div>
+                      ),
+                    },
+                    { key: 'module', label: 'Module', render: (row) => row.role || '-' },
+                    { key: 'status', label: 'Status', render: (row) => <span className={`status status-${String(row.status || 'Active').toLowerCase().replaceAll(' ', '-')}`}>{row.status || 'Active'}</span> },
+                    {
+                      key: 'edit',
+                      label: 'Edit',
+                      render: (row) => (
+                        <button type="button" className="section-action" onClick={() => openMemberEdit(row)}>
+                          Edit
+                        </button>
+                      ),
+                    },
+                    {
+                      key: 'delete',
+                      label: 'Delete',
+                      render: (row) => (
+                        <button type="button" className="section-action danger" onClick={() => deleteMemberAssignment(row)}>
+                          Delete
+                        </button>
+                      ),
+                    },
+                  ]}
+                  rows={selectedProjectTeamMembers}
+                  emptyMessage="No team members found for this project."
+                />
+              ) : (
                 <p className="project-empty-state">No team members found for this project.</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {memberEditTarget && (
+        <div className="project-team-modal-backdrop" role="presentation" onClick={() => setMemberEditTarget(null)}>
+          <div className="project-team-modal" role="dialog" aria-modal="true" aria-label="Edit assignment" onClick={(event) => event.stopPropagation()}>
+            <div className="project-team-modal-head">
+              <div>
+                <p className="eyebrow">Edit Assignment</p>
+                <h3>{memberEditTarget.name || memberEditTarget.displayName || 'Assign Member'}</h3>
+              </div>
+              <button type="button" className="project-team-modal-close" onClick={() => setMemberEditTarget(null)} aria-label="Close edit assignment popup">
+                <i className="ri-close-line" aria-hidden="true" />
+              </button>
+            </div>
+
+            <label className="full-width">
+              <span>Assign</span>
+              <select value={memberEditValue} onChange={(event) => setMemberEditValue(event.target.value)}>
+                <option value="">Select employee</option>
+                {employeeOptions.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name} - {employee.department || '-'}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="notification-actions profile-form-actions asset-create-actions">
+              <button type="button" onClick={saveMemberAssignment}>Save Change</button>
+              <button type="button" className="danger" onClick={() => setMemberEditTarget(null)}>Cancel</button>
             </div>
           </div>
         </div>
@@ -1029,6 +1291,32 @@ function ProjectToast({ popup, onClose }) {
         <i className="ri-close-line" aria-hidden="true" />
       </button>
       <span className="project-toast__accent" aria-hidden="true" />
+    </div>
+  );
+
+  let portalRoot = document.querySelector('.project-toast-portal');
+  if (!portalRoot) {
+    portalRoot = document.createElement('div');
+    portalRoot.className = 'project-toast-portal';
+    document.body.appendChild(portalRoot);
+  }
+
+  return createPortal(toast, portalRoot);
+}
+
+function ProjectUndoToast({ projectName, onUndo }) {
+  const handleUndo = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onUndo();
+  };
+
+  const toast = (
+    <div className="project-undo-toast" role="status" aria-live="polite">
+      <span>{projectName} deleted. Undo?</span>
+      <button type="button" onClick={handleUndo}>
+        Undo
+      </button>
     </div>
   );
 

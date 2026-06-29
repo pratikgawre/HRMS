@@ -6,6 +6,7 @@ import com.kavya.hrms.service.PayrollGenerationService;
 import com.kavya.hrms.service.PayrollValidationService;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -135,6 +136,7 @@ public class PayrollController {
   }
 
   @PostMapping("/bulk")
+  @SuppressWarnings("null")
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
     List<PayrollRecord> safeRecords = records == null ? List.of() : records.stream().filter(Objects::nonNull).toList();
@@ -194,5 +196,9 @@ public class PayrollController {
 
   private boolean isBlank(String value) {
     return value == null || value.trim().isEmpty();
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

@@ -1,9 +1,5 @@
 package com.kavya.hrms.service;
 
-import com.kavya.hrms.model.AppUser;
-import com.kavya.hrms.model.Notification;
-import com.kavya.hrms.repository.AppUserRepository;
-import com.kavya.hrms.repository.NotificationRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,8 +8,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
+
 import org.springframework.stereotype.Service;
 import org.springframework.lang.Nullable;
+
+import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.model.Notification;
+import com.kavya.hrms.repository.AppUserRepository;
+import com.kavya.hrms.repository.NotificationRepository;
 
 @Service
 public class NotificationService {
@@ -53,8 +55,12 @@ public class NotificationService {
     }
 
     Set<String> targetUserIds = new LinkedHashSet<>();
-    for (String role : roles) {
-      targetUserIds.addAll(resolveUserIdsForRole(role));
+    if (roles != null) {
+      for (String role : roles) {
+        if (!isBlank(role)) {
+          targetUserIds.addAll(resolveUserIdsForRole(role));
+        }
+      }
     }
     if (!isBlank(createdByUserId)) {
       targetUserIds.add(createdByUserId);
@@ -152,7 +158,7 @@ public class NotificationService {
 
     return appUserRepository.findByRoleIgnoreCase(normalized).stream()
         .filter(this::isActiveUser)
-        .map(AppUser::getUserId)
+        .map(user -> user.getUserId())
         .filter(value -> !isBlank(value))
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }
@@ -172,12 +178,18 @@ public class NotificationService {
 
   private String normalizeRole(String role) {
     String value = String.valueOf(role == null ? "" : role).trim().toLowerCase(Locale.ROOT).replace(" ", "");
-    if ("admin".equals(value) || "superadmin".equals(value)) return "admin";
-    if ("hr".equals(value) || "hrmanager".equals(value)) return "hr";
-    if ("projectmanager".equals(value)) return "projectmanager";
-    if ("teamlead".equals(value)) return "teamlead";
-    if ("employee".equals(value)) return "employee";
-    if ("all".equals(value)) return "all";
+    if ("admin".equals(value) || "superadmin".equals(value))
+      return "admin";
+    if ("hr".equals(value) || "hrmanager".equals(value))
+      return "hr";
+    if ("projectmanager".equals(value))
+      return "projectmanager";
+    if ("teamlead".equals(value))
+      return "teamlead";
+    if ("employee".equals(value))
+      return "employee";
+    if ("all".equals(value))
+      return "all";
     return value;
   }
 

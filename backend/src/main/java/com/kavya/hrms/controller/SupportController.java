@@ -37,22 +37,25 @@ public class SupportController {
 
   @PostMapping
   public SupportTicket createTicket(@RequestBody SupportTicket payload) {
+    SupportTicket safePayload = payload == null ? new SupportTicket() : payload;
     long count = repository.count();
     String ticketId = String.format("SUP-%d", 1000 + count + 1);
-    payload.setTicketId(ticketId);
+    safePayload.setTicketId(ticketId);
 
     String created = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"));
-    payload.setCreatedDate(created);
-    if (payload.getStatus() == null) {
-      payload.setStatus("Pending");
+    safePayload.setCreatedDate(created);
+    if (safePayload.getStatus() == null) {
+      safePayload.setStatus("Pending");
     }
 
-    return repository.save(payload);
+    return repository.save(safePayload);
   }
 
   @PatchMapping("/{id}/status")
   public ResponseEntity<SupportTicket> updateStatus(@PathVariable String id, @RequestBody StatusUpdateRequest request) {
-    return repository.findById(id)
+    String safeId = id == null ? "" : id;
+    StatusUpdateRequest safeRequest = request == null ? new StatusUpdateRequest() : request;
+    return repository.findById(safeId)
         .map((ticket) -> {
           ticket.setStatus(Objects.requireNonNull(request.getStatus(), "status must not be null"));
           return ResponseEntity.ok(repository.save(ticket));
