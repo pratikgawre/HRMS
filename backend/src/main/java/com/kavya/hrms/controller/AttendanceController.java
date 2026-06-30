@@ -71,7 +71,7 @@ public class AttendanceController {
     List<AttendanceRecord> safeRecords = safeList(records);
     long existingCount = attendanceRecordRepository.count();
     attendanceRecordRepository.deleteAll();
-    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(safeRecords);
+    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(Objects.requireNonNull(safeRecords));
     if (existingCount > 0) {
       notifyAttendanceChange(saved, "Attendance updated", accessRole, userId, "updated");
     }

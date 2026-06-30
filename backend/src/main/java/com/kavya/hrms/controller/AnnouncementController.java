@@ -75,7 +75,7 @@ public class AnnouncementController {
     List<Announcement> safeAnnouncements = safeList(announcements);
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
-    List<Announcement> saved = announcementRepository.saveAll(safeAnnouncements);
+    List<Announcement> saved = announcementRepository.saveAll(Objects.requireNonNull(safeAnnouncements));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.companyWideRecipients(),

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -138,7 +139,7 @@ public class PayrollController {
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
     List<PayrollRecord> safeRecords = safeList(records);
-    return payrollRecordRepository.saveAll(safeRecords);
+    return payrollRecordRepository.saveAll(Objects.requireNonNull(safeRecords));
   }
 
   private ResponseEntity<Object> forbidden(String message) {

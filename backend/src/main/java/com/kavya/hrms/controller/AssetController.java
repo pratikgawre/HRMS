@@ -139,7 +139,7 @@ public class AssetController {
         .map(this::normalizeAssetResponse)
         .filter(Objects::nonNull)
         .toList();
-    List<Asset> saved = assetRepository.saveAll(normalizedAssets);
+    List<Asset> saved = assetRepository.saveAll(Objects.requireNonNull(normalizedAssets));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
