@@ -91,9 +91,8 @@ export async function authenticateUser(email, password) {
         permissions: getPermissions(accessRole),
         token: result.token || '',
         password,
-        mustChangePassword: Boolean(result.mustChangePassword),
-        avatar: (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
-        profilePicture: '',
+        avatar: result.avatar || (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
+        profilePicture: result.profilePicture || '',
       };
       return { ok: true, user };
     }

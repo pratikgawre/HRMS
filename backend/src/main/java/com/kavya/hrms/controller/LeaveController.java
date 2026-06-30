@@ -155,12 +155,20 @@ public class LeaveController {
   }
 
   private String buildLeaveMessage(LeaveRequest request, String verb) {
+    if (request == null) {
+      return "Employee " + verb + " leave for - to -";
+    }
+
     String employeeName = request.getEmployee() == null ? "Employee" : request.getEmployee();
     String leaveType = request.getType() == null ? "leave" : request.getType();
     return employeeName + " " + verb + " " + leaveType + " for " + safeDateRange(request);
   }
 
   private String safeDateRange(LeaveRequest request) {
+    if (request == null) {
+      return "- to -";
+    }
+
     String fromDate = request.getFromDate() == null ? "-" : request.getFromDate();
     String toDate = request.getToDate() == null ? "-" : request.getToDate();
     return fromDate + " to " + toDate;

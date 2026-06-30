@@ -44,15 +44,11 @@ public class UserController {
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
     List<AppUser> safeUsers = safeList(users);
-    List<AppUser> deduplicatedUsers = new ArrayList<>(dedupeUsers(safeUsers));
+    List<AppUser> deduplicatedUsers = new ArrayList<>(deduplicateUsers(safeUsers));
     return appUserRepository.saveAll(deduplicatedUsers);
   }
 
-  private List<AppUser> dedupeUsers(List<AppUser> users) {
-    if (users == null || users.isEmpty()) {
-      return List.of();
-    }
-
+  private List<AppUser> deduplicateUsers(List<AppUser> users) {
     Map<String, Integer> identityIndexes = new LinkedHashMap<>();
     List<AppUser> uniqueUsers = new ArrayList<>();
 

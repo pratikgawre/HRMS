@@ -30,7 +30,6 @@ import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/assets")
-@SuppressWarnings("all")
 public class AssetController {
   private static final Logger LOGGER = Logger.getLogger(AssetController.class.getName());
   private final AssetRepository assetRepository;
@@ -136,7 +135,11 @@ public class AssetController {
     List<Asset> safeAssets = assets == null ? List.of() : assets.stream().filter(Objects::nonNull).toList();
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
-    List<Asset> saved = assetRepository.saveAll(safeAssets.stream().map(this::normalizeAssetResponse).toList());
+    List<Asset> normalizedAssets = safeAssets.stream()
+        .map(this::normalizeAssetResponse)
+        .filter(Objects::nonNull)
+        .toList();
+    List<Asset> saved = assetRepository.saveAll(Objects.requireNonNull(normalizedAssets));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -190,14 +193,15 @@ public class AssetController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Asset current = assetRepository.findById(id).orElseGet(Asset::new);
-    assetRepository.deleteById(id);
+    String safeId = Objects.requireNonNull(id, "asset id must not be null");
+    Asset current = assetRepository.findById(safeId).orElse(null);
+    assetRepository.deleteById(safeId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset removed",
         buildAssetMessage(current, "removed"),
         "asset",
-        id,
+        safeId,
         accessRole,
         "System",
         userId);

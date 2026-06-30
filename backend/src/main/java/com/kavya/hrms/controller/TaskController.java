@@ -8,7 +8,6 @@ import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.TaskRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.time.OffsetDateTime;
@@ -32,7 +31,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/tasks")
-@SuppressWarnings("all")
 public class TaskController {
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
@@ -83,13 +81,22 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    hydrateTeamLeadFields(task);
-    syncProjectAssignment(task);
-    if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
-      task.setCreatedDateTime(OffsetDateTime.now().toString());
+    TaskItem safeTask = task == null ? new TaskItem() : task;
+    hydrateTeamLeadFields(safeTask);
+    if (safeTask.getCreatedDateTime() == null || safeTask.getCreatedDateTime().isBlank()) {
+      safeTask.setCreatedDateTime(OffsetDateTime.now().toString());
     }
-    TaskItem saved = taskRepository.save(task);
-    notifyTaskChangeSafely(saved, "Task created", "created", accessRole, userId);
+    TaskItem saved = taskRepository.save(safeTask);
+    syncProjectAssignment(saved);
+    notificationService.notifyRoles(
+        NotificationAudience.operationalRecipients(accessRole),
+        "Task created",
+        buildTaskMessage(saved, "created"),
+        "task",
+        saved.getId(),
+        accessRole,
+        "System",
+        userId);
     return saved;
   }
 
@@ -122,32 +129,19 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem previous = taskRepository.findById(id).orElse(null);
-    task.setId(id);
-    TaskItem existing = taskRepository.findById(id).orElse(null);
-    if ((task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) && existing != null) {
-      task.setCreatedDateTime(existing.getCreatedDateTime());
-    }
-    hydrateTeamLeadFields(task);
-    syncProjectAssignment(task);
-    TaskItem saved = mongoTemplate.save(task, "tasks");
-    notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
-    return saved;
-  }
-
-  @PatchMapping("/{id}/status")
-  public TaskItem updateStatus(
-      @PathVariable("id") String id,
-      @RequestBody TaskStatusRequest request,
-      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
-      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem current = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
-    String nextStatus = firstNonBlank(request == null ? null : request.getStatus(), current.getStatus());
-    Query query = new Query(Criteria.where("id").is(id));
-    Update update = new Update().set("status", nextStatus);
-    mongoTemplate.updateFirst(query, update, TaskItem.class);
-    TaskItem saved = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
-    notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
+    TaskItem safeTask = task == null ? new TaskItem() : task;
+    safeTask.setId(id);
+    hydrateTeamLeadFields(safeTask);
+    TaskItem saved = taskRepository.save(safeTask);
+    notificationService.notifyRoles(
+        NotificationAudience.operationalRecipients(accessRole),
+        "Task updated",
+        buildTaskMessage(saved, "updated"),
+        "task",
+        saved.getId(),
+        accessRole,
+        "System",
+        userId);
     return saved;
   }
 
@@ -156,9 +150,18 @@ public class TaskController {
       @PathVariable("id") String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem current = taskRepository.findById(id).orElseGet(TaskItem::new);
-    mongoTemplate.remove(new Query(Criteria.where("id").is(id)), TaskItem.class);
-    notifyTaskChangeSafely(current, "Task removed", "removed", accessRole, userId);
+    String nonNullId = id == null ? "" : id;
+    TaskItem current = taskRepository.findById(nonNullId).orElse(null);
+    taskRepository.deleteById(nonNullId);
+    notificationService.notifyRoles(
+        NotificationAudience.operationalRecipients(accessRole),
+        "Task removed",
+        buildTaskMessage(current, "removed"),
+        "task",
+        nonNullId,
+        accessRole,
+        "System",
+        userId);
   }
 
   private String buildTaskMessage(TaskItem task, String action) {
@@ -380,42 +383,5 @@ public class TaskController {
 
   private <T> List<T> safeList(List<T> values) {
     return values == null ? new ArrayList<>() : new ArrayList<>(values);
-  }
-
-  private void notifyTaskChangeSafely(
-      TaskItem task,
-      String title,
-      String verb,
-      String accessRole,
-      String userId) {
-    if (task == null) {
-      return;
-    }
-
-    try {
-      notificationService.notifyRoles(
-          NotificationAudience.operationalRecipients(accessRole),
-          title,
-          buildTaskMessage(task, verb),
-          "task",
-          task.getId(),
-          accessRole,
-          "System",
-          userId);
-    } catch (RuntimeException ignored) {
-      // Keep task persistence responsive even if notification fan-out fails.
-    }
-  }
-
-  public static class TaskStatusRequest {
-    private String status;
-
-    public String getStatus() {
-      return status;
-    }
-
-    public void setStatus(String status) {
-      this.status = status;
-    }
   }
 }

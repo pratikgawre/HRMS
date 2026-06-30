@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/announcements")
-@SuppressWarnings("all")
 public class AnnouncementController {
   private final AnnouncementRepository announcementRepository;
   private final NotificationService notificationService;
@@ -96,7 +95,7 @@ public class AnnouncementController {
       @RequestBody Announcement announcement,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Announcement safeAnnouncement = Objects.requireNonNull(announcement, "announcement must not be null");
+    Announcement safeAnnouncement = announcement == null ? new Announcement() : announcement;
     safeAnnouncement.setId(id);
     Announcement saved = announcementRepository.save(safeAnnouncement);
     notificationService.notifyRoles(
@@ -116,8 +115,9 @@ public class AnnouncementController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Announcement current = announcementRepository.findById(id).orElseGet(Announcement::new);
-    announcementRepository.deleteById(id);
+    String nonNullId = id == null ? "" : id;
+    Announcement current = announcementRepository.findById(nonNullId).orElse(null);
+    announcementRepository.deleteById(nonNullId);
     String title = "An announcement";
     String currentTitle = current.getTitle();
     if (currentTitle != null && !currentTitle.isBlank()) {
@@ -128,7 +128,7 @@ public class AnnouncementController {
         "Announcement removed",
         title + " was removed.",
         "announcement",
-        id,
+        nonNullId,
         accessRole,
         "System",
         userId);

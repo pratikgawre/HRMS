@@ -5,7 +5,6 @@ import com.kavya.hrms.dto.EmployeeDashboardSummary;
 import com.kavya.hrms.model.Asset;
 import com.kavya.hrms.model.AttendanceRecord;
 import com.kavya.hrms.model.LeaveRequest;
-import com.kavya.hrms.model.SystemSettings;
 import com.kavya.hrms.model.TaskItem;
 import com.kavya.hrms.repository.AnnouncementRepository;
 import com.kavya.hrms.repository.AttendanceRecordRepository;
@@ -183,7 +182,8 @@ public class DashboardController {
     int allocated = systemSettingsRepository.findAll().stream()
         .filter(Objects::nonNull)
         .findFirst()
-        .map(this::resolveAllocatedLeaves)
+        .map(settings -> settings.getLeaveTypes())
+        .map(types -> types == null ? 0 : types.stream().mapToInt(type -> type.getDays() != null ? type.getDays() : 0).sum())
         .orElse(0);
 
     int remaining = Math.max(allocated - used, 0);

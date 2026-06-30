@@ -25,7 +25,6 @@ import com.kavya.hrms.repository.TaskRepository;
 import java.util.Objects;
 
 @Configuration
-@SuppressWarnings("all")
 public class DataSeeder {
   @Bean
   CommandLineRunner seedData(
