@@ -1,19 +1,21 @@
 package com.kavya.hrms.service;
 
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import com.kavya.hrms.dto.EmployeeLeaveSummaryResponse;
 import com.kavya.hrms.model.LeaveRequest;
 import com.kavya.hrms.model.SystemSettings;
 import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
-import java.util.List;
-import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
+@SuppressWarnings("all")
 public class EmployeeLeaveSummaryService {
   private static final String DEFAULT_SETTINGS_ID = "default";
   private final LeaveRequestRepository leaveRequestRepository;

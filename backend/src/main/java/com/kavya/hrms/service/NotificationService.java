@@ -17,6 +17,7 @@ import com.kavya.hrms.repository.NotificationRepository;
 import org.springframework.stereotype.Service;
 
 @Service
+@SuppressWarnings("all")
 public class NotificationService {
   private final NotificationRepository notificationRepository;
   private final AppUserRepository appUserRepository;

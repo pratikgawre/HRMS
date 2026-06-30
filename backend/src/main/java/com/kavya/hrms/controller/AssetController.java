@@ -135,9 +135,11 @@ public class AssetController {
     List<Asset> safeAssets = assets == null ? List.of() : assets;
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
-    List<Asset> saved = assetRepository.saveAll(Objects.requireNonNull(safeAssets.stream()
+    List<Asset> normalizedAssets = safeAssets.stream()
         .map(this::normalizeAssetResponse)
-        .toList()));
+        .filter(Objects::nonNull)
+        .toList();
+    List<Asset> saved = assetRepository.saveAll(normalizedAssets);
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),

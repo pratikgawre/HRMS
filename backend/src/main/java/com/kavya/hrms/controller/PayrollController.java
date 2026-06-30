@@ -138,7 +138,7 @@ public class PayrollController {
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
     List<PayrollRecord> safeRecords = safeList(records);
-    return payrollRecordRepository.saveAll(java.util.Objects.requireNonNull(safeRecords));
+    return payrollRecordRepository.saveAll(safeRecords);
   }
 
   private ResponseEntity<Object> forbidden(String message) {

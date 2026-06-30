@@ -75,7 +75,7 @@ public class AnnouncementController {
     List<Announcement> safeAnnouncements = safeList(announcements);
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
-    List<Announcement> saved = announcementRepository.saveAll(Objects.requireNonNull(safeAnnouncements));
+    List<Announcement> saved = announcementRepository.saveAll(safeAnnouncements);
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.companyWideRecipients(),
@@ -96,7 +96,7 @@ public class AnnouncementController {
       @RequestBody Announcement announcement,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Announcement safeAnnouncement = Objects.requireNonNull(announcement, "announcement must not be null");
+    Announcement safeAnnouncement = announcement == null ? new Announcement() : announcement;
     safeAnnouncement.setId(id);
     Announcement saved = announcementRepository.save(safeAnnouncement);
     String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
@@ -138,6 +138,7 @@ public class AnnouncementController {
         "System",
         safeUserId);
   }
+
   private String asString(Object value) {
     return value == null ? "" : String.valueOf(value).trim();
   }

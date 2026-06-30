@@ -1,20 +1,27 @@
 package com.kavya.hrms.controller;
 
+import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.model.Employee;
+import com.kavya.hrms.repository.AppUserRepository;
+import com.kavya.hrms.repository.EmployeeRepository;
+import com.kavya.hrms.service.EmployeeWelcomeEmailService;
+import com.kavya.hrms.service.NotificationAudience;
+import com.kavya.hrms.service.NotificationService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,18 +34,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
-
-import com.kavya.hrms.model.AppUser;
-import com.kavya.hrms.model.Employee;
-import com.kavya.hrms.repository.AppUserRepository;
-import com.kavya.hrms.repository.EmployeeRepository;
-import com.kavya.hrms.service.EmployeeWelcomeEmailService;
-import com.kavya.hrms.service.NotificationAudience;
-import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/employees")
+@SuppressWarnings("all")
 public class EmployeeController {
   private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
       "image/png",
@@ -105,7 +106,6 @@ public class EmployeeController {
         .collect(Collectors.toList());
     List<Employee> saved = employeeRepository.saveAll(Objects.requireNonNull(normalizedEmployees));
     syncCredentialEmailsForBulkSave(saved, existingByKey, shouldSendCredentialUpdates(sendCredentialUpdates), credentialUpdateEmployeeId);
-
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),

@@ -45,15 +45,11 @@ public class UserController {
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
     List<AppUser> safeUsers = safeList(users);
-    List<AppUser> deduplicatedUsers = new ArrayList<>(dedupeUsers(safeUsers));
+    List<AppUser> deduplicatedUsers = new ArrayList<>(deduplicateUsers(safeUsers));
     return appUserRepository.saveAll(deduplicatedUsers);
   }
 
-  private List<AppUser> dedupeUsers(List<AppUser> users) {
-    if (users == null || users.isEmpty()) {
-      return List.of();
-    }
-
+  private List<AppUser> deduplicateUsers(List<AppUser> users) {
     Map<String, Integer> identityIndexes = new LinkedHashMap<>();
     List<AppUser> uniqueUsers = new ArrayList<>();
 
@@ -98,7 +94,7 @@ public class UserController {
     normalized.setStatus(user.getStatus());
     normalized.setLastLogin(user.getLastLogin());
     normalized.setMustChangePassword(user.getMustChangePassword());
-return normalized;
+    return normalized;
   }
 
   private AppUser mergeUsers(AppUser current, AppUser next) {
@@ -120,7 +116,7 @@ return normalized;
     merged.setStatus(firstNonBlank(current.getStatus(), next.getStatus()));
     merged.setLastLogin(firstNonBlank(current.getLastLogin(), next.getLastLogin()));
     merged.setMustChangePassword(Boolean.TRUE.equals(current.getMustChangePassword()) || Boolean.TRUE.equals(next.getMustChangePassword()));
-return merged;
+    return merged;
   }
 
   @Nullable

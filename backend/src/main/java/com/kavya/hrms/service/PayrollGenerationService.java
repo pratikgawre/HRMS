@@ -24,6 +24,7 @@ import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.PayrollRecordRepository;
 
 @Service
+@SuppressWarnings("all")
 public class PayrollGenerationService {
   private static final String[] MONTHS = {
       "January", "February", "March", "April", "May", "June",

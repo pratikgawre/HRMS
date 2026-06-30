@@ -454,18 +454,6 @@ public class TaskController {
     return value == null ? "" : value.trim().toLowerCase();
   }
 
-  public static class TaskStatusRequest {
-    private String status;
-
-    public String getStatus() {
-      return status;
-    }
-
-    public void setStatus(String status) {
-      this.status = status;
-    }
-  }
-
   private <T> List<T> safeList(List<T> values) {
     return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }

@@ -71,7 +71,7 @@ public class AttendanceController {
     List<AttendanceRecord> safeRecords = safeList(records);
     long existingCount = attendanceRecordRepository.count();
     attendanceRecordRepository.deleteAll();
-    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(Objects.requireNonNull(safeRecords));
+    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(safeRecords);
     if (existingCount > 0) {
       notifyAttendanceChange(saved, "Attendance updated", accessRole, userId, "updated");
     }
@@ -117,6 +117,9 @@ public class AttendanceController {
     }
 
     AttendanceRecord first = records.get(0);
+    if (first == null) {
+      return "Attendance records were " + verb + ".";
+    }
     String employee = first.getEmployeeName() != null ? first.getEmployeeName() : "employee";
     String date = first.getDateLabel() != null ? first.getDateLabel() : first.getDate();
     return employee + "'s attendance was " + verb + " for " + (date == null ? "selected records" : date) + ".";

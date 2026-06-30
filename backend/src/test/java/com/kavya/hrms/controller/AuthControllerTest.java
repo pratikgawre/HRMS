@@ -16,16 +16,22 @@ import com.kavya.hrms.dto.PasswordResetConfirmationRequest;
 import com.kavya.hrms.dto.PasswordResetRequest;
 import com.kavya.hrms.dto.PasswordResetResponse;
 import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.model.AuthSession;
 import com.kavya.hrms.repository.AppUserRepository;
+import com.kavya.hrms.repository.AuthSessionRepository;
 import com.kavya.hrms.service.PasswordResetEmailService;
 
 @org.junit.jupiter.api.extension.ExtendWith(org.mockito.junit.jupiter.MockitoExtension.class)
+@SuppressWarnings("all")
 class AuthControllerTest {
     @org.mockito.Mock
     private AppUserRepository appUserRepository;
 
     @org.mockito.Mock
     private PasswordResetEmailService passwordResetEmailService;
+
+    @org.mockito.Mock
+    private AuthSessionRepository authSessionRepository;
 
     @org.mockito.InjectMocks
     private AuthController authController;
@@ -43,6 +49,7 @@ class AuthControllerTest {
 
         when(appUserRepository.findAllByEmailIgnoreCase("admin@example.com"))
             .thenReturn(java.util.Collections.singletonList(user));
+        when(authSessionRepository.save(any(AuthSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
         LoginRequest request = new LoginRequest();
         request.setEmail("Admin@Example.com");
         request.setPassword("admin123");
