@@ -111,6 +111,7 @@ export async function bootstrapSessionFromBackend() {
     kavyaEmployeePhoto: '',
     kavyaUserId: payload?.userId || '',
     kavyaLastLogin: payload?.lastLogin || '',
+    kavyaMustChangePassword: Boolean(payload?.mustChangePassword),
   };
   window.dispatchEvent(new Event('kavyaSessionChanged'));
   return session;

@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -81,6 +82,7 @@ public class PayrollValidationService {
     return "paid".equalsIgnoreCase(String.valueOf(status).trim());
   }
 
+  @Nullable
   public Integer normalizeMonthIndex(String salaryMonth) {
     String rawValue = String.valueOf(salaryMonth == null ? "" : salaryMonth).trim();
     if (rawValue.isEmpty()) {
@@ -108,6 +110,7 @@ public class PayrollValidationService {
     return MONTH_INDEX_BY_NAME.get(prefix);
   }
 
+  @Nullable
   private Integer normalizeYear(String salaryYear) {
     try {
       return Integer.valueOf(String.valueOf(salaryYear).trim());

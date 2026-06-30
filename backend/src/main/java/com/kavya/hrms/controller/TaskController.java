@@ -8,17 +8,9 @@ import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.TaskRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.time.OffsetDateTime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -84,22 +76,14 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem safeTask = task == null ? new TaskItem() : task;
-    hydrateTeamLeadFields(safeTask);
-    if (safeTask.getCreatedDateTime() == null || safeTask.getCreatedDateTime().isBlank()) {
-      safeTask.setCreatedDateTime(OffsetDateTime.now().toString());
+    hydrateTeamLeadFields(task);
+    syncProjectAssignment(task);
+    if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
+      task.setCreatedDateTime(OffsetDateTime.now().toString());
     }
-    TaskItem saved = taskRepository.save(safeTask);
+    TaskItem saved = taskRepository.save(task);
     syncProjectAssignment(saved);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task created",
-        buildTaskMessage(saved, "created"),
-        "task",
-        saved.getId(),
-        accessRole,
-        "System",
-        userId);
+    notifyTaskAssigned(saved, accessRole);
     return saved;
   }
 
@@ -111,17 +95,17 @@ public class TaskController {
     List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
-    List<TaskItem> saved = taskRepository.saveAll(safeTasks);
+    List<TaskItem> saved = taskRepository.saveAll(tasks == null ? List.of() : tasks.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
-      notificationService.notifyRoles(
-          NotificationAudience.operationalRecipients(accessRole),
+      notificationService.notifyRolesExcept(
+          NotificationAudience.taskStatusRecipients(),
+          excludedIds(userId),
           "Tasks refreshed",
           "Task board was updated in bulk.",
           "task",
           "bulk",
           accessRole,
-          "System",
-          userId);
+          "System");
     }
     return saved;
   }
@@ -132,19 +116,16 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem safeTask = task == null ? new TaskItem() : task;
-    safeTask.setId(id);
-    hydrateTeamLeadFields(safeTask);
-    TaskItem saved = taskRepository.save(safeTask);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task updated",
-        buildTaskMessage(saved, "updated"),
-        "task",
-        saved.getId(),
-        accessRole,
-        "System",
-        userId);
+    TaskItem previous = taskRepository.findById(id).orElse(null);
+    task.setId(id);
+    TaskItem existing = taskRepository.findById(id).orElse(null);
+    if ((task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) && existing != null) {
+      task.setCreatedDateTime(existing.getCreatedDateTime());
+    }
+    hydrateTeamLeadFields(task);
+    syncProjectAssignment(task);
+    TaskItem saved = taskRepository.save(task);
+    notifyTaskUpdated(saved, previous, accessRole, userId);
     return saved;
   }
 
@@ -169,24 +150,122 @@ public class TaskController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String nonNullId = id == null ? "" : id;
-    TaskItem current = taskRepository.findById(nonNullId).orElse(null);
-    taskRepository.deleteById(nonNullId);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task removed",
-        buildTaskMessage(current, "removed"),
+    TaskItem current = taskRepository.findById(id).orElseGet(TaskItem::new);
+    taskRepository.deleteById(id);
+    notifyTaskRemoved(current, accessRole, userId);
+  }
+
+  private void notifyTaskAssigned(TaskItem task, String accessRole) {
+    notificationService.notifyUserIdentities(
+        taskRecipientIdentities(task),
+        "Task assigned",
+        buildTaskMessage(task, "assigned"),
         "task",
-        nonNullId,
+        task == null ? "" : task.getId(),
         accessRole,
-        "System",
-        userId);
+        "System");
+  }
+
+  private void notifyTaskUpdated(TaskItem task, TaskItem previous, String accessRole, String actorUserId) {
+    if (hasStatusChanged(task, previous)) {
+      String message = buildTaskStatusMessage(task, previous);
+      notificationService.notifyRolesAndIdentitiesExcept(
+          NotificationAudience.taskStatusRecipients(),
+          taskManagerIdentities(task),
+          excludedIds(actorUserId),
+          "Task status updated",
+          message,
+          "task",
+          task == null ? "" : task.getId(),
+          accessRole,
+          "System");
+      return;
+    }
+
+    if (hasAssigneeChanged(task, previous)) {
+      notifyTaskAssigned(task, accessRole);
+    }
+  }
+
+  private void notifyTaskRemoved(TaskItem task, String accessRole, String actorUserId) {
+    notificationService.notifyRolesExcept(
+        NotificationAudience.taskStatusRecipients(),
+        excludedIds(actorUserId),
+        "Task removed",
+        buildTaskMessage(task, "removed"),
+        "task",
+        task == null ? "" : task.getId(),
+        accessRole,
+        "System");
   }
 
   private String buildTaskMessage(TaskItem task, String action) {
     String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
     String owner = task != null && task.getOwner() != null ? task.getOwner() : "team";
     return title + " was " + action + " for " + owner + ".";
+  }
+
+  private String buildTaskStatusMessage(TaskItem task, TaskItem previous) {
+    String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
+    String nextStatus = task != null && task.getStatus() != null ? task.getStatus() : "updated";
+    String previousStatus = previous != null && previous.getStatus() != null ? previous.getStatus() : "previous status";
+    return title + " status changed from " + previousStatus + " to " + nextStatus + ".";
+  }
+
+  private boolean hasStatusChanged(TaskItem task, TaskItem previous) {
+    if (task == null || previous == null) {
+      return false;
+    }
+    return !normalize(task.getStatus()).equals(normalize(previous.getStatus()));
+  }
+
+  private boolean hasAssigneeChanged(TaskItem task, TaskItem previous) {
+    if (task == null || previous == null) {
+      return false;
+    }
+    return !normalize(firstNonBlank(task.getAssignedToId(), task.getAssignedToName(), task.getAssignedTo(), task.getOwner()))
+        .equals(normalize(firstNonBlank(previous.getAssignedToId(), previous.getAssignedToName(), previous.getAssignedTo(), previous.getOwner())));
+  }
+
+  private List<String> taskRecipientIdentities(TaskItem task) {
+    List<String> identities = new ArrayList<>();
+    if (task == null) {
+      return identities;
+    }
+    addIdentity(identities, task.getAssignedToId());
+    addIdentity(identities, task.getAssignedToName());
+    addIdentity(identities, task.getAssignedTo());
+    addIdentity(identities, task.getOwner());
+    return identities;
+  }
+
+  private List<String> taskManagerIdentities(TaskItem task) {
+    List<String> identities = new ArrayList<>();
+    if (task == null) {
+      return identities;
+    }
+    addIdentity(identities, task.getAssignedById());
+    addIdentity(identities, task.getAssignedByName());
+    addIdentity(identities, task.getAssignedBy());
+    addIdentity(identities, task.getTeamLeadId());
+    return identities;
+  }
+
+  private List<String> excludedIds(String... values) {
+    List<String> ids = new ArrayList<>();
+    if (values == null) {
+      return ids;
+    }
+    for (String value : values) {
+      addIdentity(ids, value);
+    }
+    return ids;
+  }
+
+  private void addIdentity(List<String> identities, String value) {
+    if (value != null && !value.isBlank()) {
+      identities.add(value.trim());
+    }
   }
 
   private void hydrateTeamLeadFields(TaskItem task) {
@@ -219,13 +298,14 @@ public class TaskController {
       return;
     }
 
-    Project project = projectRepository.findById(projectId).orElse(null);
-    if (project == null) {
+    java.util.Optional<Project> project = projectRepository.findById(projectId);
+    if (project.isEmpty()) {
       return;
     }
+    Project currentProject = project.get();
 
     if (task.getProjectName() == null || task.getProjectName().isBlank()) {
-      task.setProjectName(firstNonBlank(project.getName(), projectId));
+      task.setProjectName(firstNonBlank(currentProject.getName(), projectId));
     }
 
     if (task.getProjectCode() == null || task.getProjectCode().isBlank()) {
@@ -233,7 +313,7 @@ public class TaskController {
     }
 
     if (task.getTeamLeadId() == null || task.getTeamLeadId().isBlank()) {
-      task.setTeamLeadId(firstNonBlank(project.getTeamLeadId()));
+      task.setTeamLeadId(firstNonBlank(currentProject.getTeamLeadId()));
     }
   }
 
@@ -279,6 +359,7 @@ public class TaskController {
     }
   }
 
+  @Nullable
   private Employee findEmployee(String... candidates) {
     for (Employee employee : employeeRepository.findAll()) {
       if (employee == null) {

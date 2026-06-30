@@ -7,9 +7,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Locale;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.logging.Logger;
-
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -133,14 +133,10 @@ public class AssetController {
       @RequestBody List<Asset> assets,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    List<Asset> safeAssets = assets == null ? List.of() : assets;
+    List<Asset> safeAssets = assets == null ? List.of() : assets.stream().filter(Objects::nonNull).toList();
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
-    List<Asset> normalizedAssets = safeAssets.stream()
-        .map(this::normalizeAssetResponse)
-        .filter(Objects::nonNull)
-        .toList();
-    List<Asset> saved = assetRepository.saveAll(Objects.requireNonNull(normalizedAssets));
+    List<Asset> saved = assetRepository.saveAll(safeAssets.stream().map(this::normalizeAssetResponse).toList());
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -194,9 +190,8 @@ public class AssetController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String safeId = Objects.requireNonNull(id, "asset id must not be null");
-    Asset current = assetRepository.findById(safeId).orElse(null);
-    assetRepository.deleteById(safeId);
+    Asset current = assetRepository.findById(id).orElseGet(Asset::new);
+    assetRepository.deleteById(id);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset removed",
@@ -218,6 +213,7 @@ public class AssetController {
     return value == null ? "" : value.trim();
   }
 
+  @Nullable
   private Asset normalizeAssetResponse(Asset asset) {
     if (asset == null) {
       return null;
@@ -413,15 +409,20 @@ public class AssetController {
     return asset;
   }
 
+  @Nullable
   private AssetAssignment resolveLatestAssignment(String assetId, String assetCode, List<AssetAssignment> assignments) {
     if (assignments == null || assignments.isEmpty()) {
       return null;
     }
 
-    return assignments.stream()
-        .filter((assignment) -> matchesAsset(assetId, assetCode, assignment))
-        .max((left, right) -> compareAssignments(left, right))
-        .orElse(null);
+    Optional<AssetAssignment> latestAssignment = assignments.stream()
+      .filter((assignment) -> matchesAsset(assetId, assetCode, assignment))
+      .max((left, right) -> compareAssignments(left, right));
+    if (latestAssignment.isEmpty()) {
+      return null;
+    }
+
+    return latestAssignment.get();
   }
 
   private int compareAssignments(AssetAssignment left, AssetAssignment right) {
@@ -528,6 +529,7 @@ public class AssetController {
     return parsed.format(DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH));
   }
 
+  @Nullable
   private LocalDate parseDate(String value) {
     String normalized = normalize(value);
     if (normalized.isBlank()) {

@@ -41,6 +41,7 @@ export function saveUsers(users) {
     profilePicture: sanitizeProfilePicture(user.profilePicture),
     status: user.status,
     lastLogin: user.lastLogin,
+    mustChangePassword: Boolean(user.mustChangePassword),
     twoFactorEnabled: Boolean(user.twoFactorEnabled),
     twoFactorSecret: user.twoFactorSecret || '',
   }));
@@ -48,9 +49,44 @@ export function saveUsers(users) {
   return apiRequest('/users/bulk', { method: 'POST', body: JSON.stringify(payload) });
 }
 
+function buildEmployeePassword(employee) {
+  const explicitPassword = String(employee?.generatedPassword || '').trim();
+  if (explicitPassword) {
+    return explicitPassword;
+  }
+
+  const firstName = String(employee?.firstName || 'Employee').trim();
+  const passwordBase = firstName.toLowerCase();
+  return passwordBase.charAt(0).toUpperCase() + passwordBase.slice(1) + '@123';
+}
+function buildEmployeeLoginEmail(employee) {
+  const explicitLoginEmail = String(employee?.generatedUsername || '').trim().toLowerCase();
+  if (explicitLoginEmail) {
+    return explicitLoginEmail;
+  }
+
+  const firstName = String(employee?.firstName || '').trim().toLowerCase().replace(/\s+/g, '');
+  const lastName = String(employee?.lastName || '').trim().toLowerCase().replace(/\s+/g, '');
+
+  if (firstName && lastName) {
+    return `${firstName}.${lastName}@kavyainfoweb.com`;
+  }
+
+  if (firstName) {
+    return `${firstName}@kavyainfoweb.com`;
+  }
+
+  const fallbackEmail = String(employee?.email || '').trim().toLowerCase();
+  return fallbackEmail.includes('@') ? fallbackEmail : '';
+}
 export function buildUserAccess({ employee, accessRole, status = 'Active', existingUser }) {
   const employeeId = employee.employeeCode || employee.id || existingUser?.employeeId;
-  const email = String(employee.email || existingUser?.email || '').trim().toLowerCase();
+  const email = buildEmployeeLoginEmail(employee) || String(existingUser?.email || '').trim().toLowerCase();
+  const generatedPassword = buildEmployeePassword(employee);
+  const existingEmail = String(existingUser?.email || '').trim().toLowerCase();
+  const sameLoginEmail = Boolean(existingUser && existingEmail === email);
+  const existingUsesTemporaryPassword = sameLoginEmail && String(existingUser?.password || '') === generatedPassword;
+  const keepExistingPassword = sameLoginEmail && String(existingUser?.password || '').trim() && !existingUsesTemporaryPassword;
 
   return {
     userId: existingUser?.userId || `USR-${Date.now()}`,
@@ -60,7 +96,8 @@ export function buildUserAccess({ employee, accessRole, status = 'Active', exist
     role: accessRole,
     status,
     permissions: getPermissions(accessRole),
-    password: existingUser?.password || 'employee123',
+    password: keepExistingPassword ? existingUser.password : generatedPassword,
+    mustChangePassword: keepExistingPassword ? Boolean(existingUser?.mustChangePassword) : true,
     avatar: employee.avatar || existingUser?.avatar || getInitials(employee.displayName || employee.name || ''),
     profilePicture: sanitizeProfilePicture(employee.profilePicture || existingUser?.profilePicture),
     department: employee.department || existingUser?.department || '',
@@ -191,6 +228,7 @@ function getPreferredDuplicateUser(currentUser, nextUser) {
     department: currentUser.department || nextUser.department || '',
     designation: currentUser.designation || nextUser.designation || '',
     lastLogin: currentUser.lastLogin || nextUser.lastLogin || '-',
+    mustChangePassword: Boolean(currentUser.mustChangePassword) || Boolean(nextUser.mustChangePassword),
     twoFactorEnabled: Boolean(currentUser.twoFactorEnabled || nextUser.twoFactorEnabled),
     twoFactorSecret: currentUser.twoFactorSecret || nextUser.twoFactorSecret || '',
   };

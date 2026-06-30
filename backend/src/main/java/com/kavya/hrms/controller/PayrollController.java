@@ -139,9 +139,8 @@ public class PayrollController {
   @SuppressWarnings("null")
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
-    List<PayrollRecord> safeRecords = safeList(records);
-    List<PayrollRecord> saved = payrollRecordRepository.saveAll(safeRecords);
-    return saved;
+    List<PayrollRecord> safeRecords = records == null ? List.of() : records.stream().filter(Objects::nonNull).toList();
+    return payrollRecordRepository.saveAll(safeRecords);
   }
 
   private ResponseEntity<Object> forbidden(String message) {

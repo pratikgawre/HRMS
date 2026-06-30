@@ -7,11 +7,11 @@ import { setAnnouncementsCache } from './announcementStorage.js';
 import { setAttendanceRowsCache } from './attendanceStorage.js';
 
 const defaultUsers = [
-  { userId: 'USR-ADMIN-001', email: 'admin@gmail.com', password: 'admin123', role: 'admin', employeeId: 'ADMIN-001', employeeName: 'Admin Kavya', status: 'Active', lastLogin: '-', twoFactorEnabled: false, twoFactorSecret: '' },
-  { userId: 'USR-HR-001', email: 'hr@gmail.com', password: 'hr123', role: 'hr', employeeId: 'HR-001', employeeName: 'Meera Nair', status: 'Active', lastLogin: '-', twoFactorEnabled: false, twoFactorSecret: '' },
-  { userId: 'USR-KV001', email: 'employee@gmail.com', password: 'employee123', role: 'employee', employeeId: 'KV001', employeeName: 'Aarav Sharma', status: 'Active', lastLogin: '-', twoFactorEnabled: false, twoFactorSecret: '' },
-  { userId: 'USR-KV003', email: 'teamlead@gmail.com', password: 'teamlead123', role: 'teamlead', employeeId: 'KV003', employeeName: 'Kabir Khan', status: 'Active', lastLogin: '-', twoFactorEnabled: false, twoFactorSecret: '' },
-  { userId: 'USR-KV004', email: 'manager@gmail.com', password: 'manager123', role: 'projectmanager', employeeId: 'KV004', employeeName: 'Isha Patel', status: 'Active', lastLogin: '-', twoFactorEnabled: false, twoFactorSecret: '' },
+  { userId: 'USR-ADMIN-001', email: 'admin@gmail.com', password: 'admin123', role: 'admin', employeeId: 'ADMIN-001', employeeName: 'Admin Kavya', status: 'Active', lastLogin: '-', mustChangePassword: false, twoFactorEnabled: false, twoFactorSecret: '' },
+  { userId: 'USR-HR-001', email: 'hr@gmail.com', password: 'hr123', role: 'hr', employeeId: 'HR-001', employeeName: 'Meera Nair', status: 'Active', lastLogin: '-', mustChangePassword: false, twoFactorEnabled: false, twoFactorSecret: '' },
+  { userId: 'USR-KV001', email: 'employee@gmail.com', password: 'employee123', role: 'employee', employeeId: 'KV001', employeeName: 'Aarav Sharma', status: 'Active', lastLogin: '-', mustChangePassword: false, twoFactorEnabled: false, twoFactorSecret: '' },
+  { userId: 'USR-KV003', email: 'teamlead@gmail.com', password: 'teamlead123', role: 'teamlead', employeeId: 'KV003', employeeName: 'Kabir Khan', status: 'Active', lastLogin: '-', mustChangePassword: false, twoFactorEnabled: false, twoFactorSecret: '' },
+  { userId: 'USR-KV004', email: 'manager@gmail.com', password: 'manager123', role: 'projectmanager', employeeId: 'KV004', employeeName: 'Isha Patel', status: 'Active', lastLogin: '-', mustChangePassword: false, twoFactorEnabled: false, twoFactorSecret: '' },
 ];
 
 function mapFallbackLeaves() {

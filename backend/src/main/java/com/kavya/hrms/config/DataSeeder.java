@@ -214,8 +214,7 @@ public class DataSeeder {
       String role,
       String employeeId,
       String employeeName) {
-    List<AppUser> foundUsers = appUserRepository.findAllByEmailIgnoreCase(email);
-    List<AppUser> usersWithEmail = new ArrayList<>(foundUsers == null ? List.of() : foundUsers);
+    List<AppUser> usersWithEmail = new ArrayList<>(appUserRepository.findAllByEmailIgnoreCase(email));
     AppUser user = usersWithEmail.isEmpty() ? new AppUser() : usersWithEmail.get(0);
 
     if (usersWithEmail.size() > 1) {
@@ -231,7 +230,10 @@ public class DataSeeder {
     user.setStatus("Active");
     user.setTwoFactorEnabled(false);
     user.setTwoFactorSecret("");
-    if (user.getUserId() == null || user.getUserId().isEmpty()) {
+    user.setPasswordResetToken(null);
+    user.setPasswordResetTokenExpiresAt(null);
+    user.setMustChangePassword(false);
+if (user.getUserId() == null || user.getUserId().isEmpty()) {
       user.setUserId("USR-" + employeeId);
     }
     appUserRepository.save(Objects.requireNonNull(user));
