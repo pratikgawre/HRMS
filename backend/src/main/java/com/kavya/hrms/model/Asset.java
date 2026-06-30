@@ -2,6 +2,7 @@ package com.kavya.hrms.model;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "assets")
@@ -29,6 +30,9 @@ public class Asset {
   private String assignedToEmployeeId;
 
   private String assignedTo;
+
+  @Transient
+  private String employeeName;
 
   private String condition;
   private String location;
@@ -67,6 +71,8 @@ public class Asset {
   public String getAssignedTo() { return assignedTo; }
   public void setAssignedTo(String assignedTo) { this.assignedTo = assignedTo; }
 
+  public String getEmployeeName() { return employeeName; }
+  public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
 
   public String getCondition() { return condition; }
   public void setCondition(String condition) { this.condition = condition; }

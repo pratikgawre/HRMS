@@ -1,4 +1,5 @@
 import { getAppRole, getDashboardPath, getPermissions, normalizeAccessRole } from './role-access.js';
+import { apiRequest } from './api.js';
 import { getUsers, saveUsers } from './user-management.js';
 import { getStoredEmployees } from './employeeStorage.js';
 import { clearSessionValues, getSessionValue, setSessionValue } from './appSession.js';
@@ -69,6 +70,7 @@ export async function authenticateUser(email, password) {
 
   if (response) {
     const isServerError = response.status >= 500;
+    const isUnauthorized = response.status === 401;
     const text = await response.text();
     let result = null;
     try {
@@ -93,6 +95,13 @@ export async function authenticateUser(email, password) {
         profilePicture: result.profilePicture || '',
       };
       return { ok: true, user };
+    }
+
+    if (isUnauthorized) {
+      const localUser = findLocalUser(normalizedEmail, password);
+      if (localUser) {
+        return { ok: true, user: localUser };
+      }
     }
 
     if (isServerError) {
@@ -147,6 +156,7 @@ function findLocalUser(email, password) {
     status: user.status || 'Active',
     permissions: getPermissions(accessRole),
     token: user.token || `local-${Date.now()}`,
+    mustChangePassword: Boolean(user.mustChangePassword),
     avatar: user.avatar || (user.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
     profilePicture: user.profilePicture || '',
   };
@@ -154,6 +164,7 @@ function findLocalUser(email, password) {
 
 export function startSession(user) {
   const appRole = getAppRole(user.role);
+  const mustChangePassword = Boolean(user.mustChangePassword);
   setSessionValue('kavyaRole', appRole);
   setSessionValue('kavyaAccessRole', user.role);
   setSessionValue('kavyaUserEmail', user.email);
@@ -165,6 +176,7 @@ export function startSession(user) {
   setSessionValue('kavyaUserId', user.userId || '');
   setSessionValue('kavyaLastLogin', user.lastLogin || '');
   setSessionValue('kavyaAuthToken', user.token || '');
+  setSessionValue('kavyaMustChangePassword', mustChangePassword);
   setSessionValue('kavyaLoginSuccess', 'true');
 
   return getDashboardPath(user.role);
@@ -179,7 +191,7 @@ export function clearSession() {
     }).catch(() => {});
   }
 
-  clearSessionValues(['kavyaRole', 'kavyaAccessRole', 'kavyaUserEmail', 'kavyaUserStatus', 'kavyaEmployeeId', 'kavyaEmployeeName', 'kavyaEmployeeAvatar', 'kavyaEmployeePhoto', 'kavyaUserId', 'kavyaLastLogin', 'kavyaAuthToken', 'kavyaLoginSuccess']);
+  clearSessionValues(['kavyaRole', 'kavyaAccessRole', 'kavyaUserEmail', 'kavyaUserStatus', 'kavyaEmployeeId', 'kavyaEmployeeName', 'kavyaEmployeeAvatar', 'kavyaEmployeePhoto', 'kavyaUserId', 'kavyaLastLogin', 'kavyaAuthToken', 'kavyaMustChangePassword', 'kavyaLoginSuccess']);
 }
 
 export function syncSessionFromAccessUser() {
@@ -193,6 +205,7 @@ export function syncSessionFromAccessUser() {
     ok: true,
     role,
     dashboardPath: getDashboardPath(getSessionValue('kavyaAccessRole') || role),
+    mustChangePassword: Boolean(getSessionValue('kavyaMustChangePassword')),
     user: {
       userId: getSessionValue('kavyaUserId') || '',
       email: getSessionValue('kavyaUserEmail') || '',
@@ -200,7 +213,105 @@ export function syncSessionFromAccessUser() {
       employeeName: getSessionValue('kavyaEmployeeName') || '',
       role: getSessionValue('kavyaAccessRole') || 'Employee',
       status: getSessionValue('kavyaUserStatus') || 'Active',
+      mustChangePassword: Boolean(getSessionValue('kavyaMustChangePassword')),
       token,
     },
   };
+}
+
+async function parseAuthResponse(response) {
+  const text = await response.text();
+  let result = null;
+
+  try {
+    result = text ? JSON.parse(text) : null;
+  } catch {
+    result = text ? { message: text } : null;
+  }
+
+  return { response, result };
+}
+
+export async function requestPasswordReset(email) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: normalizedEmail }),
+  }).catch(() => null);
+
+  if (!response) {
+    return { ok: false, message: 'Unable to connect to the reset service right now.' };
+  }
+
+  const { result } = await parseAuthResponse(response);
+  if (response.ok && result?.ok) {
+    return {
+      ok: true,
+      email: result.email || normalizedEmail,
+      emailSent: Boolean(result.emailSent),
+      resetToken: result.resetToken || '',
+      expiresAt: result.expiresAt || '',
+      message: result.message || 'Reset code generated successfully.',
+    };
+  }
+
+  return {
+    ok: false,
+    message: result?.message || 'Unable to generate a reset code for this email.',
+  };
+}
+
+export async function resetPassword(email, token, newPassword) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const response = await fetch(`${API_BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: normalizedEmail,
+      token,
+      newPassword,
+    }),
+  }).catch(() => null);
+
+  if (!response) {
+    return { ok: false, message: 'Unable to connect to the reset service right now.' };
+  }
+
+  const { result } = await parseAuthResponse(response);
+  if (response.ok && result?.ok) {
+    return {
+      ok: true,
+      email: result.email || normalizedEmail,
+      message: result.message || 'Password updated successfully.',
+    };
+  }
+
+  return {
+    ok: false,
+    message: result?.message || 'Unable to update the password.',
+  };
+}
+
+export async function changePassword(newPassword, confirmPassword) {
+  try {
+    const result = await apiRequest('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        newPassword,
+        confirmPassword,
+      }),
+    });
+
+    return {
+      ok: true,
+      message: result?.message || 'Password updated successfully.',
+      mustChangePassword: Boolean(result?.mustChangePassword),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Unable to update the password.',
+    };
+  }
 }

@@ -635,30 +635,20 @@ function Profile() {
       )}
 
       {showDeleteConfirm && (
-        <div className="settings-modal-backdrop" role="presentation" onClick={() => !isDeleting && setShowDeleteConfirm(false)}>
-          <section className="settings-modal settings-modal--error" role="dialog" aria-modal="true" aria-label="Delete confirmation" onClick={(event) => event.stopPropagation()}>
-            <div className="settings-modal-icon">
-              <i className="ri-delete-bin-line" aria-hidden="true" />
+        <div className="user-delete-backdrop" role="presentation" onClick={() => !isDeleting && setShowDeleteConfirm(false)}>
+          <section className="user-delete-modal" role="dialog" aria-modal="true" aria-label="Delete confirmation" onClick={(event) => event.stopPropagation()}>
+            <div className="user-delete-icon" aria-hidden="true">
+              <i className="ri-delete-bin-line" />
             </div>
-            <div className="settings-modal-copy">
-              <strong>Delete User Account?</strong>
-              <span>Are you sure you want to permanently delete this user account and all associated data? This action cannot be undone.</span>
+            <div className="user-delete-copy">
+              <h3>Delete User Account?</h3>
+              <p>Are you sure you want to permanently delete this user account and all associated data? This action cannot be undone.</p>
             </div>
-            <div className="settings-modal-actions">
-              <button 
-                type="button" 
-                className="settings-modal-cancel" 
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={isDeleting}
-              >
+            <div className="user-delete-actions">
+              <button type="button" className="user-delete-cancel" onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>
                 Cancel
               </button>
-              <button 
-                type="button" 
-                className="settings-modal-delete" 
-                onClick={handleDelete}
-                disabled={isDeleting}
-              >
+              <button type="button" className="user-delete-confirm" onClick={handleDelete} disabled={isDeleting}>
                 {isDeleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
@@ -896,7 +886,7 @@ function Profile() {
                     type={showNewPassword ? 'text' : 'password'}
                     value={form.newPassword}
                     onChange={(event) => updateField('newPassword', event.target.value)}
-                    placeholder="Leave blank to keep current password"
+                    placeholder="Enter a new password"
                     autoComplete="new-password"
                   />
                   <button type="button" className="profile-password-toggle" onClick={() => setShowNewPassword((current) => !current)} aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}>
@@ -911,7 +901,7 @@ function Profile() {
                     type={showConfirmPassword ? 'text' : 'password'}
                     value={form.confirmPassword}
                     onChange={(event) => updateField('confirmPassword', event.target.value)}
-                    placeholder="Repeat the new password"
+                    placeholder="Re-enter the new password"
                     autoComplete="new-password"
                   />
                   <button type="button" className="profile-password-toggle" onClick={() => setShowConfirmPassword((current) => !current)} aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}>
@@ -1337,6 +1327,7 @@ function buildStoredProfileDetails(employee, canManagePackageAmount) {
 }
 
 function validateProfileSection(form, section, canManagePackageAmount) {
+  const hasValue = (value) => String(value || '').trim().length > 0;
   const displayName = String(form.displayName || '').trim();
   const jobTitle = String(form.jobTitle || '').trim();
   const department = String(form.department || '').trim();
@@ -1398,41 +1389,54 @@ function validateProfileSection(form, section, canManagePackageAmount) {
   }
 
   if (section === 'address' || section === 'all') {
+    requireValue(hasValue(String(form.presentAddressLine1 || '')), 'Present Address 1 is required.');
+    requireValue(hasValue(String(form.presentAddressLine2 || '')), 'Present Address 2 is required.');
+    requireValue(hasValue(String(form.presentCityDistrict || '')), 'Present City is required.');
+    requireValue(hasValue(String(form.presentState || '')), 'Present State is required.');
+    requireValue(hasValue(presentPinCode), 'Present PIN code is required.');
+    requireValue(hasValue(String(form.presentCountry || '')), 'Present Country is required.');
+    if (!form.sameAsAbove) {
+      requireValue(hasValue(String(form.permanentAddressLine1 || '')), 'Permanent Address 1 is required.');
+      requireValue(hasValue(String(form.permanentAddressLine2 || '')), 'Permanent Address 2 is required.');
+      requireValue(hasValue(String(form.permanentCityDistrict || '')), 'Permanent City is required.');
+      requireValue(hasValue(String(form.permanentState || '')), 'Permanent State is required.');
+      requireValue(hasValue(permanentPinCode), 'Permanent PIN code is required.');
+      requireValue(hasValue(String(form.permanentCountry || '')), 'Permanent Country is required.');
+    }
     if (presentPinCode) {
       requireValue(/^\d{6}$/.test(presentPinCode), 'Present PIN code must be 6 digits.');
     }
-    if (permanentPinCode) {
+    if (permanentPinCode && !form.sameAsAbove) {
       requireValue(/^\d{6}$/.test(permanentPinCode), 'Permanent PIN code must be 6 digits.');
     }
   }
 
   if (section === 'statutory' || section === 'all') {
-    if (aadhaarCardNo) {
-      requireValue(/^\d{12}$/.test(aadhaarCardNo), 'Aadhaar number must be 12 digits.');
-    }
-    if (panCardNo) {
-      requireValue(/^[A-Z0-9]{10}$/.test(panCardNo), 'PAN number must be 10 alphanumeric characters.');
-    }
-    if (pfUanNo) {
-      requireValue(/^\d{12}$/.test(pfUanNo), 'PF UAN must be 12 digits.');
-    }
-    if (esiNo) {
-      requireValue(/^\d{10}$/.test(esiNo), 'ESIC number must be 10 digits.');
-    }
+    requireValue(hasValue(aadhaarCardNo), 'Aadhaar number is required.');
+    requireValue(hasValue(panCardNo), 'PAN number is required.');
+    requireValue(hasValue(pfUanNo), 'UAN number is required.');
+    requireValue(hasValue(esiNo), 'ESIC number is required.');
+    requireValue(/^\d{12}$/.test(aadhaarCardNo), 'Aadhaar number must be 12 digits.');
+    requireValue(/^[A-Z0-9]{10}$/.test(panCardNo), 'PAN number must be 10 alphanumeric characters.');
+    requireValue(/^\d{12}$/.test(pfUanNo), 'UAN number must be 12 digits.');
+    requireValue(/^\d{10}$/.test(esiNo), 'ESIC number must be 10 digits.');
   }
 
   if (section === 'security' || section === 'all') {
+    requireValue(twoFactorEnabled || hasValue(twoFactorSecret), 'Enable two-factor authentication or enter an authenticator secret.');
     if (twoFactorEnabled) {
       requireValue(twoFactorSecret, 'Two-factor secret is required when 2FA is enabled.');
+      requireValue(/^[A-Z2-7]{16,32}$/.test(twoFactorSecret), 'Two-factor secret must be a valid Base32 code.');
+    } else if (twoFactorSecret) {
       requireValue(/^[A-Z2-7]{16,32}$/.test(twoFactorSecret), 'Two-factor secret must be a valid Base32 code.');
     }
   }
 
   if (section === 'password' || section === 'all') {
-    if (newPassword || confirmPassword) {
-      requireValue(newPassword.length >= 8, 'Password must be at least 8 characters long.');
-      requireValue(newPassword === confirmPassword, 'Password and confirm password must match.');
-    }
+    requireValue(hasValue(newPassword), 'New password is required.');
+    requireValue(hasValue(confirmPassword), 'Confirm password is required.');
+    requireValue(newPassword.length >= 8, 'Password must be at least 8 characters long.');
+    requireValue(newPassword === confirmPassword, 'Password and confirm password must match.');
   }
 
   return errors[0] || '';
@@ -1508,6 +1512,7 @@ function upsertCurrentUser(users, currentAccessUser, nextEmployee, newPassword) 
     department: nextEmployee.department || currentAccessUser?.department || '',
     designation: nextEmployee.jobTitle || currentAccessUser?.designation || '',
     lastLogin: currentAccessUser?.lastLogin || 'Invite pending',
+    mustChangePassword: newPassword ? false : Boolean(currentAccessUser?.mustChangePassword),
     permissions: currentAccessUser?.permissions || [],
     twoFactorEnabled: Boolean(nextEmployee.twoFactorEnabled ?? currentAccessUser?.twoFactorEnabled),
     twoFactorSecret: nextEmployee.twoFactorSecret || currentAccessUser?.twoFactorSecret || '',

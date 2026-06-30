@@ -101,9 +101,9 @@ public class AnnouncementController {
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "Announcement updated",
-        saved.getTitle() + " was updated.",
+        asString(saved.getTitle()) + " was updated.",
         "announcement",
-        saved.getId(),
+        asString(saved.getId()),
         accessRole,
         "System",
         userId);
@@ -119,11 +119,9 @@ public class AnnouncementController {
     Announcement current = announcementRepository.findById(nonNullId).orElse(null);
     announcementRepository.deleteById(nonNullId);
     String title = "An announcement";
-    if (current != null) {
-      String currentTitle = current.getTitle();
-      if (currentTitle != null && !currentTitle.isBlank()) {
-        title = currentTitle;
-      }
+    String currentTitle = current.getTitle();
+    if (currentTitle != null && !currentTitle.isBlank()) {
+      title = currentTitle;
     }
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
@@ -135,6 +133,7 @@ public class AnnouncementController {
         "System",
         userId);
   }
+
   private String asString(Object value) {
     return value == null ? "" : String.valueOf(value).trim();
   }

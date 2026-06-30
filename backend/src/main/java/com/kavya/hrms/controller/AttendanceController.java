@@ -1,12 +1,8 @@
 package com.kavya.hrms.controller;
 
-import com.kavya.hrms.model.AttendanceRecord;
-import com.kavya.hrms.repository.AppUserRepository;
-import com.kavya.hrms.repository.AttendanceRecordRepository;
-import com.kavya.hrms.service.AttendanceAutoCheckoutService;
-import com.kavya.hrms.service.NotificationAudience;
-import com.kavya.hrms.service.NotificationService;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.ArrayList;
@@ -15,9 +11,16 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.kavya.hrms.model.AttendanceRecord;
+import com.kavya.hrms.repository.AppUserRepository;
+import com.kavya.hrms.repository.AttendanceRecordRepository;
+import com.kavya.hrms.service.AttendanceAutoCheckoutService;
+import com.kavya.hrms.service.NotificationAudience;
+import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/attendance")
@@ -85,7 +88,7 @@ public class AttendanceController {
         .collect(Collectors.toCollection(LinkedHashSet::new));
 
     Set<String> employeeUserIds = appUserRepository.findByEmployeeIdIn(employeeIds).stream()
-        .map(user -> user.getUserId())
+        .map(user -> user == null ? null : user.getUserId())
         .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.toCollection(LinkedHashSet::new));
 

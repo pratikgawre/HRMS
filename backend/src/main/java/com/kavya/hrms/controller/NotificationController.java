@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.lang.Nullable;
 
 @RestController
 @RequestMapping("/api/notifications")
@@ -48,7 +49,7 @@ public class NotificationController {
     for (Document document : documents) {
       notifications.add(fromDocument(document));
     }
-    return notifications;
+    return dedupeNotifications(notifications);
   }
 
   @PutMapping("/{id}/read")
@@ -73,6 +74,35 @@ public class NotificationController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String headerUserId) {
     notificationService.clearForUser(normalizeUserId(userId != null ? userId : headerUserId));
     return ResponseEntity.noContent().build();
+  }
+
+  private List<Notification> dedupeNotifications(List<Notification> notifications) {
+    List<Notification> unique = new ArrayList<>();
+    java.util.Set<String> keys = new java.util.LinkedHashSet<>();
+
+    for (Notification notification : notifications) {
+      String key = notificationKey(notification);
+      if (keys.add(key)) {
+        unique.add(notification);
+      }
+    }
+
+    return unique;
+  }
+
+  private String notificationKey(Notification notification) {
+    if (notification == null) {
+      return "";
+    }
+
+    return normalizeNotificationPart(notification.getTitle())
+        + "|" + normalizeNotificationPart(notification.getMessage())
+        + "|" + normalizeNotificationPart(notification.getSourceType())
+        + "|" + normalizeNotificationPart(notification.getSourceId());
+  }
+
+  private String normalizeNotificationPart(String value) {
+    return value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
   }
 
   private String normalizeUserId(String userId) {
@@ -102,6 +132,7 @@ public class NotificationController {
     return value == null ? "" : String.valueOf(value).trim();
   }
 
+  @Nullable
   private Boolean asBoolean(Object value) {
     if (value instanceof Boolean booleanValue) {
       return booleanValue;

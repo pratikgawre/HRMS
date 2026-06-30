@@ -3,6 +3,7 @@ package com.kavya.hrms.controller;
 import java.time.format.DateTimeFormatter;
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -56,7 +57,7 @@ public class SupportController {
     StatusUpdateRequest safeRequest = request == null ? new StatusUpdateRequest() : request;
     return repository.findById(safeId)
         .map((ticket) -> {
-          ticket.setStatus(safeRequest.getStatus());
+          ticket.setStatus(Objects.requireNonNull(safeRequest.getStatus(), "status must not be null"));
           return ResponseEntity.ok(repository.save(ticket));
         })
         .orElse(ResponseEntity.notFound().build());

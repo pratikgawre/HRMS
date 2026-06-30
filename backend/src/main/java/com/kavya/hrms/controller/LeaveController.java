@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/leaves")
+@SuppressWarnings("all")
 public class LeaveController {
   private final LeaveRequestRepository leaveRequestRepository;
   private final AppUserRepository appUserRepository;
@@ -47,8 +48,8 @@ public class LeaveController {
     if (accessRole != null && !accessRole.isBlank()) {
       safeRequest.setOwnerRole(accessRole);
     }
-    LeaveRequest saved = leaveRequestRepository.save(safeRequest);
-    notifyLeaveChange(saved, "Leave request submitted", accessRole, userId, "submitted");
+    LeaveRequest saved = leaveRequestRepository.save(request);
+    notifyLeaveSubmitted(saved, accessRole, userId);
     return saved;
   }
 
@@ -59,15 +60,15 @@ public class LeaveController {
     leaveRequestRepository.deleteAll();
     List<LeaveRequest> saved = leaveRequestRepository.saveAll(safeRequests);
     if (existingCount > 0) {
-      notificationService.notifyRoles(
-          NotificationAudience.leaveRecipients("hr"),
+      notificationService.notifyRolesExcept(
+          NotificationAudience.leaveApproverRecipients(),
+          List.of(),
           "Leave records refreshed",
           "Leave records were updated in bulk.",
           "leave",
           "bulk",
           "admin",
-          "System",
-          null);
+          "System");
     }
     return saved;
   }
@@ -78,38 +79,71 @@ public class LeaveController {
       @RequestBody LeaveRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    LeaveRequest safeRequest = request == null ? new LeaveRequest() : request;
-    safeRequest.setId(id);
-    LeaveRequest saved = leaveRequestRepository.save(safeRequest);
-    notifyLeaveChange(saved, "Leave request updated", accessRole, userId, "updated");
+    LeaveRequest previous = leaveRequestRepository.findById(id).orElse(null);
+    request.setId(id);
+    LeaveRequest saved = leaveRequestRepository.save(request);
+    notifyLeaveUpdated(saved, previous, accessRole, userId);
     return saved;
   }
 
-  private void notifyLeaveChange(LeaveRequest request, String title, String accessRole, String userId, String verb) {
-    if (request == null) {
-      return;
-    }
-
+  private void notifyLeaveSubmitted(LeaveRequest request, String accessRole, String actorUserId) {
     String employeeUserId = resolveEmployeeUserId(request.getEmployeeId()).orElse("");
-    notificationService.notifyRoles(
-        NotificationAudience.leaveRecipients(accessRole),
-        title,
-        buildLeaveMessage(request, verb),
+    notificationService.notifyRolesExcept(
+        NotificationAudience.leaveApproverRecipients(),
+        excludedIds(employeeUserId, actorUserId),
+        "Leave request submitted",
+        buildLeaveMessage(request, "submitted"),
         "leave",
         request.getId(),
         accessRole,
-        "System",
-        userId);
-    if (!employeeUserId.isBlank()) {
+        "System");
+  }
+
+  private void notifyLeaveUpdated(LeaveRequest request, LeaveRequest previous, String accessRole, String actorUserId) {
+    String employeeUserId = resolveEmployeeUserId(request.getEmployeeId()).orElse("");
+    if (isFinalStatusChange(request, previous)) {
       notificationService.notifyUsers(
           List.of(employeeUserId),
-          title,
-          buildLeaveMessage(request, verb),
+          "Leave " + normalizeStatusLabel(request.getStatus()),
+          buildLeaveMessage(request, normalizeStatusLabel(request.getStatus()).toLowerCase(Locale.ROOT)),
           "leave",
           request.getId(),
           accessRole,
           "System");
+      return;
     }
+
+    notificationService.notifyRolesExcept(
+        NotificationAudience.leaveApproverRecipients(),
+        excludedIds(employeeUserId, actorUserId),
+        "Leave request updated",
+        buildLeaveMessage(request, "updated"),
+        "leave",
+        request.getId(),
+        accessRole,
+        "System");
+  }
+
+  private boolean isFinalStatusChange(LeaveRequest request, LeaveRequest previous) {
+    String currentStatus = normalizeStatus(request == null ? null : request.getStatus());
+    String previousStatus = normalizeStatus(previous == null ? null : previous.getStatus());
+    return !currentStatus.isBlank()
+        && !currentStatus.equals(previousStatus)
+        && ("approved".equals(currentStatus) || "rejected".equals(currentStatus));
+  }
+
+  private List<String> excludedIds(String... values) {
+    List<String> ids = new ArrayList<>();
+    if (values == null) {
+      return ids;
+    }
+
+    for (String value : values) {
+      if (value != null && !value.isBlank()) {
+        ids.add(value.trim());
+      }
+    }
+    return ids;
   }
 
   private Optional<String> resolveEmployeeUserId(String employeeId) {
@@ -140,7 +174,18 @@ public class LeaveController {
     return fromDate + " to " + toDate;
   }
 
-  private <T> List<T> safeList(List<T> values) {
-    return values == null ? new ArrayList<>() : new ArrayList<>(values);
+  private String normalizeStatus(String status) {
+    return status == null ? "" : status.trim().toLowerCase(Locale.ROOT);
+  }
+
+  private String normalizeStatusLabel(String status) {
+    String normalized = normalizeStatus(status);
+    if ("approved".equals(normalized)) {
+      return "Approved";
+    }
+    if ("rejected".equals(normalized)) {
+      return "Rejected";
+    }
+    return status == null || status.isBlank() ? "Updated" : status.trim();
   }
 }

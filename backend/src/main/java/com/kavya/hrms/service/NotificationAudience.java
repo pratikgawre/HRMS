@@ -25,12 +25,31 @@ public final class NotificationAudience {
     return roles;
   }
 
-  public static Set<String> leaveRecipients(String accessRoleHeader) {
-    Set<String> roles = operationalRecipients(accessRoleHeader);
+  public static Set<String> adminHrRecipients() {
+    Set<String> roles = new LinkedHashSet<>();
+    roles.add("admin");
+    roles.add("hr");
+    return roles;
+  }
+
+  public static Set<String> leaveApproverRecipients() {
+    Set<String> roles = new LinkedHashSet<>();
+    roles.add("admin");
     roles.add("hr");
     roles.add("teamlead");
     roles.add("projectmanager");
     return roles;
+  }
+
+  public static Set<String> taskStatusRecipients() {
+    Set<String> roles = new LinkedHashSet<>();
+    roles.add("projectmanager");
+    roles.add("teamlead");
+    return roles;
+  }
+
+  public static Set<String> leaveRecipients(String accessRoleHeader) {
+    return leaveApproverRecipients();
   }
 
   public static Set<String> companyWideRecipients() {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
@@ -8,7 +8,7 @@ import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitials } from '../utils/user-management.js';
-import { getNextTaskCode, loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
+import { loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
 import {
   getEmployeeId,
   getEmployeeName,
@@ -52,7 +52,7 @@ function Tasks() {
   }
   const isTeamLead = role === 'teamLead';
   const canAssignTasks = taskAssignableRoles.includes(role);
-  const showTaskActionColumns = role !== 'hr';
+  const showTaskActionColumns = canAssignTasks;
   const [taskRows, setTaskRows] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -64,6 +64,7 @@ function Tasks() {
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
+  const [undoTask, setUndoTask] = useState(null);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(getEmptyTaskForm());
   const [taskFormMode, setTaskFormMode] = useState('create');
@@ -110,7 +111,7 @@ function Tasks() {
       console.debug('[TeamLead Tasks] selectedProjectId', form.projectId || '');
       console.debug('[TeamLead Tasks] API URL', apiUrl);
       Promise.all([
-        loadTasksWithSeed(),
+        loadNormalizedTaskRows(),
         safeApiRequest('/employees', people),
         loadTeamLeadProjects(),
       ]).then(([rows, employeeRows, projectRows]) => {
@@ -118,11 +119,11 @@ function Tasks() {
           return;
         }
 
-        setTaskRows(Array.isArray(rows) ? rows.map(normalizeTaskRow) : []);
+        setTaskRows(rows);
         setEmployees(normalizeEmployees(employeeRows));
         setProjects(normalizeProjectRows(projectRows));
         console.debug('[TeamLead Tasks] API response', {
-          taskCount: Array.isArray(rows) ? rows.length : 0,
+          taskCount: rows.length,
           employeeCount: Array.isArray(employeeRows) ? employeeRows.length : 0,
           projectCount: Array.isArray(projectRows) ? projectRows.length : 0,
           projectIds: Array.isArray(projectRows) ? projectRows.map((project) => project.id || project.projectId || '-') : [],
@@ -146,6 +147,18 @@ function Tasks() {
       window.removeEventListener('kavyaProjectsChanged', refreshData);
     };
   }, []);
+
+  useEffect(() => {
+    if (!undoTask) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setUndoTask(null);
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [undoTask]);
 
   const teamLeadProjects = useMemo(() => (
     isTeamLead
@@ -251,61 +264,85 @@ function Tasks() {
     setIsTaskModalOpen(true);
   };
 
-  const taskListColumns = [
-    {
-      key: 'owner',
-      label: 'Assign',
-      render: (row) => row.assignedToName || row.owner || '-',
-    },
-    {
-      key: 'title',
-      label: 'Module',
-      render: (row) => row.title || '-',
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      render: (row) => (
-        <span style={{ padding: '0.18rem 0.6rem', borderRadius: 999, background: 'rgba(15,159,154,0.08)', color: '#0f9f9a', fontWeight: 800, fontSize: '0.86rem' }}>
-          {row.status || 'Pending'}
-        </span>
-      ),
-    },
-    ...(
-      showTaskActionColumns
-        ? [
-          {
-            key: 'edit',
-            label: 'Edit',
-            render: (row) => (
-              <div className="table-actions table-actions-inline">
-                <button type="button" className="section-action" onClick={() => openTaskEditModal(row)}>
-                  Edit
-                </button>
-              </div>
-            ),
-          },
-          {
-            key: 'delete',
-            label: 'Delete',
-            render: (row) => (
-              <div className="table-actions table-actions-inline">
-                <button
-                  type="button"
-                  className="section-action danger"
-                  onClick={() => deleteTaskAssignment(row)}
-                >
-                  Delete
-                </button>
-              </div>
-            ),
-          },
-        ]
-        : []
-    ),
-  ];
+  const saveTaskAssignment = async (task) => {
+    const normalizedTask = normalizeTaskRow(task);
+    const payload = serializeTaskForApi(normalizedTask);
+    const saved = await apiRequest(`/tasks/${normalizedTask.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    return normalizeTaskRow(saved || normalizedTask);
+  };
 
-  const taskAssignmentColumns = [
+  const refreshTaskBoard = async () => {
+    const rows = await loadNormalizedTaskRows();
+    setTaskRows(rows);
+    return rows;
+  };
+
+  const showSavedTaskList = () => {
+    setStatus('All');
+    setPriority('All');
+    setDueDate('');
+    setActiveTab('list');
+  };
+
+  const deleteTaskAssignment = async (task) => {
+    if (!task?.id) {
+      setMessage('Task could not be deleted because its ID is missing.');
+      return;
+    }
+
+    if (!canAssignTasks) {
+      setMessage('You do not have permission to delete task assignments.');
+      return;
+    }
+
+    const normalizedTask = normalizeTaskRow(task);
+    const nextRows = taskRows.filter((item) => item.id !== normalizedTask.id);
+    setTaskRows(nextRows);
+    setUndoTask(normalizedTask);
+    setMessage(`${normalizedTask.title} deleted. Use Undo to restore it.`);
+
+    try {
+      await apiRequest(`/tasks/${normalizedTask.id}`, { method: 'DELETE' });
+      await refreshTaskBoard();
+      window.dispatchEvent(new Event('kavyaTasksChanged'));
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
+    } catch {
+      setTaskRows((current) => (
+        current.some((item) => item.id === normalizedTask.id) ? current : [normalizedTask, ...current]
+      ));
+      setUndoTask(null);
+      setMessage('Task could not be deleted right now.');
+    }
+  };
+
+  const undoDeleteTask = async () => {
+    if (!undoTask?.id) {
+      return;
+    }
+
+    const taskToRestore = undoTask;
+    setUndoTask(null);
+
+    try {
+      await apiRequest('/tasks', {
+        method: 'POST',
+        body: JSON.stringify(serializeTaskForApi(taskToRestore)),
+      });
+      const restoredTask = normalizeTaskRow(taskToRestore);
+      await refreshTaskBoard();
+      window.dispatchEvent(new Event('kavyaTasksChanged'));
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
+      setMessage(`${restoredTask.title} restored successfully.`);
+    } catch {
+      setUndoTask(taskToRestore);
+      setMessage('Task could not be restored right now.');
+    }
+  };
+
+  const taskListColumns = [
     {
       key: 'owner',
       label: 'Assign',
@@ -354,19 +391,18 @@ function Tasks() {
           <button type="button" onClick={() => openTaskEditModal(row)}>
             Edit
           </button>
-          <button type="button" className="danger" onClick={() => deleteTask(row)}>
+          <button type="button" className="danger" onClick={() => deleteTaskAssignment(row)}>
             Delete
           </button>
         </div>
       ),
     },
   ];
-
   const createTask = async (event) => {
     event.preventDefault();
+    const isEditing = Boolean(editingTask);
 
     try {
-      const isEditing = Boolean(editingTask);
       if (isTeamLead) {
         const project = teamLeadProjects.find((item) => item.id === form.projectId) || null;
         if (!project) {
@@ -387,41 +423,35 @@ function Tasks() {
           return;
         }
 
-        const assigneeId = getEmployeeId(assignee);
-        const assigneeName = getEmployeeName(assignee);
-        const payload = {
-          id: `TSK-${Date.now()}`,
-          title,
-          description: form.description.trim(),
-          owner: assigneeName,
-          assignedToId: assigneeId,
-          assignedToName: assigneeName,
-          assignedTo: assigneeName,
-          assignedById: currentEmployeeId,
-          assignedByRole: role,
-          assignedByName: employeeIdentity.employee || getSessionValue('kavyaEmployeeName') || 'Team Lead',
-          teamLeadId: currentEmployeeId,
-          priority: form.priority,
-          dueDate: form.dueDate,
-          status: form.status,
-          projectId: project.id,
-          projectName: project.name || '',
-          projectCode: project.projectCode || project.id || '',
-          createdDateTime: editingTask?.createdDateTime || '',
-        };
-
-        const saved = await apiRequest(editingTask ? `/tasks/${editingTask.id}` : '/tasks', {
-          method: editingTask ? 'PUT' : 'POST',
-          body: JSON.stringify(payload),
+        const payload = buildTaskAssignmentPayload({
+          taskId: editingTask?.id || `TSK-${Date.now()}`,
+          form,
+          assignee,
+          project,
+          role,
+          currentEmployeeId,
+          employeeIdentity,
+          existingTask: editingTask,
         });
-        const nextTask = normalizeTaskRow(saved || payload);
-        setTaskRows((current) => (editingTask
-          ? current.map((task) => (task.id === nextTask.id ? nextTask : task))
-          : [nextTask, ...current]));
+
+        const nextTask = normalizeTaskRow(payload);
+        if (editingTask) {
+          const savedTask = await saveTaskAssignment(nextTask);
+          setTaskRows((current) => current.map((task) => (task.id === savedTask.id ? savedTask : task)));
+        } else {
+          await apiRequest('/tasks', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+        }
+        await refreshTaskBoard();
         window.dispatchEvent(new Event('kavyaTasksChanged'));
+        showSavedTaskList();
         setIsTaskModalOpen(false);
+        setTaskFormMode('create');
+        setEditingTask(null);
         setForm(getEmptyTaskForm({ teamLeadMode: true, projectId: project.id }));
-        setMessage('Task assigned successfully.');
+        setMessage(isEditing ? 'Task updated successfully.' : 'Task assigned successfully.');
         return;
       }
 
@@ -437,38 +467,41 @@ function Tasks() {
         return;
       }
 
-      const payload = {
-        id: `TSK-${Date.now()}`,
-        title,
-        description: form.description.trim(),
-        owner: getEmployeeName(assignee),
-        assignedToId: getEmployeeId(assignee),
-        assignedToName: getEmployeeName(assignee),
-        assignedTo: getEmployeeName(assignee),
-        assignedById: currentEmployeeId,
-        assignedByRole: role,
-        assignedByName: employeeIdentity.employee || getSessionValue('kavyaEmployeeName') || 'Team Lead',
-        teamLeadId: currentEmployeeId,
-        priority: form.priority,
-        dueDate: form.dueDate,
-        status: form.status,
-        projectId: form.projectId || '',
-        createdDateTime: editingTask?.createdDateTime || '',
-      };
-
-      const saved = await apiRequest(editingTask ? `/tasks/${editingTask.id}` : '/tasks', {
-        method: editingTask ? 'PUT' : 'POST',
-        body: JSON.stringify(payload),
+      const payload = buildTaskAssignmentPayload({
+        taskId: editingTask?.id || `TSK-${Date.now()}`,
+        form,
+        assignee,
+        project: null,
+        role,
+        currentEmployeeId,
+        employeeIdentity: {
+          ...employeeIdentity,
+          employee: employeeIdentity.employee || getSessionValue('kavyaEmployeeName') || 'Team Lead',
+        },
+        existingTask: editingTask,
       });
-      const nextTask = normalizeTaskRow(saved || payload);
-      setTaskRows((current) => (editingTask
-        ? current.map((task) => (task.id === nextTask.id ? nextTask : task))
-        : [nextTask, ...current]));
+
+      const nextTask = normalizeTaskRow(payload);
+      if (editingTask) {
+        const savedTask = await saveTaskAssignment(nextTask);
+        setTaskRows((current) => current.map((task) => (task.id === savedTask.id ? savedTask : task)));
+      } else {
+        await apiRequest('/tasks', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      }
+      await refreshTaskBoard();
       window.dispatchEvent(new Event('kavyaTasksChanged'));
+      showSavedTaskList();
       setIsTaskModalOpen(false);
-      setMessage('Task assigned successfully.');
-    } catch {
-      setMessage(isEditing ? 'Task could not be updated right now.' : 'Task could not be assigned right now.');
+      setTaskFormMode('create');
+      setEditingTask(null);
+      setForm(getEmptyTaskForm());
+      setMessage(isEditing ? 'Task updated successfully.' : 'Task assigned successfully.');
+    } catch (error) {
+      const detail = error?.message ? ` ${error.message}` : '';
+      setMessage(isEditing ? `Task could not be updated right now.${detail}` : `Task could not be assigned right now.${detail}`);
     }
   };
 
@@ -491,9 +524,9 @@ function Tasks() {
     };
 
     try {
-      const saved = await apiRequest(`/tasks/${selectedTask.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(serializeTaskForApi(nextTask)),
+      const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextTask.status }),
       });
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
@@ -621,7 +654,7 @@ function Tasks() {
           projectOptions={teamLeadProjects}
           selectedProject={selectedProject}
           isTeamLead={isTeamLead}
-          onClose={() => setIsTaskModalOpen(false)}
+          onClose={closeTaskModal}
           onSubmit={createTask}
         />
       )}
@@ -638,6 +671,14 @@ function Tasks() {
           onSubmit={updateTaskStatus}
         />
       )}
+      {undoTask && (
+        <div className="user-undo-toast" role="status" aria-live="polite">
+          <span>{undoTask.title} was deleted.</span>
+          <button type="button" onClick={undoDeleteTask}>
+            Undo
+          </button>
+        </div>
+      )}
     </>
   );
 }
@@ -651,6 +692,8 @@ function EmployeeTasksView() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedDetailsTask, setSelectedDetailsTask] = useState(null);
   const [message, setMessage] = useState('');
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
   const [form, setForm] = useState(getEmptyTaskForm());
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
@@ -684,6 +727,26 @@ function EmployeeTasksView() {
       window.removeEventListener('kavyaTasksChanged', refreshData);
     };
   }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+    }, 2400);
+
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, [toast]);
 
   const filteredRows = useMemo(() => {
     let rows = taskRows.filter((task) => isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee));
@@ -745,13 +808,21 @@ function EmployeeTasksView() {
           ...col,
           render: (row) => {
             const s = String(row.status || '').trim() || 'Pending';
-            const map = {
-              Pending: { color: '#d88a12', bg: 'rgba(216,138,18,0.08)' },
-              'In Progress': { color: '#0f9f9a', bg: 'rgba(15,159,154,0.08)' },
-              Completed: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
-              Blocked: { color: '#d94d63', bg: 'rgba(217,77,99,0.08)' },
+            const normalized = s.toLowerCase();
+            const teamLeadStatusStyles = {
+              pending: { color: '#d88a12', bg: 'rgba(216,138,18,0.10)' },
+              active: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+              approved: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+              completed: { color: '#2f74d0', bg: 'rgba(47,116,208,0.12)' },
             };
-            const style = map[s] || { color: '#485666', bg: 'rgba(72,86,102,0.06)' };
+            const style = isTeamLead
+              ? (teamLeadStatusStyles[normalized] || { color: '#485666', bg: 'rgba(72,86,102,0.06)' })
+              : ({
+                  Pending: { color: '#d88a12', bg: 'rgba(216,138,18,0.08)' },
+                  'In Progress': { color: '#0f9f9a', bg: 'rgba(15,159,154,0.08)' },
+                  Completed: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+                  Blocked: { color: '#d94d63', bg: 'rgba(217,77,99,0.08)' },
+                }[s] || { color: '#485666', bg: 'rgba(72,86,102,0.06)' });
             return (
               <span style={{ padding: '0.18rem 0.6rem', borderRadius: 999, background: style.bg, color: style.color, fontWeight: 800, fontSize: '0.86rem' }}>{s}</span>
             );
@@ -810,9 +881,9 @@ function EmployeeTasksView() {
     };
 
     try {
-      const saved = await apiRequest(`/tasks/${selectedTask.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(serializeTaskForApi(nextTask)),
+      const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextTask.status }),
       });
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
@@ -820,6 +891,10 @@ function EmployeeTasksView() {
       setIsStatusModalOpen(false);
       setSelectedTask(null);
       setMessage('Task status updated successfully.');
+      setToast({
+        message: 'Task status updated successfully.',
+        type: 'success',
+      });
     } catch {
       setMessage('Task status could not be updated right now.');
     }
@@ -835,6 +910,21 @@ function EmployeeTasksView() {
         <div className="user-alert" role="status">
           <i className="ri-checkbox-circle-line" aria-hidden="true" />
           <span>{message}</span>
+        </div>
+      )}
+      {toast && (
+        <div className={`project-toast is-${toast.type || 'success'}`} role="status" aria-live="polite">
+          <span className="project-toast__icon" aria-hidden="true">
+            <i className="ri-checkbox-circle-fill" />
+          </span>
+          <div className="project-toast__copy">
+            <span>Success</span>
+            <strong>{toast.message}</strong>
+          </div>
+          <button type="button" className="project-toast__close" onClick={() => setToast(null)} aria-label="Dismiss notification">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+          <span className="project-toast__accent" aria-hidden="true" />
         </div>
       )}
       <section className="dashboard-card-grid" style={{ marginBottom: '0.9rem' }}>
@@ -923,6 +1013,10 @@ function EmployeeTasksView() {
 function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
   const teamLeadMode = Boolean(isTeamLead);
   const isEditMode = mode === 'edit';
+  const handleSubmit = (event) => {
+    event?.preventDefault?.();
+    onSubmit?.(event);
+  };
 
   const updateProject = (nextProjectId) => {
     setForm((current) => {
@@ -937,13 +1031,13 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
 
   return (
     <div className="payroll-modal-backdrop" role="presentation">
-      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Assign task">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label={isEditMode ? 'Edit task' : 'Assign task'}>
         <div className="payroll-modal-head">
-          <h3>Assign Task</h3>
+          <h3>{isEditMode ? 'Edit Task' : 'Assign Task'}</h3>
           <button type="button" onClick={onClose} aria-label="Close task modal"><i className="ri-close-line" aria-hidden="true" /></button>
         </div>
 
-        <form className="salary-form" onSubmit={onSubmit}>
+        <form className="salary-form" onSubmit={handleSubmit}>
           {teamLeadMode ? (
             <>
               <label className="field">
@@ -1066,7 +1160,58 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
   );
 }
 
+function TaskDetailsModal({ task, onClose }) {
+  if (!task) {
+    return null;
+  }
+
+  const dueIndicator = getDueIndicator(task);
+
+  return (
+    <div className="payroll-modal-backdrop" role="presentation">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Task details">
+        <div className="payroll-modal-head">
+          <h3>Task Details</h3>
+          <button type="button" onClick={onClose} aria-label="Close task details">
+            <i className="ri-close-line" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="task-summary-card" style={{ display: 'grid', gap: '0.75rem' }}>
+          <div>
+            <p className="eyebrow">{task.id}</p>
+            <strong>{task.title}</strong>
+          </div>
+          <small>Assigned by: {task.owner || '-'}</small>
+          <small>Priority: {task.priority || 'Medium'}</small>
+          <small>Status: {task.status || 'Pending'}</small>
+          <small>Due date: {task.dueDate || task.due || '-'}</small>
+          {dueIndicator ? (
+            <small>
+              Deadline: {dueIndicator.label}
+            </small>
+          ) : null}
+          {task.projectName || task.projectCode ? (
+            <small>Project: {task.projectName || '-'}{task.projectCode ? ` (${task.projectCode})` : ''}</small>
+          ) : null}
+          {task.description ? <p style={{ margin: 0, color: 'var(--muted-text, #667085)' }}>{task.description}</p> : null}
+        </div>
+
+        <div className="salary-form-actions">
+          <button className="payroll-primary" type="button" onClick={onClose}>Close</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
+  const statusOptions = taskStatusOptions.filter((item) => item !== 'Approved');
+  const handleSubmit = (event) => {
+    event?.preventDefault?.();
+    onSubmit(event);
+  };
+
   return (
     <div className="payroll-modal-backdrop" role="presentation">
       <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Update task status">
@@ -1075,7 +1220,7 @@ function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
           <button type="button" onClick={onClose} aria-label="Close status modal"><i className="ri-close-line" aria-hidden="true" /></button>
         </div>
 
-        <form className="salary-form" onSubmit={onSubmit}>
+        <form className="salary-form" onSubmit={handleSubmit}>
           <div className="task-summary-card">
             <p className="eyebrow">{task.id}</p>
             <strong>{task.title}</strong>
@@ -1085,7 +1230,7 @@ function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
           <label className="field">
             <span>Status</span>
             <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-              {taskStatusOptions.map((item) => <option key={item}>{item}</option>)}
+              {statusOptions.map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
           <div className="salary-form-actions">
@@ -1208,17 +1353,28 @@ function buildTaskAssignmentPayload({
     projectId: resolvedProjectId,
     projectName: resolvedProjectName,
     projectCode: resolvedProjectCode,
+    createdDateTime: existingTask?.createdDateTime || '',
   };
+}
+
+async function loadNormalizedTaskRows() {
+  const rows = await loadTasksWithSeed();
+  return Array.isArray(rows) ? rows.map(normalizeTaskRow) : [];
 }
 
 function normalizeTaskRow(task) {
   return {
     id: task.id,
     title: task.title || '-',
+    description: task.description || '',
     owner: task.owner || task.assignedToName || task.assignedTo || '-',
     assignedToId: task.assignedToId || '',
     assignedToName: task.assignedToName || task.owner || task.assignedTo || '-',
     assignedTo: task.assignedTo || '',
+    assignedById: task.assignedById || '',
+    assignedByName: task.assignedByName || '',
+    assignedBy: task.assignedBy || task.assignedByName || '-',
+    assignedByRole: task.assignedByRole || '',
     priority: task.priority || 'Medium',
     due: task.due || task.dueDate || '-',
     dueDate: task.dueDate || task.due || '',

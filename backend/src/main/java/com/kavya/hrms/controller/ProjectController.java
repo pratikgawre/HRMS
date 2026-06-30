@@ -13,12 +13,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/projects")
+@SuppressWarnings("all")
 public class ProjectController {
   private final ProjectRepository projectRepository;
   private final NotificationService notificationService;
@@ -34,7 +35,7 @@ public class ProjectController {
   }
 
   @GetMapping("/team-lead/{teamLeadId}")
-  public List<Project> listByTeamLead(@PathVariable String teamLeadId) {
+  public List<Project> listByTeamLead(@PathVariable("teamLeadId") String teamLeadId) {
     String normalizedLeadId = normalize(teamLeadId);
     if (normalizedLeadId.isEmpty()) {
       return List.of();
@@ -56,18 +57,9 @@ public class ProjectController {
   @PostMapping
   public Project create(
       @RequestBody Project project,
-      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
-      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Project saved = projectRepository.save(project == null ? new Project() : project);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Project created",
-        buildProjectMessage(saved, "created"),
-        "project",
-        saved.getId(),
-        accessRole,
-        "System",
-        userId);
+      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole) {
+    Project saved = projectRepository.save(project);
+    notifyProjectChange(saved, "Project created", "created", saved.getId(), accessRole);
     return saved;
   }
 
@@ -81,57 +73,49 @@ public class ProjectController {
     projectRepository.deleteAll();
     List<Project> saved = projectRepository.saveAll(safeProjects);
     if (existingCount > 0) {
-      notificationService.notifyRoles(
-          NotificationAudience.operationalRecipients(accessRole),
+      notificationService.notifyRolesExcept(
+          NotificationAudience.adminHrRecipients(),
+          List.of(),
           "Projects refreshed",
           "Project data was updated in bulk.",
           "project",
           "bulk",
           accessRole,
-          "System",
-          userId);
+          "System");
     }
     return saved;
   }
 
   @PutMapping("/{id}")
   public Project update(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestBody Project project,
-      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
-      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Project safeProject = project == null ? new Project() : project;
-    safeProject.setId(id);
-    Project saved = projectRepository.save(safeProject);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Project updated",
-        buildProjectMessage(saved, "updated"),
-        "project",
-        saved.getId(),
-        accessRole,
-        "System",
-        userId);
+      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole) {
+    project.setId(id);
+    Project saved = projectRepository.save(project);
+    notifyProjectChange(saved, "Project updated", "updated", saved.getId(), accessRole);
     return saved;
   }
 
   @DeleteMapping("/{id}")
   public void delete(
       @PathVariable String id,
-      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
-      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String nonNullId = id == null ? "" : id;
-    Project current = projectRepository.findById(nonNullId).orElse(null);
-    projectRepository.deleteById(nonNullId);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Project removed",
-        buildProjectMessage(current, "removed"),
+      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole) {
+    Project current = projectRepository.findById(id).orElse(null);
+    projectRepository.deleteById(id);
+    notifyProjectChange(current, "Project removed", "removed", id, accessRole);
+  }
+
+  private void notifyProjectChange(Project project, String title, String action, String sourceId, String accessRole) {
+    notificationService.notifyRolesExcept(
+        NotificationAudience.adminHrRecipients(),
+        List.of(),
+        title,
+        buildProjectMessage(project, action),
         "project",
         nonNullId,
         accessRole,
-        "System",
-        userId);
+        "System");
   }
 
   private String buildProjectMessage(Project project, String action) {

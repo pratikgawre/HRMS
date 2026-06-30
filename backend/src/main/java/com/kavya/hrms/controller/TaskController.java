@@ -11,15 +11,23 @@ import com.kavya.hrms.service.NotificationService;
 import java.util.ArrayList;
 import java.util.List;
 import java.time.OffsetDateTime;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.http.HttpStatus;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/tasks")
@@ -28,16 +36,19 @@ public class TaskController {
   private final ProjectRepository projectRepository;
   private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
+  private final MongoTemplate mongoTemplate;
 
   public TaskController(
       TaskRepository taskRepository,
       ProjectRepository projectRepository,
       EmployeeRepository employeeRepository,
-      NotificationService notificationService) {
+      NotificationService notificationService,
+      MongoTemplate mongoTemplate) {
     this.taskRepository = taskRepository;
     this.projectRepository = projectRepository;
     this.employeeRepository = employeeRepository;
     this.notificationService = notificationService;
+    this.mongoTemplate = mongoTemplate;
   }
 
   @GetMapping
@@ -46,22 +57,22 @@ public class TaskController {
   }
 
   @GetMapping("/assigned-to/{assignedToId}")
-  public List<TaskItem> listByAssignee(@PathVariable String assignedToId) {
+  public List<TaskItem> listByAssignee(@PathVariable("assignedToId") String assignedToId) {
     return taskRepository.findByAssignedToId(assignedToId);
   }
 
   @GetMapping("/assigned-by/{assignedById}")
-  public List<TaskItem> listByAssignedBy(@PathVariable String assignedById) {
+  public List<TaskItem> listByAssignedBy(@PathVariable("assignedById") String assignedById) {
     return taskRepository.findByAssignedById(assignedById);
   }
 
   @GetMapping("/owner/{owner}")
-  public List<TaskItem> listByOwner(@PathVariable String owner) {
+  public List<TaskItem> listByOwner(@PathVariable("owner") String owner) {
     return taskRepository.findByOwnerIgnoreCase(owner);
   }
 
   @GetMapping("/assignee-name/{assignedToName}")
-  public List<TaskItem> listByAssigneeName(@PathVariable String assignedToName) {
+  public List<TaskItem> listByAssigneeName(@PathVariable("assignedToName") String assignedToName) {
     return taskRepository.findByAssignedToNameIgnoreCase(assignedToName);
   }
 
@@ -99,22 +110,22 @@ public class TaskController {
     taskRepository.deleteAll();
     List<TaskItem> saved = taskRepository.saveAll(safeTasks);
     if (existingCount > 0) {
-      notificationService.notifyRoles(
-          NotificationAudience.operationalRecipients(accessRole),
+      notificationService.notifyRolesExcept(
+          NotificationAudience.taskStatusRecipients(),
+          excludedIds(userId),
           "Tasks refreshed",
           "Task board was updated in bulk.",
           "task",
           "bulk",
           accessRole,
-          "System",
-          userId);
+          "System");
     }
     return saved;
   }
 
   @PutMapping("/{id}")
   public TaskItem update(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
@@ -136,7 +147,7 @@ public class TaskController {
 
   @DeleteMapping("/{id}")
   public void delete(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     String nonNullId = id == null ? "" : id;
@@ -157,6 +168,69 @@ public class TaskController {
     String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
     String owner = task != null && task.getOwner() != null ? task.getOwner() : "team";
     return title + " was " + action + " for " + owner + ".";
+  }
+
+  private String buildTaskStatusMessage(TaskItem task, TaskItem previous) {
+    String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
+    String nextStatus = task != null && task.getStatus() != null ? task.getStatus() : "updated";
+    String previousStatus = previous != null && previous.getStatus() != null ? previous.getStatus() : "previous status";
+    return title + " status changed from " + previousStatus + " to " + nextStatus + ".";
+  }
+
+  private boolean hasStatusChanged(TaskItem task, TaskItem previous) {
+    if (task == null || previous == null) {
+      return false;
+    }
+    return !normalize(task.getStatus()).equals(normalize(previous.getStatus()));
+  }
+
+  private boolean hasAssigneeChanged(TaskItem task, TaskItem previous) {
+    if (task == null || previous == null) {
+      return false;
+    }
+    return !normalize(firstNonBlank(task.getAssignedToId(), task.getAssignedToName(), task.getAssignedTo(), task.getOwner()))
+        .equals(normalize(firstNonBlank(previous.getAssignedToId(), previous.getAssignedToName(), previous.getAssignedTo(), previous.getOwner())));
+  }
+
+  private List<String> taskRecipientIdentities(TaskItem task) {
+    List<String> identities = new ArrayList<>();
+    if (task == null) {
+      return identities;
+    }
+    addIdentity(identities, task.getAssignedToId());
+    addIdentity(identities, task.getAssignedToName());
+    addIdentity(identities, task.getAssignedTo());
+    addIdentity(identities, task.getOwner());
+    return identities;
+  }
+
+  private List<String> taskManagerIdentities(TaskItem task) {
+    List<String> identities = new ArrayList<>();
+    if (task == null) {
+      return identities;
+    }
+    addIdentity(identities, task.getAssignedById());
+    addIdentity(identities, task.getAssignedByName());
+    addIdentity(identities, task.getAssignedBy());
+    addIdentity(identities, task.getTeamLeadId());
+    return identities;
+  }
+
+  private List<String> excludedIds(String... values) {
+    List<String> ids = new ArrayList<>();
+    if (values == null) {
+      return ids;
+    }
+    for (String value : values) {
+      addIdentity(ids, value);
+    }
+    return ids;
+  }
+
+  private void addIdentity(List<String> identities, String value) {
+    if (value != null && !value.isBlank()) {
+      identities.add(value.trim());
+    }
   }
 
   private void hydrateTeamLeadFields(TaskItem task) {
@@ -189,13 +263,14 @@ public class TaskController {
       return;
     }
 
-    Project project = projectRepository.findById(projectId).orElse(null);
-    if (project == null) {
+    java.util.Optional<Project> project = projectRepository.findById(projectId);
+    if (project.isEmpty()) {
       return;
     }
+    Project currentProject = project.get();
 
     if (task.getProjectName() == null || task.getProjectName().isBlank()) {
-      task.setProjectName(firstNonBlank(project.getName(), projectId));
+      task.setProjectName(firstNonBlank(currentProject.getName(), projectId));
     }
 
     if (task.getProjectCode() == null || task.getProjectCode().isBlank()) {
@@ -203,7 +278,7 @@ public class TaskController {
     }
 
     if (task.getTeamLeadId() == null || task.getTeamLeadId().isBlank()) {
-      task.setTeamLeadId(firstNonBlank(project.getTeamLeadId()));
+      task.setTeamLeadId(firstNonBlank(currentProject.getTeamLeadId()));
     }
   }
 
@@ -249,6 +324,7 @@ public class TaskController {
     }
   }
 
+  @Nullable
   private Employee findEmployee(String... candidates) {
     for (Employee employee : employeeRepository.findAll()) {
       if (employee == null) {

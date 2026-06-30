@@ -190,7 +190,7 @@ function TeamLeadDashboard() {
       delta: teamMembers.length ? `${teamMembersOnLeaveCount} on leave` : 'No direct reports loaded',
       tone: 'blue',
       icon: 'ri-profile-line',
-      onClick: () => navigate('/team-lead/profile'),
+      onClick: () => navigate('/team-lead/team'),
     },
     {
       label: 'Tasks Pending',

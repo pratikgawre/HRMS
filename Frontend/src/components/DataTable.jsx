@@ -1,4 +1,4 @@
-function DataTable({ columns, rows, emptyMessage = 'No records found.', onRowClick, getRowClassName }) {
+function DataTable({ columns, rows, emptyMessage = 'No records found.', onRowClick, getRowClassName, className = '' }) {
   const handleRowClick = (event, row) => {
     const interactiveElement = event.target.closest('button, a, input, select, textarea, label');
     if (interactiveElement || typeof onRowClick !== 'function') {
@@ -20,7 +20,7 @@ function DataTable({ columns, rows, emptyMessage = 'No records found.', onRowCli
   };
 
   return (
-    <div className="table-card">
+    <div className={`table-card ${className}`.trim()}>
       <div className="table-responsive">
         <table className="table align-middle mb-0">
           <thead>
