@@ -14,30 +14,36 @@ import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
+  private static final Logger log = LoggerFactory.getLogger(TaskController.class);
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
   private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
+  private final MongoTemplate mongoTemplate;
 
   public TaskController(
       TaskRepository taskRepository,
       ProjectRepository projectRepository,
       EmployeeRepository employeeRepository,
-      NotificationService notificationService) {
+      NotificationService notificationService,
+      MongoTemplate mongoTemplate) {
     this.taskRepository = taskRepository;
     this.projectRepository = projectRepository;
     this.employeeRepository = employeeRepository;
     this.notificationService = notificationService;
+    this.mongoTemplate = mongoTemplate;
   }
 
   @GetMapping
@@ -71,6 +77,7 @@ public class TaskController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     hydrateTeamLeadFields(task);
+    syncProjectAssignment(task);
     if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
       task.setCreatedDateTime(OffsetDateTime.now().toString());
     }
@@ -85,9 +92,10 @@ public class TaskController {
       @RequestBody List<TaskItem> tasks,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
-    List<TaskItem> saved = taskRepository.saveAll(tasks);
+    List<TaskItem> saved = taskRepository.saveAll(tasks == null ? List.of() : tasks.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
       notificationService.notifyRolesExcept(
           NotificationAudience.taskStatusRecipients(),
@@ -110,9 +118,30 @@ public class TaskController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     TaskItem previous = taskRepository.findById(id).orElse(null);
     task.setId(id);
+    TaskItem existing = taskRepository.findById(id).orElse(null);
+    if ((task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) && existing != null) {
+      task.setCreatedDateTime(existing.getCreatedDateTime());
+    }
     hydrateTeamLeadFields(task);
+    syncProjectAssignment(task);
     TaskItem saved = taskRepository.save(task);
     notifyTaskUpdated(saved, previous, accessRole, userId);
+    return saved;
+  }
+
+  @PatchMapping("/{id}/status")
+  public TaskItem updateStatus(
+      @PathVariable String id,
+      @RequestBody TaskStatusRequest request,
+      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
+      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    TaskItem current = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    String nextStatus = firstNonBlank(request == null ? null : request.getStatus(), current.getStatus());
+    Query query = new Query(Criteria.where("id").is(id));
+    Update update = new Update().set("status", nextStatus);
+    mongoTemplate.updateFirst(query, update, TaskItem.class);
+    TaskItem saved = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
     return saved;
   }
 
@@ -121,7 +150,7 @@ public class TaskController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem current = taskRepository.findById(id).orElse(null);
+    TaskItem current = taskRepository.findById(id).orElseGet(TaskItem::new);
     taskRepository.deleteById(id);
     notifyTaskRemoved(current, accessRole, userId);
   }
@@ -248,7 +277,8 @@ public class TaskController {
       task.setTeamLeadId(task.getAssignedById());
     }
 
-    if ((task.getAssignedById() == null || task.getAssignedById().isBlank()) && task.getTeamLeadId() != null && !task.getTeamLeadId().isBlank()) {
+    if ((task.getAssignedById() == null || task.getAssignedById().isBlank()) && task.getTeamLeadId() != null
+        && !task.getTeamLeadId().isBlank()) {
       task.setAssignedById(task.getTeamLeadId());
     }
   }
@@ -268,13 +298,14 @@ public class TaskController {
       return;
     }
 
-    Project project = projectRepository.findById(projectId).orElse(null);
-    if (project == null) {
+    java.util.Optional<Project> project = projectRepository.findById(projectId);
+    if (project.isEmpty()) {
       return;
     }
+    Project currentProject = project.get();
 
     if (task.getProjectName() == null || task.getProjectName().isBlank()) {
-      task.setProjectName(firstNonBlank(project.getName(), projectId));
+      task.setProjectName(firstNonBlank(currentProject.getName(), projectId));
     }
 
     if (task.getProjectCode() == null || task.getProjectCode().isBlank()) {
@@ -282,12 +313,13 @@ public class TaskController {
     }
 
     if (task.getTeamLeadId() == null || task.getTeamLeadId().isBlank()) {
-      task.setTeamLeadId(firstNonBlank(project.getTeamLeadId()));
+      task.setTeamLeadId(firstNonBlank(currentProject.getTeamLeadId()));
     }
   }
 
   private void syncEmployeeDetails(TaskItem task) {
-    Employee assignedTo = findEmployee(task.getAssignedToId(), task.getAssignedToName(), task.getAssignedTo(), task.getOwner());
+    Employee assignedTo = findEmployee(task.getAssignedToId(), task.getAssignedToName(), task.getAssignedTo(),
+        task.getOwner());
     if (assignedTo != null) {
       String employeeId = firstNonBlank(assignedTo.getEmployeeId(), assignedTo.getEmployeeCode(), assignedTo.getId());
       String employeeName = firstNonBlank(assignedTo.getDisplayName(), assignedTo.getName(), employeeId);
@@ -327,6 +359,7 @@ public class TaskController {
     }
   }
 
+  @Nullable
   private Employee findEmployee(String... candidates) {
     for (Employee employee : employeeRepository.findAll()) {
       if (employee == null) {
@@ -381,5 +414,9 @@ public class TaskController {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim().toLowerCase();
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Objects;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -44,8 +45,9 @@ public class LeaveController {
       @RequestBody LeaveRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    LeaveRequest safeRequest = request == null ? new LeaveRequest() : request;
     if (accessRole != null && !accessRole.isBlank()) {
-      request.setOwnerRole(accessRole);
+      safeRequest.setOwnerRole(accessRole);
     }
     LeaveRequest saved = leaveRequestRepository.save(request);
     notifyLeaveSubmitted(saved, accessRole, userId);
@@ -54,9 +56,11 @@ public class LeaveController {
 
   @PostMapping("/bulk")
   public List<LeaveRequest> bulkSave(@RequestBody List<LeaveRequest> requests) {
+    List<LeaveRequest> safeRequests = safeList(requests);
     long existingCount = leaveRequestRepository.count();
     leaveRequestRepository.deleteAll();
-    List<LeaveRequest> saved = leaveRequestRepository.saveAll(requests);
+    List<LeaveRequest> saved = leaveRequestRepository.saveAll(
+        requests == null ? List.of() : requests.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
       notificationService.notifyRolesExcept(
           NotificationAudience.leaveApproverRecipients(),

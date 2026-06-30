@@ -79,6 +79,10 @@ function TeamLeadMyTeamView() {
     () => buildTaskAssignmentGroups(tasks, currentTeamLeadIdentity),
     [currentTeamLeadIdentity, tasks],
   );
+  const visibleTaskRows = useMemo(() => (
+    Array.isArray(taskAssignmentData.tasks) ? taskAssignmentData.tasks : []
+  ), [taskAssignmentData.tasks]);
+
   const teamAssignmentGroups = assignmentData.groups.length > 0 ? assignmentData.groups : taskAssignmentData.groups;
   const effectiveEmployeeDirectory = assignmentData.employeeDirectory.size > 0
     ? assignmentData.employeeDirectory
@@ -177,22 +181,88 @@ function TeamLeadMyTeamView() {
   const memberColumns = [
     {
       key: 'name',
-      label: 'Team Member',
+      label: 'Assign',
       render: (row) => (
         <div className="employee-cell">
           <span>{row.avatar}</span>
           <div>
             <strong>{row.name}</strong>
-            <small>{row.id}</small>
+            <small>{row.employeeId || row.id}</small>
           </div>
         </div>
       ),
     },
-    { key: 'role', label: 'Designation' },
-    { key: 'department', label: 'Department' },
-    { key: 'projects', label: 'Project Name' },
-    { key: 'modules', label: 'Module' },
-    { key: 'status', label: 'Status' },
+    { key: 'projectName', label: 'Project Name' },
+    {
+      key: 'moduleName',
+      label: 'Module Name',
+      render: (row) => <span className="myteam-module-cell">{row.moduleName || '-'}</span>,
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (row) => {
+        const status = String(row.status || '').trim() || 'Pending';
+        const normalized = status.toLowerCase();
+        const statusStyles = {
+          pending: { color: '#d88a12', bg: 'rgba(216,138,18,0.10)' },
+          active: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+          approved: { color: '#1fa67a', bg: 'rgba(31,166,122,0.12)' },
+          completed: { color: '#2f74d0', bg: 'rgba(47,116,208,0.12)' },
+          inactive: { color: '#657380', bg: 'rgba(101,115,128,0.10)' },
+          blocked: { color: '#d94d63', bg: 'rgba(217,77,99,0.10)' },
+        };
+        const style = statusStyles[normalized] || { color: '#485666', bg: 'rgba(72,86,102,0.06)' };
+
+        return (
+          <span
+            className={`myteam-status-pill myteam-status-pill--${normalized}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0.22rem 0.7rem',
+              borderRadius: '999px',
+              background: style.bg,
+              color: style.color,
+              fontWeight: 800,
+              fontSize: '0.86rem',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {status}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'edit',
+      label: 'Edit',
+      render: (row) => (
+        <button
+          type="button"
+          className="section-action"
+          style={{ background: '#fff', border: '1px solid #b7e2df', color: '#0f9f9a', borderRadius: '14px', padding: '0.45rem 0.9rem', fontWeight: 700 }}
+          onClick={() => openAssignmentEditor(row)}
+        >
+          Edit
+        </button>
+      ),
+    },
+    {
+      key: 'delete',
+      label: 'Delete',
+      render: (row) => (
+        <button
+          type="button"
+          className="section-action danger"
+          style={{ background: '#fff', border: '1px solid #f2b8c0', color: '#ef5d74', borderRadius: '14px', padding: '0.45rem 0.9rem', fontWeight: 700 }}
+          onClick={() => deleteTask(row.taskRows?.[0] || row)}
+        >
+          Delete
+        </button>
+      ),
+    },
   ];
   const cardRoutes = {
     'Team Members': '/team-lead/team',
@@ -232,29 +302,26 @@ function TeamLeadMyTeamView() {
                 <span className="project-action-chip">{group.teamMemberCount} member{group.teamMemberCount === 1 ? '' : 's'}</span>
               </div>
               <DataTable
+                className="myteam-table"
                 columns={memberColumns}
                 rows={group.teamMembers.map((member) => {
+                  const task = findTaskForMemberInProject(tasks, member, group);
+                  if (task) {
+                    return normalizeTaskRowForTeamLead(task, effectiveEmployeeDirectory);
+                  }
+
                   const source = effectiveEmployeeDirectory.get(normalizeLookupValue(getEmployeeId(member)));
-                  const memberTasks = (Array.isArray(tasks) ? tasks : []).filter((task) => {
-                    const assigneeValues = [
-                      task.assignedToId,
-                      task.assignedToName,
-                      task.owner,
-                    ].map((value) => String(value || '').trim().toLowerCase());
-                    const memberId = String(getEmployeeId(member) || '').trim().toLowerCase();
-                    const memberName = String(getEmployeeName(member) || '').trim().toLowerCase();
-                    return assigneeValues.includes(memberId) || assigneeValues.includes(memberName);
-                  });
-                  return {
-                    id: getEmployeeId(member),
-                    avatar: member.avatar || source?.avatar || getInitials(getEmployeeName(member)),
-                    name: getEmployeeName(member),
-                    role: member.role || source?.role || '-',
-                    department: member.department || source?.department || '-',
-                    projects: group.name || '-',
-                    modules: Array.from(new Set(memberTasks.map((task) => String(task.title || '-').trim()).filter(Boolean))).join(', ') || '-',
+                  return normalizeTaskRowForTeamLead({
+                    id: `${getEmployeeId(member)}::${String(group.id || group.projectId || group.projectCode || group.name || 'project').trim()}`,
+                    assignedToId: getEmployeeId(member),
+                    assignedToName: getEmployeeName(member),
+                    owner: getEmployeeName(member),
+                    projectId: group.id,
+                    projectName: group.name,
+                    projectCode: group.projectCode || group.id,
+                    title: '-',
                     status: source?.status || member.status || 'Active',
-                  };
+                  }, effectiveEmployeeDirectory);
                 })}
                 emptyMessage="No team members assigned to this project."
               />

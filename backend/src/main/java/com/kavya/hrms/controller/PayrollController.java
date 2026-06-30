@@ -6,9 +6,11 @@ import com.kavya.hrms.service.PayrollGenerationService;
 import com.kavya.hrms.service.PayrollValidationService;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,12 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/payroll")
 public class PayrollController {
-  private static final String CURRENT_MONTH_LIMIT_MESSAGE =
-      "Current month salary can only be marked as paid between the 1st and 15th.";
-  private static final String FUTURE_PERIOD_LIMIT_MESSAGE =
-      "Salary payments cannot be processed for future payroll periods.";
-  private static final String PAYSLIP_LIMIT_MESSAGE =
-      "Payslip is available only after the salary is marked as paid.";
+  private static final String CURRENT_MONTH_LIMIT_MESSAGE = "Current month salary can only be marked as paid between the 1st and 15th.";
+  private static final String FUTURE_PERIOD_LIMIT_MESSAGE = "Salary payments cannot be processed for future payroll periods.";
+  private static final String PAYSLIP_LIMIT_MESSAGE = "Payslip is available only after the salary is marked as paid.";
   private static final String NOT_FOUND_MESSAGE = "Salary record not found";
 
   private final PayrollRecordRepository payrollRecordRepository;
@@ -56,7 +55,7 @@ public class PayrollController {
     return payrollRecordRepository.findByEmployeeId(employeeId);
   }
 
-  @GetMapping(value = "/employee/{employeeId}", params = {"month", "year"})
+  @GetMapping(value = "/employee/{employeeId}", params = { "month", "year" })
   public ResponseEntity<Object> byEmployeeAndPeriod(
       @PathVariable String employeeId,
       @RequestParam String month,
@@ -76,7 +75,8 @@ public class PayrollController {
       @RequestParam String month,
       @RequestParam String year) {
     try {
-      return ResponseEntity.ok(payrollGenerationService.generateAndStorePayrollRecords(month, year));
+      return ResponseEntity.<Object>ok(
+          payrollGenerationService.generateAndStorePayrollRecords(month, year));
     } catch (IllegalArgumentException ex) {
       return badRequest(ex.getMessage());
     }
@@ -88,7 +88,8 @@ public class PayrollController {
       return badRequest("Employee, month, and year are required.");
     }
 
-    return payrollRecordRepository.findByEmployeeIdAndMonthAndYear(record.getEmployeeId(), record.getMonth(), record.getYear())
+    return payrollRecordRepository
+        .findByEmployeeIdAndMonthAndYear(record.getEmployeeId(), record.getMonth(), record.getYear())
         .stream()
         .findFirst()
         .map(existing -> {
@@ -112,7 +113,8 @@ public class PayrollController {
   }
 
   private ResponseEntity<Object> markPaidInternal(String payrollId) {
-    return payrollRecordRepository.findById(payrollId)
+    String safePayrollId = payrollId == null ? "" : payrollId;
+    return payrollRecordRepository.findById(safePayrollId)
         .map(this::updatePaidStatus)
         .orElseGet(() -> notFound(NOT_FOUND_MESSAGE));
   }
@@ -134,9 +136,11 @@ public class PayrollController {
   }
 
   @PostMapping("/bulk")
+  @SuppressWarnings("null")
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
-    return payrollRecordRepository.saveAll(records);
+    List<PayrollRecord> safeRecords = records == null ? List.of() : records.stream().filter(Objects::nonNull).toList();
+    return payrollRecordRepository.saveAll(safeRecords);
   }
 
   private ResponseEntity<Object> forbidden(String message) {
@@ -174,7 +178,7 @@ public class PayrollController {
     }
 
     if (payrollValidationService.isPaidStatus(record.getStatus())) {
-      return ResponseEntity.ok(record);
+      return ResponseEntity.<Object>ok(record);
     }
 
     if (payrollValidationService.isFuturePayrollPeriod(record.getMonth(), record.getYear(), LocalDate.now())) {
@@ -192,5 +196,9 @@ public class PayrollController {
 
   private boolean isBlank(String value) {
     return value == null || value.trim().isEmpty();
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

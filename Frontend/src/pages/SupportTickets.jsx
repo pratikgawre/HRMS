@@ -6,6 +6,7 @@ import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { apiRequest } from '../utils/api.js';
 
 const categories = [
+  'Select category',
   'Technical Issue',
   'Login Issue',
   'Attendance Issue',
@@ -14,7 +15,7 @@ const categories = [
   'Other',
 ];
 
-const priorities = ['Low', 'Medium', 'High', 'Urgent'];
+const priorities = [ 'Select Priority', 'Low', 'Medium', 'High', 'Urgent'];
 const statusStages = ['Pending', 'Open', 'In Process', 'Completed'];
 
 const ticketColumns = [
@@ -30,6 +31,9 @@ const ticketColumns = [
 function SupportTickets() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const isEmployeeView = role === 'employee';
+  const isHrSupportView = role === 'hr';
+  const isAdminSupportView = role === 'admin';
+  const useHrTicketHistoryLayout = isHrSupportView || isAdminSupportView;
   const canUpdateTicketStatus = role === 'admin' || role === 'hr' || role === 'teamLead';
   const currentEmployee = getCurrentEmployeeIdentity();
   const [tickets, setTickets] = useState([]);
@@ -39,7 +43,7 @@ function SupportTickets() {
   const [form, setForm] = useState({
     title: '',
     category: categories[0],
-    priority: priorities[1],
+    priority: priorities[0],
     description: '',
     screenshot: null,
   });
@@ -84,10 +88,27 @@ function SupportTickets() {
       : ticketColumns
   ), [isEmployeeView]);
 
+  const nonEmployeeTableColumns = useHrTicketHistoryLayout
+    ? ['createdDate', 'id', 'employeeName', 'title', 'category', 'priority', 'status']
+    : ['id', 'employeeName', 'title', 'category', 'priority', 'status', 'createdDate'];
+
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: '' }));
     setSuccessMessage('');
+  };
+
+  const resetForm = () => {
+    setForm({
+      title: '',
+      category: categories[0],
+      priority: priorities[1],
+      description: '',
+      screenshot: null,
+    });
+    setErrors({});
+    setSuccessMessage('');
+    setErrorMessage('');
   };
 
   const handleStatusUpdate = async (ticketId, mongoId, newStatus) => {
@@ -170,7 +191,7 @@ function SupportTickets() {
       />
 
       <div className="support-layout">
-        <Section title="Raise Support Ticket" action="New request">
+        <Section title="Raise Support Ticket" action="New request" actionOnClick={resetForm}>
           {successMessage && (
             <div className="support-alert success" role="status">
               <i className="ri-checkbox-circle-line" aria-hidden="true" />
@@ -194,14 +215,14 @@ function SupportTickets() {
 
             <label className="field">
               <span>Category</span>
-              <select value={form.category} onChange={(event) => updateField('category', event.target.value)}>
+              <select className="support-select" value={form.category} onChange={(event) => updateField('category', event.target.value)}>
                 {categories.map((category) => <option key={category} value={category}>{category}</option>)}
               </select>
             </label>
 
             <label className="field">
               <span>Priority</span>
-              <select value={form.priority} onChange={(event) => updateField('priority', event.target.value)}>
+              <select className="support-select" value={form.priority} onChange={(event) => updateField('priority', event.target.value)}>
                 {priorities.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
               </select>
             </label>
@@ -244,13 +265,11 @@ function SupportTickets() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Ticket ID</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Employee</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Title</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Category</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Priority</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Status</th>
-                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Created Date</th>
+                  {nonEmployeeTableColumns.map((column) => (
+                    <th key={column} style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>
+                      {getSupportColumnLabel(column)}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -261,25 +280,16 @@ function SupportTickets() {
                 ) : (
                   visibleTickets.map((ticket) => (
                     <tr key={ticket.mongoId || ticket.id || ticket.ticketId} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                      <td style={{ padding: '12px' }}>{ticket.id || ticket.ticketId}</td>
-                      <td style={{ padding: '12px' }}>{ticket.employeeName}</td>
-                      <td style={{ padding: '12px' }}>{ticket.title}</td>
-                      <td style={{ padding: '12px' }}>{ticket.category}</td>
-                      <td style={{ padding: '12px' }}>
-                        <span className={`status status-${String(ticket.priority || '').toLowerCase()}`}>{ticket.priority}</span>
-                      </td>
-                      <td style={{ padding: '12px' }}>
-                        {canUpdateTicketStatus ? (
-                          <select value={ticket.status} onChange={(e) => handleStatusUpdate(ticket.id || ticket.ticketId, ticket.mongoId || ticket._id || ticket.id, e.target.value)}>
-                            {statusStages.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
-                          </select>
-                        ) : (
-                          <span className={`status status-${String(ticket.status || '').toLowerCase().replace(/\s+/g, '-')}`}>
-                            {ticket.status}
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ padding: '12px' }}>{ticket.createdDate}</td>
+                      {nonEmployeeTableColumns.map((column) => (
+                        <td key={column} style={{ padding: '12px' }}>
+                          {renderSupportTableCell(column, ticket, {
+                            role,
+                            canUpdateTicketStatus,
+                            handleStatusUpdate,
+                            useHrTicketHistoryLayout,
+                          })}
+                        </td>
+                      ))}
                     </tr>
                   ))
                 )}
@@ -299,6 +309,62 @@ function normalizeTicket(ticket) {
     mongoId: ticket.mongoId || ticket._id || ticket.id,
     createdDate: ticket.createdDate || '',
   };
+}
+
+function getSupportColumnLabel(column) {
+  switch (column) {
+    case 'createdDate':
+      return 'Created Date';
+    case 'id':
+      return 'Ticket ID';
+    case 'employeeName':
+      return 'Employee';
+    case 'title':
+      return 'Title';
+    case 'category':
+      return 'Category';
+    case 'priority':
+      return 'Priority';
+    case 'status':
+      return 'Status';
+    default:
+      return column;
+  }
+}
+
+function renderSupportTableCell(column, ticket, context) {
+  const { canUpdateTicketStatus, handleStatusUpdate, useHrTicketHistoryLayout } = context;
+
+  switch (column) {
+    case 'createdDate':
+      return ticket.createdDate;
+    case 'id':
+      return ticket.id || ticket.ticketId;
+    case 'employeeName':
+      return ticket.employeeName;
+    case 'title':
+      return ticket.title;
+    case 'category':
+      return ticket.category;
+    case 'priority':
+      return <span className={`status status-${String(ticket.priority || '').toLowerCase()}`}>{ticket.priority}</span>;
+    case 'status':
+      return canUpdateTicketStatus ? (
+        <select
+          className={useHrTicketHistoryLayout ? 'hr-support-status-select' : ''}
+          value={ticket.status}
+          onChange={(e) => handleStatusUpdate(ticket.id || ticket.ticketId, ticket.mongoId || ticket._id || ticket.id, e.target.value)}
+        >
+          {statusStages.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+        </select>
+      ) : (
+        <span className={`status status-${String(ticket.status || '').toLowerCase().replace(/\s+/g, '-')}`}>
+          {ticket.status}
+        </span>
+      );
+    default:
+      return '-';
+  }
 }
 
 function fileToDataUrl(file) {

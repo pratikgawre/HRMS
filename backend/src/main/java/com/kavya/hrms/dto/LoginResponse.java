@@ -6,6 +6,8 @@ public class LoginResponse {
   private String email;
   private String employeeId;
   private String employeeName;
+  private String avatar;
+  private String profilePicture;
   private String userId;
   private String lastLogin;
   private String token;
@@ -22,6 +24,10 @@ private String message;
   public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
   public String getEmployeeName() { return employeeName; }
   public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
+  public String getAvatar() { return avatar; }
+  public void setAvatar(String avatar) { this.avatar = avatar; }
+  public String getProfilePicture() { return profilePicture; }
+  public void setProfilePicture(String profilePicture) { this.profilePicture = profilePicture; }
   public String getUserId() { return userId; }
   public void setUserId(String userId) { this.userId = userId; }
   public String getLastLogin() { return lastLogin; }

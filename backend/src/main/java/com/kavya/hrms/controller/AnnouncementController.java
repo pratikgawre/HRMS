@@ -55,7 +55,8 @@ public class AnnouncementController {
       @RequestBody Announcement announcement,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Announcement saved = announcementRepository.save(announcement);
+    Announcement saved = announcementRepository
+        .save(Objects.requireNonNull(announcement, "announcement must not be null"));
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "New announcement posted",
@@ -70,9 +71,13 @@ public class AnnouncementController {
 
   @PostMapping("/bulk")
   public List<Announcement> bulkSave(@RequestBody List<Announcement> announcements) {
+    List<Announcement> safeAnnouncements = safeList(announcements);
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
-    List<Announcement> saved = announcementRepository.saveAll(announcements);
+    List<Announcement> safeAnnouncements = announcements == null
+        ? List.<Announcement>of()
+        : announcements.stream().filter(Objects::nonNull).toList();
+    List<Announcement> saved = announcementRepository.saveAll(safeAnnouncements);
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.companyWideRecipients(),
@@ -93,14 +98,15 @@ public class AnnouncementController {
       @RequestBody Announcement announcement,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    announcement.setId(id);
-    Announcement saved = announcementRepository.save(announcement);
+    Announcement safeAnnouncement = Objects.requireNonNull(announcement, "announcement must not be null");
+    safeAnnouncement.setId(id);
+    Announcement saved = announcementRepository.save(safeAnnouncement);
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "Announcement updated",
-        saved.getTitle() + " was updated.",
+        asString(saved.getTitle()) + " was updated.",
         "announcement",
-        saved.getId(),
+        asString(saved.getId()),
         accessRole,
         "System",
         userId);
@@ -112,14 +118,20 @@ public class AnnouncementController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Announcement current = announcementRepository.findById(id).orElse(null);
-    announcementRepository.deleteById(id);
+    String nonNullId = id;
+    Announcement current = announcementRepository.findById(nonNullId).orElseGet(Announcement::new);
+    announcementRepository.deleteById(nonNullId);
+    String title = "An announcement";
+    String currentTitle = current.getTitle();
+    if (currentTitle != null && !currentTitle.isBlank()) {
+      title = currentTitle;
+    }
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "Announcement removed",
-        (current != null ? current.getTitle() : "An announcement") + " was removed.",
+        title + " was removed.",
         "announcement",
-        id,
+        nonNullId,
         accessRole,
         "System",
         userId);
@@ -130,6 +142,10 @@ public class AnnouncementController {
 
   private boolean equalsIgnoreCase(String left, String right) {
     return asString(left).equalsIgnoreCase(asString(right));
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 
   private List<Announcement> readAnnouncementsFromDocuments() {

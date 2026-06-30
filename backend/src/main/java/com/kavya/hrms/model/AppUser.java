@@ -17,6 +17,8 @@ public class AppUser {
   private Boolean isActive;
   private String employeeId;
   private String employeeName;
+  private String avatar;
+  private String profilePicture;
   private String status;
   private String lastLogin;
   private String passwordResetToken;
@@ -44,6 +46,10 @@ public String getId() { return id; }
   public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
   public String getEmployeeName() { return employeeName; }
   public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
+  public String getAvatar() { return avatar; }
+  public void setAvatar(String avatar) { this.avatar = avatar; }
+  public String getProfilePicture() { return profilePicture; }
+  public void setProfilePicture(String profilePicture) { this.profilePicture = profilePicture; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
   public String getLastLogin() { return lastLogin; }

@@ -12,6 +12,7 @@ import com.kavya.hrms.dto.PasswordResetConfirmationRequest;
 import com.kavya.hrms.dto.PasswordResetRequest;
 import com.kavya.hrms.dto.PasswordResetResponse;
 import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.model.AuthSession;
 import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.AuthSessionRepository;
 import com.kavya.hrms.service.PasswordResetEmailService;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.stubbing.Answer;
 import org.springframework.http.ResponseEntity;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,18 +52,28 @@ class AuthControllerTest {
         user.setStatus("Active");
 
         when(appUserRepository.findAllByEmailIgnoreCase("admin@example.com")).thenReturn(List.of(user));
-        when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(authSessionRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        Answer<AppUser> saveUserAnswer = invocation -> (AppUser) invocation.getArguments()[0];
+        Answer<AuthSession> saveSessionAnswer = invocation -> (AuthSession) invocation.getArguments()[0];
+        when(appUserRepository.save(any(AppUser.class))).thenAnswer(saveUserAnswer);
+        when(authSessionRepository.save(any(AuthSession.class))).thenAnswer(saveSessionAnswer);
 
         LoginRequest request = new LoginRequest();
         request.setEmail("Admin@Example.com");
         request.setPassword("admin123");
 
         ResponseEntity<LoginResponse> response = authController.login(request);
+        assertNotNull(response, "Response should not be null");
+
+        LoginResponse loginResponse = response.getBody();
+        if (loginResponse == null) {
+            throw new AssertionError("Response body should not be null");
+        }
 
         assertEquals(200, response.getStatusCode().value());
-        assertTrue(response.getBody() != null && response.getBody().isOk());
-        assertEquals("Super Admin", response.getBody().getRole());
+        LoginResponse body = response.getBody();
+        assertNotNull(body);
+        assertTrue(body.isOk());
+        assertEquals("Super Admin", body.getRole());
     }
 
     @Test

@@ -1,9 +1,5 @@
 package com.kavya.hrms.service;
 
-import com.kavya.hrms.model.AppUser;
-import com.kavya.hrms.model.Notification;
-import com.kavya.hrms.repository.AppUserRepository;
-import com.kavya.hrms.repository.NotificationRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,7 +8,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
+
 import org.springframework.stereotype.Service;
+import org.springframework.lang.Nullable;
+
+import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.model.Notification;
+import com.kavya.hrms.repository.AppUserRepository;
+import com.kavya.hrms.repository.NotificationRepository;
 
 @Service
 public class NotificationService {
@@ -113,13 +116,14 @@ public class NotificationService {
       return null;
     }
 
-    Notification notification = notificationRepository.findByIdAndUserId(id, userId).orElse(null);
-    if (notification == null) {
+    java.util.Optional<Notification> notification = notificationRepository.findByIdAndUserId(id, userId);
+    if (notification.isEmpty()) {
       return null;
     }
 
-    notification.setReadStatus(true);
-    return notificationRepository.save(notification);
+    Notification current = notification.get();
+    current.setReadStatus(true);
+    return notificationRepository.save(current);
   }
 
   public void clearForUser(String userId) {
@@ -229,7 +233,7 @@ public class NotificationService {
     String normalized = normalizeRole(role);
     if ("all".equals(normalized)) {
       return appUserRepository.findAll().stream()
-          .filter(this::isActiveUser)
+        .filter(this::isActiveUser)
           .map(AppUser::getUserId)
           .filter(value -> !isBlank(value))
           .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -293,12 +297,18 @@ public class NotificationService {
 
   private String normalizeRole(String role) {
     String value = String.valueOf(role == null ? "" : role).trim().toLowerCase(Locale.ROOT).replace(" ", "");
-    if ("admin".equals(value) || "superadmin".equals(value)) return "admin";
-    if ("hr".equals(value) || "hrmanager".equals(value)) return "hr";
-    if ("projectmanager".equals(value)) return "projectmanager";
-    if ("teamlead".equals(value)) return "teamlead";
-    if ("employee".equals(value)) return "employee";
-    if ("all".equals(value)) return "all";
+    if ("admin".equals(value) || "superadmin".equals(value))
+      return "admin";
+    if ("hr".equals(value) || "hrmanager".equals(value))
+      return "hr";
+    if ("projectmanager".equals(value))
+      return "projectmanager";
+    if ("teamlead".equals(value))
+      return "teamlead";
+    if ("employee".equals(value))
+      return "employee";
+    if ("all".equals(value))
+      return "all";
     return value;
   }
 

@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.springframework.lang.Nullable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -106,6 +107,7 @@ public class AttendanceAutoCheckoutService {
     return LocalDateTime.now(KOLKATA_ZONE);
   }
 
+  @Nullable
   private LocalDate getAttendanceDate(AttendanceRecord record) {
     LocalDate parsed = parseDate(record != null ? record.getDateLabel() : null);
     if (parsed != null) {
@@ -120,6 +122,7 @@ public class AttendanceAutoCheckoutService {
     return null;
   }
 
+  @Nullable
   private LocalDate parseDate(String value) {
     if (isBlank(value)) {
       return null;
@@ -138,6 +141,7 @@ public class AttendanceAutoCheckoutService {
     }
   }
 
+  @Nullable
   private LocalTime parseTime(String value) {
     if (isBlank(value) || "-".equals(value.trim())) {
       return null;

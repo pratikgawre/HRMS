@@ -5,6 +5,19 @@ import { getSessionValue, setSessionValue } from './appSession.js';
 
 let employeesCache = [];
 
+function sanitizeProfilePicture(value) {
+  const normalizedValue = String(value || '').trim();
+  if (!normalizedValue) {
+    return '';
+  }
+
+  if (normalizedValue.startsWith('data:image/') || normalizedValue.startsWith('blob:')) {
+    return '';
+  }
+
+  return normalizedValue;
+}
+
 const fallbackEmployee = {
   employeeId: 'KV001',
   employee: 'Aarav Sharma',
@@ -77,7 +90,7 @@ export function saveStoredEmployees(employees, options = {}) {
     esiNo: employee.esiNo || '',
     aadhaarDocument: employee.aadhaarDocument || '',
     panDocument: employee.panDocument || '',
-    profilePicture: employee.profilePicture || '',
+    profilePicture: sanitizeProfilePicture(employee.profilePicture),
     mobileNo: employee.mobileNo || '',
     packageAmount: employee.packageAmount || '',
   }));
@@ -124,7 +137,7 @@ export function upsertEmployeeLogin(employee, options = {}) {
     status: existing?.status || 'Active',
     permissions: getPermissions(accessRole),
     avatar: employee.avatar || existing?.avatar || getInitials(employee.displayName || employee.name || ''),
-    profilePicture: employee.profilePicture || existing?.profilePicture || '',
+    profilePicture: sanitizeProfilePicture(employee.profilePicture || existing?.profilePicture),
     department: employee.department || existing?.department || '',
     designation: employee.jobTitle || employee.role || existing?.designation || '',
     createdAt: existing?.createdAt || new Date().toISOString(),
@@ -156,7 +169,7 @@ export function getCurrentEmployeeIdentity() {
     employeeId: getSessionValue('kavyaEmployeeId') || fallbackEmployee.employeeId,
     employee: getSessionValue('kavyaEmployeeName') || fallbackEmployee.employee,
     avatar: getSessionValue('kavyaEmployeeAvatar') || fallbackEmployee.avatar,
-    profilePicture: getSessionValue('kavyaEmployeePhoto') || '',
+    profilePicture: sanitizeProfilePicture(getSessionValue('kavyaEmployeePhoto')),
     email: getSessionValue('kavyaUserEmail') || fallbackEmployee.email,
   };
 }

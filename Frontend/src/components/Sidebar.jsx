@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import companyLogo from '../assets/logo.png';
 
 const menus = {
   admin: [
     { label: 'Dashboard', to: '/admin/dashboard', icon: 'ri-dashboard-line' },
     { label: 'Announcements', to: '/admin/announcements', icon: 'ri-megaphone-line' },
     { label: 'Assets', to: '/admin/assets', icon: 'ri-briefcase-4-line' },
+    { label: 'Task Assignment', to: '/admin/tasks', icon: 'ri-task-line' },
     { label: 'Team Attendance', to: '/admin/team-attendance', icon: 'ri-team-line' },
     { label: 'Employees', to: '/admin/employees', icon: 'ri-team-line' },
     { label: 'Leave Management', to: '/admin/leave-management', icon: 'ri-calendar-check-line' },
@@ -105,16 +107,22 @@ function Sidebar({ role, isOpen, onClose }) {
     <>
       <aside className={`sidebar ${isOpen ? 'is-open' : ''}`}>
         <div className="brand">
-          <span className="brand-mark">K</span>
+          <span className="brand-logo-frame" aria-hidden="true">
+            <img className="brand-logo" src={companyLogo} alt="" />
+          </span>
           <div>
-            <strong>Kavya</strong>
-            <small>HRMS Suite</small>
+            <strong>Kavya HR 360</strong>
           </div>
         </div>
 
         <nav className="sidebar-nav" aria-label={`${role} navigation`}>
           {(menus[role] || menus.employee).map((item) => (
-            <NavLink key={item.to} to={item.to} className="nav-item" onClick={onClose}>
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+              onClick={onClose}
+            >
               <i className={item.icon} aria-hidden="true" />
               <span>{item.label}</span>
             </NavLink>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
-import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
+import { Hero, Section } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
@@ -14,6 +14,8 @@ import {
 } from '../utils/leaveBalance.js';
 
 const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
+const approveActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%2309767a" stroke-width="2.4"/%3E%3Cpath d="M8 12.25l2.45 2.45L16.5 8.65" stroke="%2309767a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/%3E%3C/svg%3E';
+const rejectActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%23d94d63" stroke-width="2.4"/%3E%3Cpath d="M8.75 8.75l6.5 6.5M15.25 8.75l-6.5 6.5" stroke="%23d94d63" stroke-width="2.4" stroke-linecap="round"/%3E%3C/svg%3E';
 
 function LeaveRequests() {
   const role = getSessionValue('kavyaRole') || 'employee';
@@ -32,7 +34,9 @@ function LeaveRequests() {
   const [fileErrors, setFileErrors] = useState({});
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [queueFilter, setQueueFilter] = useState('all');
+  const [reviewingRequestIds, setReviewingRequestIds] = useState(() => new Set());
   const tableRef = useRef(null);
+  const isAdminOrHr = role === 'admin' || role === 'hr';
   const leaveSummary = useMemo(
     () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee)),
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
@@ -166,25 +170,50 @@ function LeaveRequests() {
       label: 'Requested By',
       render: (row) => formatRequesterRole(row.ownerRole),
     }, {
-      key: 'medicalReport',
-      label: 'Medical Report',
-      render: (row) => row.medicalReport?.name || 'Not attached',
+      key: 'leaveDetails',
+      label: 'Leave Details',
+      render: (row) => (
+        <button type="button" className="payroll-secondary" onClick={() => setSelectedRequest(row)}>
+          View Details
+        </button>
+      ),
     }] : []),
     ...(canReviewRequests ? [{
       key: 'actions',
       label: 'Actions',
-      render: (row) => (
-        <div className="table-actions">
-          <button
-            type="button"
-            onClick={() => updateLeaveStatus(row.id, isAdminOrHr ? 'Approved' : 'Recommended')}
-          >
-            <i className="ri-checkbox-circle-line" aria-hidden="true" />
-            {isAdminOrHr ? 'Approve' : 'Recommend'}
-          </button>
-          {isAdminOrHr && row.status === 'Pending' && <button type="button" className="danger" onClick={() => updateLeaveStatus(row.id, 'Rejected')}><i className="ri-close-circle-line" aria-hidden="true" />Reject</button>}
-        </div>
-      ),
+      render: (row) => {
+        const targetStatus = isAdminOrHr ? 'Approved' : 'Recommended';
+        const isReviewing = reviewingRequestIds.has(row.id);
+        const isActionComplete = String(row.status || '').trim().toLowerCase() === targetStatus.toLowerCase();
+        const isRejectComplete = String(row.status || '').trim().toLowerCase() === 'rejected';
+        const disableApprove = isReviewing || isActionComplete;
+        const disableReject = isReviewing || isRejectComplete;
+
+        return (
+          <div className="table-actions" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+            <button
+              type="button"
+              className="leave-approve-action"
+              disabled={disableApprove}
+              onClick={() => updateLeaveStatus(row.id, targetStatus)}
+            >
+              <img src={approveActionIcon} alt="" aria-hidden="true" />
+              {isAdminOrHr ? 'Approve' : 'Recommend'}
+            </button>
+            {isAdminOrHr && (
+              <button
+                type="button"
+                className="danger leave-reject-action"
+                disabled={disableReject}
+                onClick={() => updateLeaveStatus(row.id, 'Rejected')}
+              >
+                <img src={rejectActionIcon} alt="" aria-hidden="true" />
+                Reject
+              </button>
+            )}
+          </div>
+        );
+      },
     }] : []),
   ];
 
@@ -334,21 +363,44 @@ function LeaveRequests() {
   };
 
   const updateLeaveStatus = async (requestId, nextStatus) => {
+    const existingRequest = requests.find((request) => request.id === requestId);
+    if (!existingRequest || reviewingRequestIds.has(requestId)) {
+      return;
+    }
+
+    if (String(existingRequest.status || '').trim().toLowerCase() === String(nextStatus || '').trim().toLowerCase()) {
+      return;
+    }
+
+    setReviewingRequestIds((current) => {
+      const nextIds = new Set(current);
+      nextIds.add(requestId);
+      return nextIds;
+    });
+
     const next = requests.map((request) => (
       request.id === requestId ? { ...request, status: nextStatus } : request
     ));
     setRequests(next);
 
-    const requestToUpdate = next.find((request) => request.id === requestId);
-    if (requestToUpdate) {
-      const saved = await updateLeaveRequestStatus({
-        ...requestToUpdate,
-        from: requestToUpdate.from,
-        to: requestToUpdate.to,
-      });
-      if (saved && saved.id) {
-        await refreshRequests();
+    try {
+      const requestToUpdate = next.find((request) => request.id === requestId);
+      if (requestToUpdate) {
+        const saved = await updateLeaveRequestStatus({
+          ...requestToUpdate,
+          from: requestToUpdate.from,
+          to: requestToUpdate.to,
+        });
+        if (saved && saved.id) {
+          await refreshRequests();
+        }
       }
+    } finally {
+      setReviewingRequestIds((current) => {
+        const nextIds = new Set(current);
+        nextIds.delete(requestId);
+        return nextIds;
+      });
     }
 
     setMessage(`Leave request ${nextStatus.toLowerCase()} successfully.`);
@@ -482,7 +534,7 @@ function LeaveRequests() {
             columns={columns}
             rows={filteredLeaveRequests}
             emptyMessage={queueEmptyMessage}
-            onRowClick={setSelectedRequest}
+            onRowClick={isAdminOrHr ? undefined : setSelectedRequest}
           />
         </div>
       </div>

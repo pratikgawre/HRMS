@@ -1,21 +1,22 @@
 package com.kavya.hrms.controller;
 
-import com.kavya.hrms.model.Employee;
-import com.kavya.hrms.model.Project;
-import com.kavya.hrms.model.ProjectMember;
-import com.kavya.hrms.repository.EmployeeRepository;
-import com.kavya.hrms.repository.ProjectRepository;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.kavya.hrms.model.Employee;
+import com.kavya.hrms.model.Project;
+import com.kavya.hrms.model.ProjectMember;
+import com.kavya.hrms.repository.EmployeeRepository;
+import com.kavya.hrms.repository.ProjectRepository;
 
 @RestController
 @RequestMapping("/api/team-lead")
@@ -34,7 +35,8 @@ public class TeamLeadController {
     return projectRepository.findAll().stream()
         .filter((project) -> isActiveProjectForTeamLead(project, teamLeadId))
         .map((project) -> sanitizeProject(project, teamLeadId, employeeIndex))
-        .sorted(Comparator.comparing((Project project) -> String.valueOf(project.getName() == null ? "" : project.getName())))
+        .sorted(Comparator
+            .comparing((Project project) -> String.valueOf(project.getName() == null ? "" : project.getName())))
         .collect(Collectors.toList());
   }
 
@@ -48,6 +50,10 @@ public class TeamLeadController {
   }
 
   private Project sanitizeProject(Project source, String teamLeadId, Map<String, Employee> employeeIndex) {
+    if (source == null) {
+      return new Project();
+    }
+
     Project project = new Project();
     project.setId(source.getId());
     project.setName(source.getName());
@@ -65,12 +71,19 @@ public class TeamLeadController {
     project.setStatus(source.getStatus());
 
     List<ProjectMember> members = resolveProjectMembers(source, teamLeadId, employeeIndex);
-    project.setTeamMembers(members.stream().map(ProjectMember::getId).filter(Objects::nonNull).collect(Collectors.toList()));
+    List<String> teamMemberIds = new ArrayList<>();
+    for (ProjectMember member : members) {
+      if (member != null && member.getId() != null) {
+        teamMemberIds.add(member.getId());
+      }
+    }
+    project.setTeamMembers(teamMemberIds);
     project.setTeamMemberDetails(members);
     return project;
   }
 
-  private List<ProjectMember> resolveProjectMembers(Project project, String teamLeadId, Map<String, Employee> employeeIndex) {
+  private List<ProjectMember> resolveProjectMembers(Project project, String teamLeadId,
+      Map<String, Employee> employeeIndex) {
     Map<String, ProjectMember> membersById = new HashMap<>();
 
     if (project != null && project.getTeamMemberDetails() != null) {
@@ -82,37 +95,43 @@ public class TeamLeadController {
       }
     }
 
-    if (project != null && project.getTeamMembers() != null) {
-      for (String memberId : project.getTeamMembers()) {
-        String normalizedId = normalizeLookupValue(memberId);
-        if (normalizedId.isEmpty() || membersById.containsKey(normalizedId)) {
-          continue;
-        }
+    if (project != null) {
+      List<String> teamMembers = project.getTeamMembers();
+      if (teamMembers != null) {
+        for (String memberId : teamMembers) {
+          String normalizedId = normalizeLookupValue(memberId);
+          if (normalizedId.isEmpty() || membersById.containsKey(normalizedId)) {
+            continue;
+          }
 
-        Employee employee = employeeIndex.get(normalizedId);
-        if (employee == null || isPrivilegedEmployee(employee) || equalsIgnoreCase(employee.getEmployeeId(), teamLeadId)) {
-          continue;
-        }
+          Employee employee = employeeIndex.get(normalizedId);
+          if (employee == null || isPrivilegedEmployee(employee)
+              || equalsIgnoreCase(employee.getEmployeeId(), teamLeadId)) {
+            continue;
+          }
 
-        ProjectMember resolved = new ProjectMember();
-        resolved.setId(firstNonBlank(employee.getEmployeeId(), employee.getEmployeeCode(), employee.getId(), memberId));
-        resolved.setEmployeeCode(firstNonBlank(employee.getEmployeeCode(), employee.getEmployeeId(), resolved.getId()));
-        resolved.setName(firstNonBlank(employee.getDisplayName(), employee.getName(), resolved.getId()));
-        resolved.setDisplayName(firstNonBlank(employee.getDisplayName(), employee.getName(), resolved.getId()));
-        resolved.setDepartment(firstNonBlank(employee.getDepartment(), "-"));
-        resolved.setRole(firstNonBlank(employee.getRole(), employee.getJobTitle(), "Employee"));
-        resolved.setAvatar(firstNonBlank(employee.getAvatar(), initialsFromName(resolved.getName())));
-        resolved.setStatus(employee.getStatus());
-        membersById.put(normalizeLookupValue(resolved.getId()), resolved);
+          ProjectMember resolved = new ProjectMember();
+          resolved.setId(firstNonBlank(employee.getEmployeeId(), employee.getEmployeeCode(), employee.getId(), memberId));
+          resolved.setEmployeeCode(firstNonBlank(employee.getEmployeeCode(), employee.getEmployeeId(), resolved.getId()));
+          resolved.setName(firstNonBlank(employee.getDisplayName(), employee.getName(), resolved.getId()));
+          resolved.setDisplayName(firstNonBlank(employee.getDisplayName(), employee.getName(), resolved.getId()));
+          resolved.setDepartment(firstNonBlank(employee.getDepartment(), "-"));
+          resolved.setRole(firstNonBlank(employee.getRole(), employee.getJobTitle(), "Employee"));
+          resolved.setAvatar(firstNonBlank(employee.getAvatar(), initialsFromName(resolved.getName())));
+          resolved.setStatus(employee.getStatus());
+          membersById.put(normalizeLookupValue(resolved.getId()), resolved);
+        }
       }
     }
 
     return membersById.values().stream()
         .filter((member) -> member.getId() != null && !normalizeLookupValue(member.getId()).isEmpty())
-        .sorted(Comparator.comparing((ProjectMember member) -> String.valueOf(member.getDisplayName() == null ? "" : member.getDisplayName())))
+        .sorted(Comparator.comparing(
+            (ProjectMember member) -> String.valueOf(member.getDisplayName() == null ? "" : member.getDisplayName())))
         .collect(Collectors.toCollection(ArrayList::new));
   }
 
+  @Nullable
   private ProjectMember normalizeProjectMember(ProjectMember member, Map<String, Employee> employeeIndex) {
     if (member == null) {
       return null;
@@ -126,12 +145,20 @@ public class TeamLeadController {
     Employee employee = employeeIndex.get(normalizeLookupValue(memberId));
     ProjectMember resolved = new ProjectMember();
     resolved.setId(firstNonBlank(member.getId(), employee != null ? employee.getEmployeeId() : "", memberId));
-    resolved.setEmployeeCode(firstNonBlank(member.getEmployeeCode(), employee != null ? employee.getEmployeeCode() : "", resolved.getId()));
-    resolved.setName(firstNonBlank(member.getName(), member.getDisplayName(), employee != null ? employee.getDisplayName() : "", employee != null ? employee.getName() : "", resolved.getId()));
-    resolved.setDisplayName(firstNonBlank(member.getDisplayName(), member.getName(), employee != null ? employee.getDisplayName() : "", employee != null ? employee.getName() : "", resolved.getId()));
-    resolved.setDepartment(firstNonBlank(member.getDepartment(), employee != null ? employee.getDepartment() : "", "-"));
-    resolved.setRole(firstNonBlank(member.getRole(), employee != null ? employee.getRole() : "", employee != null ? employee.getJobTitle() : "", "Employee"));
-    resolved.setAvatar(firstNonBlank(member.getAvatar(), employee != null ? employee.getAvatar() : "", initialsFromName(resolved.getDisplayName())));
+    resolved.setEmployeeCode(
+        firstNonBlank(member.getEmployeeCode(), employee != null ? employee.getEmployeeCode() : "", resolved.getId()));
+    resolved.setName(
+        firstNonBlank(member.getName(), member.getDisplayName(), employee != null ? employee.getDisplayName() : "",
+            employee != null ? employee.getName() : "", resolved.getId()));
+    resolved.setDisplayName(
+        firstNonBlank(member.getDisplayName(), member.getName(), employee != null ? employee.getDisplayName() : "",
+            employee != null ? employee.getName() : "", resolved.getId()));
+    resolved
+        .setDepartment(firstNonBlank(member.getDepartment(), employee != null ? employee.getDepartment() : "", "-"));
+    resolved.setRole(firstNonBlank(member.getRole(), employee != null ? employee.getRole() : "",
+        employee != null ? employee.getJobTitle() : "", "Employee"));
+    resolved.setAvatar(firstNonBlank(member.getAvatar(), employee != null ? employee.getAvatar() : "",
+        initialsFromName(resolved.getDisplayName())));
     resolved.setStatus(firstNonBlank(member.getStatus(), employee != null ? employee.getStatus() : ""));
 
     return resolved;
@@ -147,14 +174,14 @@ public class TeamLeadController {
     }
 
     String role = normalizeLookupValue(member.getRole());
-    if (role.contains("super admin")
+    return !containsPrivilegedRole(role);
+  }
+
+  private boolean containsPrivilegedRole(String role) {
+    return role != null && (role.contains("super admin")
         || role.contains("project manager")
         || role.contains("team lead")
-        || role.contains("hr")) {
-      return false;
-    }
-
-    return true;
+        || role.contains("hr"));
   }
 
   private boolean isPrivilegedEmployee(Employee employee) {
@@ -162,7 +189,8 @@ public class TeamLeadController {
       return false;
     }
 
-    String role = normalizeLookupValue(firstNonBlank(employee.getAccessRole(), employee.getJobTitle(), employee.getRole()));
+    String role = normalizeLookupValue(
+        firstNonBlank(employee.getAccessRole(), employee.getJobTitle(), employee.getRole()));
     return role.contains("super admin")
         || role.contains("project manager")
         || role.contains("team lead")

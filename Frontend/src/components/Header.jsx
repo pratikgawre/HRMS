@@ -41,6 +41,24 @@ function Header({ role, onMenuClick }) {
 
   const searchRoutes = getSearchRoutes(role);
 
+  // Close notification panel when clicking outside
+  useEffect(() => {
+    if (!showNotifications) {
+      return;
+    }
+
+    const handleClickOutside = (event) => {
+      if (notificationWrapRef.current && !notificationWrapRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotifications]);
+
   useEffect(() => {
     let active = true;
 
@@ -98,9 +116,33 @@ function Header({ role, onMenuClick }) {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;
 
-    const directMatch = searchRoutes.find((entry) => {
-      return entry.keywords.some((keyword) => normalized.includes(keyword));
-    });
+    const directMatch = searchRoutes.reduce((bestMatch, entry, index) => {
+      const matchedKeyword = entry.keywords.find((keyword) => normalized.includes(keyword));
+      if (!matchedKeyword) {
+        return bestMatch;
+      }
+
+      const candidateScore = {
+        exact: normalized === matchedKeyword ? 2 : 1,
+        length: matchedKeyword.length,
+        index,
+      };
+
+      if (!bestMatch) {
+        return { entry, score: candidateScore };
+      }
+
+      const { score } = bestMatch;
+      if (candidateScore.exact !== score.exact) {
+        return candidateScore.exact > score.exact ? { entry, score: candidateScore } : bestMatch;
+      }
+
+      if (candidateScore.length !== score.length) {
+        return candidateScore.length > score.length ? { entry, score: candidateScore } : bestMatch;
+      }
+
+      return candidateScore.index < score.index ? { entry, score: candidateScore } : bestMatch;
+    }, null)?.entry;
     const targetPath = directMatch?.path || `${roleBasePath}/dashboard`;
     navigate(`${targetPath}?search=${encodeURIComponent(searchQuery.trim())}`);
   };
@@ -270,6 +312,7 @@ function getSearchRoutes(role) {
       { path: '/admin/leave-management', keywords: ['leave', 'vacation', 'absence'] },
       { path: '/admin/support', keywords: ['support', 'ticket', 'help'] },
       { path: '/admin/assets', keywords: ['asset', 'assets', 'inventory'] },
+      { path: '/admin/tasks', keywords: ['task', 'tasks', 'assignment'] },
       { path: '/admin/projects', keywords: ['project', 'projects', 'delivery'] },
       { path: '/admin/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
       { path: '/admin/profile', keywords: ['profile', 'account', 'me'] },
@@ -292,9 +335,9 @@ function getSearchRoutes(role) {
     ],
     teamLead: [
       { path: '/team-lead/dashboard', keywords: ['dashboard', 'overview', 'home'] },
-      { path: '/team-lead/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
-      { path: '/team-lead/team-attendance', keywords: ['team attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
-      { path: '/team-lead/my-attendance', keywords: ['my attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/team-lead/team-attendance', keywords: ['team attendance', 'team attendence', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/team-lead/attendance', keywords: ['my attendance', 'self attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/team-lead/team', keywords: ['my team', 'employee', 'employees', 'team member', 'team members', 'member', 'people'] },
       { path: '/team-lead/leave-review', keywords: ['leave', 'vacation', 'absence'] },
       { path: '/team-lead/tasks', keywords: ['task', 'tasks', 'assignment'] },
       { path: '/team-lead/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
@@ -320,6 +363,8 @@ function getSearchRoutes(role) {
       { path: '/employee/dashboard', keywords: ['dashboard', 'overview', 'home'] },
       { path: '/employee/leave-requests', keywords: ['leave', 'vacation', 'absence', 'request'] },
       { path: '/employee/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/employee/tasks', keywords: ['task', 'tasks', 'my task', 'my tasks', 'assignment'] },
+      { path: '/employee/assets', keywords: ['asset', 'assets', 'my asset', 'my assets', 'inventory'] },
       { path: '/employee/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
       { path: '/employee/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
       { path: '/employee/support', keywords: ['support', 'ticket', 'help'] },
@@ -403,7 +448,7 @@ function getNotificationTargetPath(notification, role, roleBasePath) {
 
   if (normalizedSourceType === 'task' || normalizedText.includes('task')) {
     return getRolePath(role, {
-      admin: '/admin/dashboard',
+      admin: '/admin/tasks',
       hr: '/hr/tasks',
       teamLead: '/team-lead/tasks',
       projectManager: '/project-manager/tasks',
