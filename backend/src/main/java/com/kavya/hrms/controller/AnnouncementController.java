@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/announcements")
-@SuppressWarnings("null")
 public class AnnouncementController {
   private final AnnouncementRepository announcementRepository;
   private final NotificationService notificationService;
@@ -71,11 +70,11 @@ public class AnnouncementController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<Announcement> bulkSave(@RequestBody List<Announcement> announcements) {
+    List<Announcement> safeAnnouncements = safeList(announcements);
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
-    List<Announcement> saved = announcementRepository.saveAll(announcements);
+    List<Announcement> saved = announcementRepository.saveAll(safeAnnouncements);
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.companyWideRecipients(),
@@ -96,8 +95,9 @@ public class AnnouncementController {
       @RequestBody Announcement announcement,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    announcement.setId(id);
-    Announcement saved = announcementRepository.save(announcement);
+    Announcement safeAnnouncement = announcement == null ? new Announcement() : announcement;
+    safeAnnouncement.setId(id);
+    Announcement saved = announcementRepository.save(safeAnnouncement);
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "Announcement updated",
@@ -115,7 +115,7 @@ public class AnnouncementController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String nonNullId = id;
+    String nonNullId = id == null ? "" : id;
     Announcement current = announcementRepository.findById(nonNullId).orElse(null);
     announcementRepository.deleteById(nonNullId);
     String title = "An announcement";
@@ -130,7 +130,7 @@ public class AnnouncementController {
         "Announcement removed",
         title + " was removed.",
         "announcement",
-        id,
+        nonNullId,
         accessRole,
         "System",
         userId);
@@ -141,6 +141,10 @@ public class AnnouncementController {
 
   private boolean equalsIgnoreCase(String left, String right) {
     return asString(left).equalsIgnoreCase(asString(right));
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 
   private List<Announcement> readAnnouncementsFromDocuments() {

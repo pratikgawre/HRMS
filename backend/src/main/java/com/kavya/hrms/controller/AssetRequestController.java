@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/asset-requests")
-@SuppressWarnings("null")
 public class AssetRequestController {
   private final AssetRequestRepository repository;
 
@@ -35,21 +34,23 @@ public class AssetRequestController {
 
   @PostMapping
   public AssetRequest create(@RequestBody AssetRequest request) {
-    request.setCreatedDate(ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu")));
-    if (request.getStatus() == null || request.getStatus().isBlank()) {
-      request.setStatus("Pending");
+    AssetRequest safeRequest = request == null ? new AssetRequest() : request;
+    safeRequest.setCreatedDate(ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu")));
+    if (safeRequest.getStatus() == null || safeRequest.getStatus().isBlank()) {
+      safeRequest.setStatus("Pending");
     }
-    return repository.save(request);
+    return repository.save(safeRequest);
   }
 
   @PatchMapping("/{id}/status")
-  @SuppressWarnings("null")
   public ResponseEntity<AssetRequest> updateStatus(@PathVariable String id, @RequestBody RequestStatusUpdate payload) {
-    return repository.findById(id)
+    String safeId = id == null ? "" : id;
+    RequestStatusUpdate safePayload = payload == null ? new RequestStatusUpdate() : payload;
+    return repository.findById(safeId)
         .map((request) -> {
-          request.setStatus(payload.getStatus());
-          request.setResolution(payload.getResolution());
-          request.setHandledBy(payload.getHandledBy());
+          request.setStatus(safePayload.getStatus());
+          request.setResolution(safePayload.getResolution());
+          request.setHandledBy(safePayload.getHandledBy());
           return ResponseEntity.ok(repository.save(request));
         })
         .orElse(ResponseEntity.notFound().build());

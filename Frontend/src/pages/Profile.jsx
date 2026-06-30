@@ -8,7 +8,7 @@ import { getCurrentEmployeeIdentity, getStoredEmployees, saveStoredEmployees, se
 import { getUsers, saveUsers, setUsersCache } from '../utils/user-management.js';
 import { normalizeAccessRole } from '../utils/role-access.js';
 import { getSessionValue, setSessionValue } from '../utils/appSession.js';
-import { safeApiRequest, deleteEmployee } from '../utils/api.js';
+import { safeApiRequest, deleteEmployee, uploadEmployeeProfilePhoto, removeEmployeeProfilePhoto } from '../utils/api.js';
 
 const fallbackEmployees = people.map((person) => ({
   ...person,
@@ -52,6 +52,20 @@ const PRESENT_TO_PERMANENT_ADDRESS_MAP = {
   presentPinCode: 'permanentPinCode',
   presentCountry: 'permanentCountry',
 };
+const MAX_PROFILE_PHOTO_SIZE_BYTES = 5 * 1024 * 1024;
+
+function sanitizePersistedProfilePicture(value) {
+  const normalizedValue = String(value || '').trim();
+  if (!normalizedValue) {
+    return '';
+  }
+
+  if (normalizedValue.startsWith('data:image/') || normalizedValue.startsWith('blob:')) {
+    return '';
+  }
+
+  return normalizedValue;
+}
 
 function Profile() {
   const navigate = useNavigate();
@@ -68,6 +82,8 @@ function Profile() {
     matchedEmployee
       ? {
           ...matchedEmployee,
+          profilePicture: matchedEmployee.profilePicture || currentAccessUser?.profilePicture || identity.profilePicture,
+          avatar: matchedEmployee.avatar || currentAccessUser?.avatar || identity.avatar,
           accessRole: matchedEmployee.accessRole || accessRole,
           twoFactorEnabled: currentAccessUser?.twoFactorEnabled ?? matchedEmployee.twoFactorEnabled ?? false,
           twoFactorSecret: currentAccessUser?.twoFactorSecret ?? matchedEmployee.twoFactorSecret ?? '',
@@ -94,6 +110,10 @@ function Profile() {
   const [statusMessage, setStatusMessage] = useState('Update your personal details, contact info, photo, and password here.');
   const [popup, setPopup] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPhotoSaving, setIsPhotoSaving] = useState(false);
+  const [isPhotoRemoving, setIsPhotoRemoving] = useState(false);
+  const [pendingPhotoFile, setPendingPhotoFile] = useState(null);
+  const [pendingPhotoPreview, setPendingPhotoPreview] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [twoFactorQr, setTwoFactorQr] = useState('');
@@ -101,6 +121,7 @@ function Profile() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [storedProfileSnapshot, setStoredProfileSnapshot] = useState(() => buildStoredProfileSnapshot(employee, form, canManagePackageAmount));
   const toastTimerRef = useRef(null);
+  const photoInputRef = useRef(null);
   const twoFactorIssuer = 'Kavya HRMS';
   const twoFactorAccount = employee.email || identity.email || '';
   const twoFactorOtpUri = useMemo(() => {
@@ -116,6 +137,8 @@ function Profile() {
 
   useEffect(() => {
     setForm(createProfileForm(employee));
+    setPendingPhotoFile(null);
+    setPendingPhotoPreview('');
   }, [employee]);
 
   useEffect(() => {
@@ -262,8 +285,8 @@ function Profile() {
     });
   };
 
-  const showPopup = (message, type = 'success') => {
-    setPopup({ message, type });
+  const showPopup = (message, type = 'success', title = '') => {
+    setPopup({ message, type, title });
     if (toastTimerRef.current) {
       window.clearTimeout(toastTimerRef.current);
     }
@@ -272,19 +295,140 @@ function Profile() {
     }, 2600);
   };
 
+  const clearPendingPhotoSelection = () => {
+    setPendingPhotoFile(null);
+    setPendingPhotoPreview('');
+    if (photoInputRef.current) {
+      photoInputRef.current.value = '';
+    }
+  };
+
   const handlePhotoUpload = (event) => {
     const file = event.target.files?.[0];
     if (!file) {
       return;
     }
 
+    const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    const lowerName = String(file.name || '').toLowerCase();
+    const hasAllowedExtension = ['.png', '.jpg', '.jpeg', '.webp'].some((extension) => lowerName.endsWith(extension));
+    if (!allowedMimeTypes.includes(String(file.type || '').toLowerCase()) && !hasAllowedExtension) {
+      const message = 'Only PNG, JPG, JPEG, and WEBP images are allowed.';
+      setStatusMessage(message);
+      showPopup(message, 'error');
+      clearPendingPhotoSelection();
+      return;
+    }
+
+    if (file.size > MAX_PROFILE_PHOTO_SIZE_BYTES) {
+      const message = 'Image size must be less than 5MB.';
+      setStatusMessage(message);
+      showPopup(message, 'error');
+      clearPendingPhotoSelection();
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
-      updateField('profilePicture', String(reader.result || ''));
-      updateField('avatar', getInitials(form.displayName || employee.displayName || employee.name));
-      setStatusMessage('Profile photo selected. Save changes to update your account.');
+      setPendingPhotoFile(file);
+      setPendingPhotoPreview(String(reader.result || ''));
+      setStatusMessage('Photo ready to upload');
     };
     reader.readAsDataURL(file);
+  };
+
+  const applyProfilePhotoUpdate = (nextProfilePicture) => {
+    const normalizedPicture = sanitizePersistedProfilePicture(nextProfilePicture);
+    const nextEmployee = normalizeProfileEmployee({
+      ...employee,
+      profilePicture: normalizedPicture,
+      avatar: employee.avatar || getInitials(employee.displayName || employee.name || identity.employee || 'User'),
+    });
+    const nextEmployees = upsertCurrentEmployee(employees, identity, nextEmployee);
+    const nextUsers = upsertCurrentUser(users, currentAccessUser, nextEmployee, '');
+
+    setEmployees(nextEmployees);
+    setUsers(nextUsers);
+    setEmployeesCache(nextEmployees);
+    setUsersCache(nextUsers);
+    upsertEmployeeLogin(nextEmployee, { persist: false });
+    setForm((current) => ({
+      ...current,
+      profilePicture: normalizedPicture,
+      avatar: nextEmployee.avatar,
+    }));
+    setStoredProfileSnapshot((current) => ({
+      ...current,
+      profilePicture: normalizedPicture,
+      avatar: nextEmployee.avatar,
+    }));
+    setSessionValue('kavyaEmployeeAvatar', nextEmployee.avatar || '');
+    setSessionValue('kavyaEmployeePhoto', normalizedPicture);
+    clearPendingPhotoSelection();
+  };
+
+  const handleSavePhoto = async () => {
+    if (!pendingPhotoFile || isPhotoSaving) {
+      return;
+    }
+
+    const employeeId = employee.employeeCode || employee.employeeId || employee.id;
+    if (!employeeId) {
+      const message = 'Employee ID not found for photo upload.';
+      setStatusMessage(message);
+      showPopup(message, 'error');
+      return;
+    }
+
+    setIsPhotoSaving(true);
+    try {
+      const response = await uploadEmployeeProfilePhoto(employeeId, pendingPhotoFile);
+      applyProfilePhotoUpdate(response?.profilePicture || '');
+      setStatusMessage('Profile photo updated successfully.');
+      showPopup('Profile photo updated successfully.', 'success');
+      refreshProfileData().catch(() => {});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to upload profile photo right now.';
+      setStatusMessage(message);
+      showPopup(message, 'error');
+    } finally {
+      setIsPhotoSaving(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    if (isPhotoRemoving) {
+      return;
+    }
+
+    if (pendingPhotoPreview && !form.profilePicture) {
+      clearPendingPhotoSelection();
+      setStatusMessage('No photo selected');
+      return;
+    }
+
+    const employeeId = employee.employeeCode || employee.employeeId || employee.id;
+    if (!employeeId) {
+      const message = 'Employee ID not found for photo removal.';
+      setStatusMessage(message);
+      showPopup(message, 'error');
+      return;
+    }
+
+    setIsPhotoRemoving(true);
+    try {
+      await removeEmployeeProfilePhoto(employeeId);
+      applyProfilePhotoUpdate('');
+      setStatusMessage('Profile photo removed successfully.');
+      showPopup('Profile photo removed successfully.', 'success', 'Removed');
+      refreshProfileData().catch(() => {});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to remove profile photo right now.';
+      setStatusMessage(message);
+      showPopup(message, 'error');
+    } finally {
+      setIsPhotoRemoving(false);
+    }
   };
 
   const refreshProfileData = async () => {
@@ -361,8 +505,8 @@ function Profile() {
       department: form.department.trim() || employee.department || getDepartmentForRole(accessRole),
       accessRole: employee.accessRole || accessRole,
       workingLocation: form.workingLocation.trim(),
-      profilePicture: form.profilePicture,
-      avatar: form.profilePicture ? employee.avatar : getInitials(form.displayName.trim()),
+      profilePicture: sanitizePersistedProfilePicture(form.profilePicture),
+      avatar: sanitizePersistedProfilePicture(form.profilePicture) ? employee.avatar : getInitials(form.displayName.trim()),
       bankName: form.bankName.trim(),
       accountType: form.accountType.trim(),
       accountNo: form.accountNo.trim(),
@@ -480,7 +624,7 @@ function Profile() {
               <i className={popup.type === 'success' ? 'ri-checkbox-circle-line' : popup.type === 'error' ? 'ri-close-circle-line' : 'ri-information-line'} aria-hidden="true" />
             </div>
             <div className="settings-modal-copy">
-              <strong>{popup.type === 'success' ? 'Saved' : popup.type === 'error' ? 'Save failed' : 'Info'}</strong>
+              <strong>{popup.title || (popup.type === 'success' ? 'Saved' : popup.type === 'error' ? 'Save failed' : 'Info')}</strong>
               <span>{popup.message}</span>
             </div>
             <button type="button" className="settings-modal-close" onClick={() => setPopup(null)} aria-label="Dismiss notification">
@@ -523,8 +667,8 @@ function Profile() {
       )}
 
       <section className="profile-hero-card">
-        {form.profilePicture ? (
-          <img className="profile-avatar large profile-photo" src={form.profilePicture} alt={`${form.displayName || employee.name} profile`} />
+        {pendingPhotoPreview || form.profilePicture ? (
+          <img className="profile-avatar large profile-photo" src={pendingPhotoPreview || form.profilePicture} alt={`${form.displayName || employee.name} profile`} />
         ) : (
           <div className="profile-avatar large">{form.avatar || employee.avatar}</div>
         )}
@@ -569,13 +713,25 @@ function Profile() {
           </div>
         </div>
         <div className="profile-contact-card">
-          <span>Photo Upload</span>
-          <strong>{form.profilePicture ? 'Photo selected' : 'No photo selected'}</strong>
-          <small>PNG, JPG, or WEBP works best.</small>
+          <span>Profile Photo</span>
+          <strong className="profile-photo-status">{pendingPhotoFile ? 'Photo ready to upload' : (form.profilePicture ? 'Photo selected' : 'No photo selected')}</strong>
+          <small className="profile-photo-guidance">Upload PNG, JPG, or WEBP image. Recommended size: 400x400 px.</small>
           <label className="profile-upload-button">
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePhotoUpload} />
+            <input ref={photoInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePhotoUpload} />
+            <i className="ri-upload-2-line" aria-hidden="true" />
             <span>Choose Photo</span>
           </label>
+          {pendingPhotoFile ? (
+            <p className="profile-upload-caption">{pendingPhotoFile.name}</p>
+          ) : null}
+          <div className="notification-actions profile-form-actions profile-photo-actions">
+            <button type="button" className="profile-photo-primary-btn" onClick={handleSavePhoto} disabled={!pendingPhotoFile || isPhotoSaving}>
+              {isPhotoSaving ? 'Uploading...' : 'Update Photo'}
+            </button>
+            <button type="button" className="profile-photo-secondary-btn" onClick={handleRemovePhoto} disabled={isPhotoRemoving || (!form.profilePicture && !pendingPhotoPreview)}>
+              {isPhotoRemoving ? 'Removing...' : 'Remove Photo'}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -790,8 +946,12 @@ function Profile() {
                 />
               </label>
               <label>
-                <span>Profile Photo URL</span>
-                <input value={form.profilePicture} onChange={(event) => updateField('profilePicture', event.target.value)} placeholder="Paste an image URL or upload a file" />
+                <span>Saved Photo Path</span>
+                <input
+                  value={sanitizePersistedProfilePicture(form.profilePicture)}
+                  placeholder="Profile photo is managed from the upload section above"
+                  readOnly
+                />
               </label>
               <label>
                 <span>Avatar Initials</span>
@@ -991,7 +1151,7 @@ function Profile() {
                 <div key={label}>
                   <dt>{label}</dt>
                   <dd
-                    className={label === 'Profile Photo URL' ? 'profile-url-value' : undefined}
+                    className={label === 'Profile Photo Path' ? 'profile-url-value' : undefined}
                     title={typeof value === 'string' ? value : undefined}
                   >
                     {value || '-'}
@@ -1052,7 +1212,7 @@ function createProfileForm(employee) {
       && presentState === permanentState
       && presentPinCode === permanentPinCode
       && presentCountry === permanentCountry,
-    profilePicture: employee.profilePicture || '',
+    profilePicture: sanitizePersistedProfilePicture(employee.profilePicture),
     avatar: employee.avatar || getInitials(employee.displayName || employee.name || ''),
     bloodGroup: employee.bloodGroup || '',
     maritalStatus: employee.maritalStatus || '',
@@ -1099,7 +1259,7 @@ function buildStoredProfileSnapshot(employee, form, canManagePackageAmount) {
     grade: String(form?.grade || employee.grade || '').trim(),
     email: String(form?.email || employee.email || '').trim(),
     mobileNo: String(form?.mobileNo || employee.mobileNo || employee.phone || '').trim(),
-    profilePicture: String(form?.profilePicture || employee.profilePicture || '').trim(),
+    profilePicture: sanitizePersistedProfilePicture(form?.profilePicture || employee.profilePicture || ''),
     avatar: String(form?.avatar || employee.avatar || getInitials(form?.displayName || employee.displayName || employee.name || '')).trim(),
     bloodGroup: String(form?.bloodGroup || employee.bloodGroup || '').trim(),
     maritalStatus: String(form?.maritalStatus || employee.maritalStatus || '').trim(),
@@ -1146,7 +1306,7 @@ function buildStoredProfileDetails(employee, canManagePackageAmount) {
     ['Grade', employee.grade],
     ['Email', employee.email],
     ['Mobile No.', employee.mobileNo],
-    ['Profile Photo URL', employee.profilePicture],
+    ['Profile Photo Path', employee.profilePicture],
     ['Avatar Initials', employee.avatar],
     ['Blood Group', employee.bloodGroup],
     ['Marital Status', employee.maritalStatus],

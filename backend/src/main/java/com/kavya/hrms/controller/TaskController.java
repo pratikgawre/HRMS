@@ -8,6 +8,7 @@ import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.TaskRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.util.ArrayList;
 import java.util.List;
 import java.time.OffsetDateTime;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/tasks")
-@SuppressWarnings("null")
 public class TaskController {
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
@@ -70,11 +70,12 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    hydrateTeamLeadFields(task);
-    if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
-      task.setCreatedDateTime(OffsetDateTime.now().toString());
+    TaskItem safeTask = task == null ? new TaskItem() : task;
+    hydrateTeamLeadFields(safeTask);
+    if (safeTask.getCreatedDateTime() == null || safeTask.getCreatedDateTime().isBlank()) {
+      safeTask.setCreatedDateTime(OffsetDateTime.now().toString());
     }
-    TaskItem saved = taskRepository.save(task);
+    TaskItem saved = taskRepository.save(safeTask);
     syncProjectAssignment(saved);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
@@ -89,14 +90,14 @@ public class TaskController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<TaskItem> bulkSave(
       @RequestBody List<TaskItem> tasks,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
-    List<TaskItem> saved = taskRepository.saveAll(tasks);
+    List<TaskItem> saved = taskRepository.saveAll(safeTasks);
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -117,9 +118,10 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    task.setId(id);
-    hydrateTeamLeadFields(task);
-    TaskItem saved = taskRepository.save(task);
+    TaskItem safeTask = task == null ? new TaskItem() : task;
+    safeTask.setId(id);
+    hydrateTeamLeadFields(safeTask);
+    TaskItem saved = taskRepository.save(safeTask);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Task updated",
@@ -133,19 +135,19 @@ public class TaskController {
   }
 
   @DeleteMapping("/{id}")
-  @SuppressWarnings("null")
   public void delete(
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem current = taskRepository.findById(id).orElse(null);
-    taskRepository.deleteById(id);
+    String nonNullId = id == null ? "" : id;
+    TaskItem current = taskRepository.findById(nonNullId).orElse(null);
+    taskRepository.deleteById(nonNullId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Task removed",
         buildTaskMessage(current, "removed"),
         "task",
-        id,
+        nonNullId,
         accessRole,
         "System",
         userId);
@@ -301,5 +303,9 @@ public class TaskController {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim().toLowerCase();
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

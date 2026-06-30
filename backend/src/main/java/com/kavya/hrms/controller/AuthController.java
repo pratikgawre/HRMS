@@ -25,7 +25,6 @@ import com.kavya.hrms.repository.AuthSessionRepository;
 
 @RestController
 @RequestMapping("/api/auth")
-@SuppressWarnings("null")
 public class AuthController {
   private final AppUserRepository appUserRepository;
   private final AuthSessionRepository authSessionRepository;
@@ -98,12 +97,17 @@ public class AuthController {
     response.setEmail(user.getEmail());
     response.setEmployeeId(user.getEmployeeId());
     response.setEmployeeName(user.getEmployeeName());
+    response.setAvatar(user.getAvatar());
+    response.setProfilePicture(user.getProfilePicture());
     response.setToken(token);
     response.setMessage("Login successful");
     return response;
   }
 
   private LoginResponse okResponse(AuthSession session) {
+    AppUser user = appUserRepository.findByUserId(session.getUserId())
+        .or(() -> appUserRepository.findByEmailIgnoreCase(session.getEmail()))
+        .orElse(null);
     LoginResponse response = new LoginResponse();
     response.setOk(true);
     response.setUserId(session.getUserId());
@@ -112,6 +116,8 @@ public class AuthController {
     response.setEmail(session.getEmail());
     response.setEmployeeId(session.getEmployeeId());
     response.setEmployeeName(session.getEmployeeName());
+    response.setAvatar(user == null ? "" : user.getAvatar());
+    response.setProfilePicture(user == null ? "" : user.getProfilePicture());
     response.setToken(session.getToken());
     response.setMessage("Session active");
     return response;

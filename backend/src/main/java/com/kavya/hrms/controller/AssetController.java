@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Locale;
 import java.util.logging.Logger;
@@ -27,7 +28,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/assets")
-@SuppressWarnings("null")
 public class AssetController {
   private static final Logger LOGGER = Logger.getLogger(AssetController.class.getName());
   private final AssetRepository assetRepository;
@@ -97,17 +97,17 @@ public class AssetController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public Asset create(
       @RequestBody Asset asset,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    LOGGER.info(() -> "[AssetController] create payload id=" + asset.getId()
-      + ", currentDate=" + asset.getCurrentDate()
-      + ", dueDate=" + asset.getDueDate()
-      + ", assignedToEmployeeId=" + asset.getAssignedToEmployeeId()
-      + ", assignedTo=" + asset.getAssignedTo());
-    Asset saved = assetRepository.save(normalizeAssetResponse(asset));
+    Asset safeAsset = Objects.requireNonNull(asset, "asset must not be null");
+    LOGGER.info(() -> "[AssetController] create payload id=" + safeAsset.getId()
+      + ", currentDate=" + safeAsset.getCurrentDate()
+      + ", dueDate=" + safeAsset.getDueDate()
+      + ", assignedToEmployeeId=" + safeAsset.getAssignedToEmployeeId()
+      + ", assignedTo=" + safeAsset.getAssignedTo());
+    Asset saved = assetRepository.save(Objects.requireNonNull(normalizeAssetResponse(safeAsset)));
     LOGGER.info(() -> "[AssetController] create saved id=" + saved.getId()
       + ", currentDate=" + saved.getCurrentDate()
       + ", dueDate=" + saved.getDueDate()
@@ -133,7 +133,11 @@ public class AssetController {
     List<Asset> safeAssets = assets == null ? List.of() : assets;
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
-    List<Asset> saved = assetRepository.saveAll(assets.stream().map(this::normalizeAssetResponse).toList());
+    List<Asset> normalizedAssets = safeAssets.stream()
+        .map(this::normalizeAssetResponse)
+        .filter(Objects::nonNull)
+        .toList();
+    List<Asset> saved = assetRepository.saveAll(Objects.requireNonNull(normalizedAssets));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -149,20 +153,21 @@ public class AssetController {
   }
 
   @PutMapping("/{id}")
-  @SuppressWarnings("null")
   public Asset update(
       @PathVariable String id,
       @RequestBody Asset asset,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    asset.setId(id);
+    String safeId = Objects.requireNonNull(id, "asset id must not be null");
+    Asset safeAsset = Objects.requireNonNull(asset, "asset must not be null");
+    safeAsset.setId(safeId);
     LOGGER.info(() -> "[AssetController] update payload id=" + id
-      + ", currentDate=" + asset.getCurrentDate()
-      + ", dueDate=" + asset.getDueDate()
-      + ", assignedToEmployeeId=" + asset.getAssignedToEmployeeId()
-      + ", assignedTo=" + asset.getAssignedTo()
-      + ", status=" + asset.getStatus());
-    Asset saved = assetRepository.save(normalizeAssetResponse(asset));
+      + ", currentDate=" + safeAsset.getCurrentDate()
+      + ", dueDate=" + safeAsset.getDueDate()
+      + ", assignedToEmployeeId=" + safeAsset.getAssignedToEmployeeId()
+      + ", assignedTo=" + safeAsset.getAssignedTo()
+      + ", status=" + safeAsset.getStatus());
+    Asset saved = assetRepository.save(Objects.requireNonNull(normalizeAssetResponse(safeAsset)));
     LOGGER.info(() -> "[AssetController] update saved id=" + saved.getId()
       + ", currentDate=" + saved.getCurrentDate()
       + ", dueDate=" + saved.getDueDate()
@@ -182,19 +187,19 @@ public class AssetController {
   }
 
   @DeleteMapping("/{id}")
-  @SuppressWarnings("null")
   public void delete(
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Asset current = assetRepository.findById(id).orElse(null);
-    assetRepository.deleteById(id);
+    String safeId = Objects.requireNonNull(id, "asset id must not be null");
+    Asset current = assetRepository.findById(safeId).orElse(null);
+    assetRepository.deleteById(safeId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset removed",
         buildAssetMessage(current, "removed"),
         "asset",
-        id,
+        safeId,
         accessRole,
         "System",
         userId);

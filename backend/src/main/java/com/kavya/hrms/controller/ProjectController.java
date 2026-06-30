@@ -4,6 +4,7 @@ import com.kavya.hrms.model.Project;
 import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/projects")
-@SuppressWarnings("null")
 public class ProjectController {
   private final ProjectRepository projectRepository;
   private final NotificationService notificationService;
@@ -54,12 +54,11 @@ public class ProjectController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public Project create(
       @RequestBody Project project,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Project saved = projectRepository.save(project);
+    Project saved = projectRepository.save(project == null ? new Project() : project);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Project created",
@@ -77,10 +76,9 @@ public class ProjectController {
       @RequestBody List<Project> projects,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    List<Project> safeProjects = projects == null ? List.of() : projects;
+    List<Project> safeProjects = safeList(projects);
     long existingCount = projectRepository.count();
     projectRepository.deleteAll();
-    @SuppressWarnings("null")
     List<Project> saved = projectRepository.saveAll(safeProjects);
     if (existingCount > 0) {
       notificationService.notifyRoles(
@@ -102,8 +100,9 @@ public class ProjectController {
       @RequestBody Project project,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    project.setId(id);
-    Project saved = projectRepository.save(project);
+    Project safeProject = project == null ? new Project() : project;
+    safeProject.setId(id);
+    Project saved = projectRepository.save(safeProject);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Project updated",
@@ -117,19 +116,19 @@ public class ProjectController {
   }
 
   @DeleteMapping("/{id}")
-  @SuppressWarnings("null")
   public void delete(
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Project current = projectRepository.findById(id).orElse(null);
-    projectRepository.deleteById(id);
+    String nonNullId = id == null ? "" : id;
+    Project current = projectRepository.findById(nonNullId).orElse(null);
+    projectRepository.deleteById(nonNullId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Project removed",
         buildProjectMessage(current, "removed"),
         "project",
-        id,
+        nonNullId,
         accessRole,
         "System",
         userId);
@@ -194,5 +193,9 @@ public class ProjectController {
 
   private String normalize(String value) {
     return String.valueOf(value == null ? "" : value).trim().toLowerCase(Locale.ROOT);
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }
