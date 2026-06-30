@@ -16,8 +16,8 @@ public class AuthSession {
   private String lastLogin;
   private String createdAt;
   private String lastSeenAt;
-
-  public String getToken() { return token; }
+  private Boolean mustChangePassword;
+public String getToken() { return token; }
   public void setToken(String token) { this.token = token; }
   public String getUserId() { return userId; }
   public void setUserId(String userId) { this.userId = userId; }
@@ -37,4 +37,6 @@ public class AuthSession {
   public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
   public String getLastSeenAt() { return lastSeenAt; }
   public void setLastSeenAt(String lastSeenAt) { this.lastSeenAt = lastSeenAt; }
+  public Boolean getMustChangePassword() { return mustChangePassword; }
+  public void setMustChangePassword(Boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
 }

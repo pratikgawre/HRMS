@@ -8,6 +8,7 @@ import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.TaskRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.time.OffsetDateTime;
@@ -102,15 +103,15 @@ public class TaskController {
     taskRepository.deleteAll();
     List<TaskItem> saved = taskRepository.saveAll(safeTasks);
     if (existingCount > 0) {
-      notificationService.notifyRoles(
-          NotificationAudience.operationalRecipients(accessRole),
+      notificationService.notifyRolesExcept(
+          NotificationAudience.taskStatusRecipients(),
+          excludedIds(userId),
           "Tasks refreshed",
           "Task board was updated in bulk.",
           "task",
           "bulk",
           accessRole,
-          "System",
-          userId);
+          "System");
     }
     return saved;
   }
@@ -121,6 +122,7 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    TaskItem previous = taskRepository.findById(id).orElse(null);
     task.setId(id);
     TaskItem existing = taskRepository.findById(id).orElse(null);
     if ((task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) && existing != null) {
@@ -163,6 +165,69 @@ public class TaskController {
     String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
     String owner = task != null && task.getOwner() != null ? task.getOwner() : "team";
     return title + " was " + action + " for " + owner + ".";
+  }
+
+  private String buildTaskStatusMessage(TaskItem task, TaskItem previous) {
+    String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
+    String nextStatus = task != null && task.getStatus() != null ? task.getStatus() : "updated";
+    String previousStatus = previous != null && previous.getStatus() != null ? previous.getStatus() : "previous status";
+    return title + " status changed from " + previousStatus + " to " + nextStatus + ".";
+  }
+
+  private boolean hasStatusChanged(TaskItem task, TaskItem previous) {
+    if (task == null || previous == null) {
+      return false;
+    }
+    return !normalize(task.getStatus()).equals(normalize(previous.getStatus()));
+  }
+
+  private boolean hasAssigneeChanged(TaskItem task, TaskItem previous) {
+    if (task == null || previous == null) {
+      return false;
+    }
+    return !normalize(firstNonBlank(task.getAssignedToId(), task.getAssignedToName(), task.getAssignedTo(), task.getOwner()))
+        .equals(normalize(firstNonBlank(previous.getAssignedToId(), previous.getAssignedToName(), previous.getAssignedTo(), previous.getOwner())));
+  }
+
+  private List<String> taskRecipientIdentities(TaskItem task) {
+    List<String> identities = new ArrayList<>();
+    if (task == null) {
+      return identities;
+    }
+    addIdentity(identities, task.getAssignedToId());
+    addIdentity(identities, task.getAssignedToName());
+    addIdentity(identities, task.getAssignedTo());
+    addIdentity(identities, task.getOwner());
+    return identities;
+  }
+
+  private List<String> taskManagerIdentities(TaskItem task) {
+    List<String> identities = new ArrayList<>();
+    if (task == null) {
+      return identities;
+    }
+    addIdentity(identities, task.getAssignedById());
+    addIdentity(identities, task.getAssignedByName());
+    addIdentity(identities, task.getAssignedBy());
+    addIdentity(identities, task.getTeamLeadId());
+    return identities;
+  }
+
+  private List<String> excludedIds(String... values) {
+    List<String> ids = new ArrayList<>();
+    if (values == null) {
+      return ids;
+    }
+    for (String value : values) {
+      addIdentity(ids, value);
+    }
+    return ids;
+  }
+
+  private void addIdentity(List<String> identities, String value) {
+    if (value != null && !value.isBlank()) {
+      identities.add(value.trim());
+    }
   }
 
   private void hydrateTeamLeadFields(TaskItem task) {

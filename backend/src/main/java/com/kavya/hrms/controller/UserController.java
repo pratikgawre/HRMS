@@ -7,8 +7,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import org.springframework.lang.Nullable;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +27,18 @@ public class UserController {
   @GetMapping
   public List<AppUser> list() {
     return new ArrayList<>(appUserRepository.findAll());
+  }
+
+  @DeleteMapping("/{userId}")
+  public void delete(@PathVariable String userId) {
+    if (userId == null || userId.isBlank()) {
+      return;
+    }
+
+    appUserRepository.findById(userId)
+        .or(() -> appUserRepository.findByUserId(userId))
+        .or(() -> appUserRepository.findByEmailIgnoreCase(userId))
+        .ifPresent(appUserRepository::delete);
   }
 
   @PostMapping("/bulk")
@@ -83,7 +96,8 @@ public class UserController {
     normalized.setProfilePicture(trimToNull(user.getProfilePicture()));
     normalized.setStatus(user.getStatus());
     normalized.setLastLogin(user.getLastLogin());
-    return normalized;
+    normalized.setMustChangePassword(user.getMustChangePassword());
+return normalized;
   }
 
   private AppUser mergeUsers(AppUser current, AppUser next) {
@@ -104,7 +118,8 @@ public class UserController {
     merged.setProfilePicture(firstNonBlank(current.getProfilePicture(), next.getProfilePicture()));
     merged.setStatus(firstNonBlank(current.getStatus(), next.getStatus()));
     merged.setLastLogin(firstNonBlank(current.getLastLogin(), next.getLastLogin()));
-    return merged;
+    merged.setMustChangePassword(Boolean.TRUE.equals(current.getMustChangePassword()) || Boolean.TRUE.equals(next.getMustChangePassword()));
+return merged;
   }
 
   @Nullable
