@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+﻿import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { authenticateUser, startSession } from '../utils/auth.js';
 
 function Login() {
@@ -98,7 +98,7 @@ function Login() {
             </label>
             {error && <p className="login-error" role="alert">{error}</p>}
             <button className="primary-btn" type="submit">Login</button>
-            <a className="login-link" href="#/login">Forgot Password?</a>
+            <Link className="login-link" to="/forgot-password">Forgot Password?</Link>
           </form>
         </div>
       </section>

@@ -88,25 +88,30 @@ function Header({ role, onMenuClick }) {
   }, [role, userId]);
 
   useEffect(() => {
-    const handleOutsideClick = (event) => {
-      if (!showNotifications) {
-        return;
-      }
+    if (!showNotifications) {
+      return undefined;
+    }
 
+    const handleNotificationPointerDown = (event) => {
       if (notificationWrapRef.current && !notificationWrapRef.current.contains(event.target)) {
         setShowNotifications(false);
       }
     };
 
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('touchstart', handleOutsideClick);
+    const handleNotificationKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handleNotificationPointerDown);
+    document.addEventListener('keydown', handleNotificationKeyDown);
 
     return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('touchstart', handleOutsideClick);
+      document.removeEventListener('pointerdown', handleNotificationPointerDown);
+      document.removeEventListener('keydown', handleNotificationKeyDown);
     };
   }, [showNotifications]);
-
   const runSearch = () => {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;

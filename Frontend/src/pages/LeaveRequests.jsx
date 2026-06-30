@@ -19,9 +19,10 @@ const rejectActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/200
 
 function LeaveRequests() {
   const role = getSessionValue('kavyaRole') || 'employee';
+  const isAdminOrHr = role === 'admin' || role === 'hr';
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
-  const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
+  const canReviewRequests = isAdminOrHr || role === 'teamLead' || role === 'projectManager';
   const [requests, setRequests] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
@@ -60,7 +61,7 @@ function LeaveRequests() {
       return teamLeadMemberIds.includes(request.employeeId);
     }
 
-    if (role === 'admin' || role === 'hr') {
+    if (isAdminOrHr) {
       return true;
     }
 
@@ -163,12 +164,7 @@ function LeaveRequests() {
   }, []);
 
   const columns = [
-    { key: 'employee', label: 'Employee' },
-    { key: 'type', label: 'Type' },
-    { key: 'days', label: 'Days' },
-    { key: 'from', label: 'From Date' },
-    { key: 'to', label: 'To Date' },
-    { key: 'status', label: 'Status' },
+    ...leaveColumns,
     ...(isAdminOrHr ? [{
       key: 'ownerRole',
       label: 'Requested By',
@@ -998,5 +994,6 @@ function getLeaveBalanceTone(name) {
 }
 
 export default LeaveRequests;
+
 
 

@@ -532,13 +532,13 @@ function Employees() {
         const next = current.map((employee) => (
           employee.id === editingEmployee.id ? { ...employee, ...payload } : employee
         ));
-        saveStoredEmployees(next);
-        upsertEmployeeLogin(payload);
+        saveStoredEmployees(next, { sendCredentialUpdates: true, credentialUpdateEmployeeId: payload.employeeCode || payload.id });
+        upsertEmployeeLogin(payload, { forceCredentialReset: true });
         return next;
       });
       setSelectedEmployee((current) => (current?.id === editingEmployee.id ? { ...current, ...payload } : current));
       setCredentialNotice(getEmployeeCredentialNotice(payload));
-      setMessage('Employee details updated successfully. Login credentials are active.');
+      setMessage('Employee details updated successfully. New login credentials were sent to the employee email.');
     } else {
       const newEmployee = {
         id: payload.employeeCode,
@@ -680,7 +680,7 @@ function EmployeeCredentialNotice({ credentials }) {
       <div>
         <p className="eyebrow">Login Credentials</p>
         <h3>{credentials.employeeName}</h3>
-        <span>Employee account is ready for login.</span>
+        <span>Credentials will be sent to {credentials.notificationEmail || 'the email on file'}.</span>
       </div>
       <dl>
         <div>
@@ -700,6 +700,10 @@ function EmployeeCredentialNotice({ credentials }) {
         <div>
           <dt>Employee ID</dt>
           <dd>{credentials.employeeId}</dd>
+        </div>
+        <div>
+          <dt>Sent To</dt>
+          <dd>{credentials.notificationEmail || '-'}</dd>
         </div>
         <div>
           <dt>Access Role</dt>
@@ -1323,25 +1327,35 @@ function normalizeEmployee(form) {
 }
 
 function getEmployeeCredentialNotice(employee) {
-  // Generate username: firstName.lastName@kavyainfoweb.com or just firstName@kavyainfoweb.com
-  const firstName = (employee.firstName || 'employee').toLowerCase().trim();
-  const lastName = (employee.lastName || '').toLowerCase().trim();
-  const username = lastName ? `${firstName}.${lastName}` : firstName;
-  const loginId = `${username}@kavyainfoweb.com`;
-  
-  // Generate password: FirstLetterCapital + restLowercase@123
+  const loginId = String(employee.generatedUsername || '').trim().toLowerCase() || buildEmployeeLoginEmail(employee);
   const passwordBase = (employee.firstName || 'Employee').toLowerCase();
   const password = passwordBase.charAt(0).toUpperCase() + passwordBase.slice(1) + '@123';
-  
+
   return {
     employeeName: employee.displayName || employee.name,
     employeeId: employee.employeeCode || employee.id,
-    loginId: loginId,
+    loginId: loginId || `${(employee.firstName || 'employee').toLowerCase().trim()}@kavyainfoweb.com`,
+    notificationEmail: String(employee.email || '').trim().toLowerCase(),
     password: password,
     accessRole: normalizeAccessRole(employee.accessRole),
   };
 }
 
+function buildEmployeeLoginEmail(employee) {
+  const firstName = String(employee?.firstName || '').trim().toLowerCase().replace(/\s+/g, '');
+  const lastName = String(employee?.lastName || '').trim().toLowerCase().replace(/\s+/g, '');
+
+  if (firstName && lastName) {
+    return `${firstName}.${lastName}@kavyainfoweb.com`;
+  }
+
+  if (firstName) {
+    return `${firstName}@kavyainfoweb.com`;
+  }
+
+  const fallbackEmail = String(employee?.email || '').trim().toLowerCase();
+  return fallbackEmail.includes('@') ? fallbackEmail : '';
+}
 function serializeEmployeeDocument(documentValue) {
   if (!documentValue) {
     return '';
@@ -1813,4 +1827,3 @@ function getEmployeeDocumentLabel(documentValue) {
 }
 
 export default Employees;
-

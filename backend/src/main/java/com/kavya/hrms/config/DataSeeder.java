@@ -230,7 +230,10 @@ public class DataSeeder {
     user.setStatus("Active");
     user.setTwoFactorEnabled(false);
     user.setTwoFactorSecret("");
-    if (user.getUserId() == null || user.getUserId().isEmpty()) {
+    user.setPasswordResetToken(null);
+    user.setPasswordResetTokenExpiresAt(null);
+    user.setMustChangePassword(false);
+if (user.getUserId() == null || user.getUserId().isEmpty()) {
       user.setUserId("USR-" + employeeId);
     }
     appUserRepository.save(Objects.requireNonNull(user));
