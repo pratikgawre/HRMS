@@ -57,7 +57,7 @@ public class SupportController {
     StatusUpdateRequest safeRequest = request == null ? new StatusUpdateRequest() : request;
     return repository.findById(safeId)
         .map((ticket) -> {
-          ticket.setStatus(Objects.requireNonNull(request.getStatus(), "status must not be null"));
+          ticket.setStatus(Objects.requireNonNull(safeRequest.getStatus(), "status must not be null"));
           return ResponseEntity.ok(repository.save(ticket));
         })
         .orElse(ResponseEntity.notFound().build());

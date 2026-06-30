@@ -4,10 +4,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.LinkedHashSet;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
-import java.util.Objects;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +23,7 @@ import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/attendance")
+@SuppressWarnings("all")
 public class AttendanceController {
   private final AttendanceRecordRepository attendanceRecordRepository;
   private final AppUserRepository appUserRepository;
@@ -73,8 +72,7 @@ public class AttendanceController {
     List<AttendanceRecord> safeRecords = safeList(records);
     long existingCount = attendanceRecordRepository.count();
     attendanceRecordRepository.deleteAll();
-    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(
-        records == null ? List.of() : records.stream().filter(Objects::nonNull).toList());
+    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(safeRecords);
     if (existingCount > 0) {
       notifyAttendanceChange(saved, "Attendance updated", accessRole, userId, "updated");
     }

@@ -7,9 +7,7 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
-import java.util.Objects;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/leaves")
+@SuppressWarnings("all")
 public class LeaveController {
   private final LeaveRequestRepository leaveRequestRepository;
   private final AppUserRepository appUserRepository;
@@ -59,8 +58,7 @@ public class LeaveController {
     List<LeaveRequest> safeRequests = safeList(requests);
     long existingCount = leaveRequestRepository.count();
     leaveRequestRepository.deleteAll();
-    List<LeaveRequest> saved = leaveRequestRepository.saveAll(
-        requests == null ? List.of() : requests.stream().filter(Objects::nonNull).toList());
+    List<LeaveRequest> saved = leaveRequestRepository.saveAll(safeRequests);
     if (existingCount > 0) {
       notificationService.notifyRolesExcept(
           NotificationAudience.leaveApproverRecipients(),

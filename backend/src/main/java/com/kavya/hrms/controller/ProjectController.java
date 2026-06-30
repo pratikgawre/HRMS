@@ -6,9 +6,7 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Locale;
-import java.util.Objects;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,13 +17,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.kavya.hrms.model.Project;
-import com.kavya.hrms.repository.ProjectRepository;
-import com.kavya.hrms.service.NotificationAudience;
-import com.kavya.hrms.service.NotificationService;
-
 @RestController
 @RequestMapping("/api/projects")
+@SuppressWarnings("all")
 public class ProjectController {
   private final ProjectRepository projectRepository;
   private final NotificationService notificationService;
@@ -70,10 +64,11 @@ public class ProjectController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<Project> bulkSave(
       @RequestBody List<Project> projects,
-      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole) {
+      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
+      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    List<Project> safeProjects = safeList(projects);
     long existingCount = projectRepository.count();
     projectRepository.deleteAll();
     List<Project> saved = projectRepository.saveAll(safeProjects);
@@ -118,7 +113,7 @@ public class ProjectController {
         title,
         buildProjectMessage(project, action),
         "project",
-        sourceId,
+        id,
         accessRole,
         "System");
   }

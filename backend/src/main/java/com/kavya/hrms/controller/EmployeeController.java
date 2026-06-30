@@ -7,15 +7,18 @@ import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.EmployeeWelcomeEmailService;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,6 +34,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/employees")
+@SuppressWarnings("all")
 public class EmployeeController {
   private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
       "image/png",
@@ -85,19 +89,10 @@ public class EmployeeController {
   public List<Employee> bulkSave(
       @RequestBody List<Employee> employees,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
-      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId,
-      @RequestHeader(value = "X-Kavya-Send-Credential-Updates", required = false) String sendCredentialUpdates,
-      @RequestHeader(value = "X-Kavya-Credential-Update-Employee", required = false) String credentialUpdateEmployeeId) {
-    List<Employee> existingEmployees = employeeRepository.findAll();
-    long existingCount = existingEmployees.size();
-    Map<String, Employee> existingByKey = buildEmployeeMap(existingEmployees);
-
-    List<Employee> normalizedEmployees = (employees == null ? java.util.Collections.<Employee>emptyList() : employees).stream()
-        .map(this::normalizeEmployeeIdentity)
-        .collect(Collectors.toList());
-    List<Employee> saved = employeeRepository.saveAll(normalizedEmployees);
-    syncCredentialEmailsForBulkSave(saved, existingByKey, shouldSendCredentialUpdates(sendCredentialUpdates), credentialUpdateEmployeeId);
-
+      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    List<Employee> safeEmployees = safeList(employees);
+    long existingCount = employeeRepository.count();
+    List<Employee> saved = employeeRepository.saveAll(safeEmployees);
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),

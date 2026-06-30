@@ -455,7 +455,6 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
     <>
       <Hero title="Payroll Management" copy="Manage employee salary records, generate payslips, and track paid or unpaid payroll status." />
 
-      <Section title="Payslip Filter" action={role === 'teamLead' ? '' : 'Employee'}>
       {role === 'hr' && (
         <>
       <Section

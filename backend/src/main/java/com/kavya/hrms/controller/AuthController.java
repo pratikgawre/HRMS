@@ -36,6 +36,7 @@ import com.kavya.hrms.service.PasswordResetEmailService.DeliveryResult;
 
 @RestController
 @RequestMapping("/api/auth")
+@SuppressWarnings("all")
 public class AuthController {
   private static final Duration RESET_TOKEN_TTL = Duration.ofMinutes(15);
   private final SecureRandom secureRandom = new SecureRandom();

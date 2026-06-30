@@ -15,7 +15,6 @@ import {
   getProjectAssigneeOptions,
   getSelectableTeamLeadProjects,
 } from '../utils/teamLeadAssignments.js';
-import { taskColumns } from './taskColumns.js';
 
 export const taskColumns = [
   { key: 'id', label: 'Task ID' },
@@ -347,58 +346,6 @@ function Tasks() {
     {
       key: 'owner',
       label: 'Assign',
-      render: (row) => row.assignedToName || row.owner || '-',
-    },
-    {
-      key: 'title',
-      label: 'Module',
-      render: (row) => row.title || '-',
-    },
-   {
-  key: 'status',
-  label: 'Status',
-  render: (row) => {
-    const status = (row.status || 'Pending').toLowerCase();
-
-    const colors = {
-      pending: {
-        background: 'rgba(255,193,7,0.15)',
-        color: '#d88a12',
-      },
-      completed: {
-        background: 'rgba(47,116,208,0.12)',
-        color: '#2f74d0',
-      },
-      active: {
-        background: 'rgba(31,166,122,0.12)',
-        color: '#1fa67a',
-      },
-      approved: {
-        background: 'rgba(31,166,122,0.12)',
-        color: '#1fa67a',
-      },
-    };
-
-    const style = colors[status] || colors.pending;
-
-    return (
-      <span
-        style={{
-          padding: '0.18rem 0.6rem',
-          borderRadius: 999,
-          fontWeight: 800,
-          fontSize: '0.86rem',
-          ...style,
-        }}
-      >
-        {row.status || 'Pending'}
-      </span>
-    );
-  },
-},
-    {
-      key: 'owner',
-      label: 'Assign',
       render: (row) => (
         <div className="employee-cell">
           <span>{getInitials(row.owner)}</span>
@@ -451,7 +398,6 @@ function Tasks() {
       ),
     },
   ];
-
   const createTask = async (event) => {
     event.preventDefault();
     const isEditing = Boolean(editingTask);
@@ -1067,6 +1013,10 @@ function EmployeeTasksView() {
 function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
   const teamLeadMode = Boolean(isTeamLead);
   const isEditMode = mode === 'edit';
+  const handleSubmit = (event) => {
+    event?.preventDefault?.();
+    onSubmit?.(event);
+  };
 
   const updateProject = (nextProjectId) => {
     setForm((current) => {
@@ -1087,7 +1037,7 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
           <button type="button" onClick={onClose} aria-label="Close task modal"><i className="ri-close-line" aria-hidden="true" /></button>
         </div>
 
-        <form className="salary-form" onSubmit={onSubmit}>
+        <form className="salary-form" onSubmit={handleSubmit}>
           {teamLeadMode ? (
             <>
               <label className="field">

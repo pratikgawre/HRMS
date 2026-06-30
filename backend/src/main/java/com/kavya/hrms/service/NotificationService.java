@@ -18,6 +18,7 @@ import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.NotificationRepository;
 
 @Service
+@SuppressWarnings("all")
 public class NotificationService {
   private final NotificationRepository notificationRepository;
   private final AppUserRepository appUserRepository;

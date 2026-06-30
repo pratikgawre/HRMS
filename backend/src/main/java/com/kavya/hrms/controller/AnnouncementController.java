@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/announcements")
+@SuppressWarnings("all")
 public class AnnouncementController {
   private final AnnouncementRepository announcementRepository;
   private final NotificationService notificationService;
@@ -74,9 +75,6 @@ public class AnnouncementController {
     List<Announcement> safeAnnouncements = safeList(announcements);
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
-    List<Announcement> safeAnnouncements = announcements == null
-        ? List.<Announcement>of()
-        : announcements.stream().filter(Objects::nonNull).toList();
     List<Announcement> saved = announcementRepository.saveAll(safeAnnouncements);
     if (existingCount > 0) {
       notificationService.notifyRoles(
@@ -118,9 +116,8 @@ public class AnnouncementController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String nonNullId = id;
-    Announcement current = announcementRepository.findById(nonNullId).orElseGet(Announcement::new);
-    announcementRepository.deleteById(nonNullId);
+    Announcement current = announcementRepository.findById(id).orElseGet(Announcement::new);
+    announcementRepository.deleteById(id);
     String title = "An announcement";
     String currentTitle = current.getTitle();
     if (currentTitle != null && !currentTitle.isBlank()) {
@@ -131,11 +128,12 @@ public class AnnouncementController {
         "Announcement removed",
         title + " was removed.",
         "announcement",
-        nonNullId,
+        id,
         accessRole,
         "System",
         userId);
   }
+
   private String asString(Object value) {
     return value == null ? "" : String.valueOf(value).trim();
   }

@@ -590,6 +590,11 @@ function getReportingManager(employee) {
   };
   return employee.reportingManager || fallback[employee.accessRole || 'Employee'] || 'HR';
 }
+
+function getInitialsFromName(name) {
+  return String(name || '').split(' ').filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'TM';
+}
+
 function isAdminEmployee(employee) {
   const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase();
   const email = String(employee.email || '').trim().toLowerCase();
