@@ -31,7 +31,7 @@ public class UserController {
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
     List<AppUser> safeUsers = safeList(users);
-    List<AppUser> deduplicatedUsers = new ArrayList<>(deduplicateUsers(safeUsers));
+    List<AppUser> deduplicatedUsers = new ArrayList<>(dedupeUsers(safeUsers));
     return appUserRepository.saveAll(deduplicatedUsers);
   }
 

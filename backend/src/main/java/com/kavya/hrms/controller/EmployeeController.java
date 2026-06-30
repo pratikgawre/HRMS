@@ -6,9 +6,18 @@ import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +34,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/employees")
+@SuppressWarnings("all")
 public class EmployeeController {
   private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
       "image/png",
@@ -76,9 +86,6 @@ public class EmployeeController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     List<Employee> safeEmployees = safeList(employees);
     long existingCount = employeeRepository.count();
-    List<Employee> safeEmployees = employees == null
-        ? List.<Employee>of()
-        : employees.stream().filter(Objects::nonNull).toList();
     List<Employee> saved = employeeRepository.saveAll(safeEmployees);
     if (existingCount > 0) {
       notificationService.notifyRoles(

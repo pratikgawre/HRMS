@@ -34,9 +34,6 @@ public class Asset {
   @Transient
   private String employeeName;
 
-  @Transient
-  private String assignedDate;
-
   private String condition;
   private String location;
 
@@ -76,9 +73,6 @@ public class Asset {
 
   public String getEmployeeName() { return employeeName; }
   public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
-
-  public String getAssignedDate() { return assignedDate; }
-  public void setAssignedDate(String assignedDate) { this.assignedDate = assignedDate; }
 
   public String getCondition() { return condition; }
   public void setCondition(String condition) { this.condition = condition; }

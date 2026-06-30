@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.logging.Logger;
 import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -31,6 +30,7 @@ import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/assets")
+@SuppressWarnings("all")
 public class AssetController {
   private static final Logger LOGGER = Logger.getLogger(AssetController.class.getName());
   private final AssetRepository assetRepository;
@@ -197,7 +197,7 @@ public class AssetController {
         "Asset removed",
         buildAssetMessage(current, "removed"),
         "asset",
-        safeId,
+        id,
         accessRole,
         "System",
         userId);

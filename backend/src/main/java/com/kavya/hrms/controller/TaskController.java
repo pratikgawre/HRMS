@@ -10,9 +10,12 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.time.OffsetDateTime;
-import java.util.Objects;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.http.HttpStatus;
 import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,8 +31,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/tasks")
+@SuppressWarnings("all")
 public class TaskController {
-  private static final Logger log = LoggerFactory.getLogger(TaskController.class);
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
   private final EmployeeRepository employeeRepository;
@@ -55,22 +58,22 @@ public class TaskController {
   }
 
   @GetMapping("/assigned-to/{assignedToId}")
-  public List<TaskItem> listByAssignee(@PathVariable String assignedToId) {
+  public List<TaskItem> listByAssignee(@PathVariable("assignedToId") String assignedToId) {
     return taskRepository.findByAssignedToId(assignedToId);
   }
 
   @GetMapping("/assigned-by/{assignedById}")
-  public List<TaskItem> listByAssignedBy(@PathVariable String assignedById) {
+  public List<TaskItem> listByAssignedBy(@PathVariable("assignedById") String assignedById) {
     return taskRepository.findByAssignedById(assignedById);
   }
 
   @GetMapping("/owner/{owner}")
-  public List<TaskItem> listByOwner(@PathVariable String owner) {
+  public List<TaskItem> listByOwner(@PathVariable("owner") String owner) {
     return taskRepository.findByOwnerIgnoreCase(owner);
   }
 
   @GetMapping("/assignee-name/{assignedToName}")
-  public List<TaskItem> listByAssigneeName(@PathVariable String assignedToName) {
+  public List<TaskItem> listByAssigneeName(@PathVariable("assignedToName") String assignedToName) {
     return taskRepository.findByAssignedToNameIgnoreCase(assignedToName);
   }
 
@@ -85,15 +88,7 @@ public class TaskController {
       task.setCreatedDateTime(OffsetDateTime.now().toString());
     }
     TaskItem saved = taskRepository.save(task);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task created",
-        buildTaskMessage(saved, "created"),
-        "task",
-        saved.getId(),
-        accessRole,
-        "System",
-        userId);
+    notifyTaskChangeSafely(saved, "Task created", "created", accessRole, userId);
     return saved;
   }
 
@@ -105,7 +100,7 @@ public class TaskController {
     List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
-    List<TaskItem> saved = taskRepository.saveAll(tasks == null ? List.of() : tasks.stream().filter(Objects::nonNull).toList());
+    List<TaskItem> saved = taskRepository.saveAll(safeTasks);
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
@@ -122,7 +117,7 @@ public class TaskController {
 
   @PutMapping("/{id}")
   public TaskItem update(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
@@ -133,22 +128,14 @@ public class TaskController {
     }
     hydrateTeamLeadFields(task);
     syncProjectAssignment(task);
-    TaskItem saved = taskRepository.save(task);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task updated",
-        buildTaskMessage(saved, "updated"),
-        "task",
-        saved.getId(),
-        accessRole,
-        "System",
-        userId);
+    TaskItem saved = mongoTemplate.save(task, "tasks");
+    notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
     return saved;
   }
 
   @PatchMapping("/{id}/status")
   public TaskItem updateStatus(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestBody TaskStatusRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
@@ -164,20 +151,12 @@ public class TaskController {
 
   @DeleteMapping("/{id}")
   public void delete(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     TaskItem current = taskRepository.findById(id).orElseGet(TaskItem::new);
-    taskRepository.deleteById(id);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task removed",
-        buildTaskMessage(current, "removed"),
-        "task",
-        nonNullId,
-        accessRole,
-        "System",
-        userId);
+    mongoTemplate.remove(new Query(Criteria.where("id").is(id)), TaskItem.class);
+    notifyTaskChangeSafely(current, "Task removed", "removed", accessRole, userId);
   }
 
   private String buildTaskMessage(TaskItem task, String action) {
@@ -336,5 +315,42 @@ public class TaskController {
 
   private <T> List<T> safeList(List<T> values) {
     return values == null ? new ArrayList<>() : new ArrayList<>(values);
+  }
+
+  private void notifyTaskChangeSafely(
+      TaskItem task,
+      String title,
+      String verb,
+      String accessRole,
+      String userId) {
+    if (task == null) {
+      return;
+    }
+
+    try {
+      notificationService.notifyRoles(
+          NotificationAudience.operationalRecipients(accessRole),
+          title,
+          buildTaskMessage(task, verb),
+          "task",
+          task.getId(),
+          accessRole,
+          "System",
+          userId);
+    } catch (RuntimeException ignored) {
+      // Keep task persistence responsive even if notification fan-out fails.
+    }
+  }
+
+  public static class TaskStatusRequest {
+    private String status;
+
+    public String getStatus() {
+      return status;
+    }
+
+    public void setStatus(String status) {
+      this.status = status;
+    }
   }
 }
