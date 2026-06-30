@@ -66,7 +66,6 @@ function Tasks() {
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(getEmptyTaskForm());
   const [taskFormMode, setTaskFormMode] = useState('create');
-  const [editingTask, setEditingTask] = useState(null);
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
   const currentTeamLeadIdentity = {

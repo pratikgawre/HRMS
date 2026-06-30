@@ -1348,6 +1348,7 @@ function upsertCurrentUser(users, currentAccessUser, nextEmployee, newPassword) 
     department: nextEmployee.department || currentAccessUser?.department || '',
     designation: nextEmployee.jobTitle || currentAccessUser?.designation || '',
     lastLogin: currentAccessUser?.lastLogin || 'Invite pending',
+    mustChangePassword: newPassword ? false : Boolean(currentAccessUser?.mustChangePassword),
     permissions: currentAccessUser?.permissions || [],
     twoFactorEnabled: Boolean(nextEmployee.twoFactorEnabled ?? currentAccessUser?.twoFactorEnabled),
     twoFactorSecret: nextEmployee.twoFactorSecret || currentAccessUser?.twoFactorSecret || '',

@@ -2,6 +2,8 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import DashboardLayout from './layouts/DashboardLayout.jsx';
 import ProtectedRoute from './routes/ProtectedRoute.jsx';
 import Login from './pages/Login.jsx';
+import ForgotPassword from './pages/ForgotPassword.jsx';
+import FirstLoginPasswordChange from './pages/FirstLoginPasswordChange.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import HRDashboard from './pages/HRDashboard.jsx';
 import EmployeeDashboard from './pages/EmployeeDashboard.jsx';
@@ -38,6 +40,8 @@ function App() {
     <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/change-password" element={<FirstLoginPasswordChange />} />
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
@@ -143,8 +147,17 @@ function App() {
 
 function RoleRedirect({ dashboards, fallback }) {
   const role = getSessionValue('kavyaRole');
+  const mustChangePassword = Boolean(getSessionValue('kavyaMustChangePassword'));
+
+  if (mustChangePassword) {
+    return <Navigate to="/change-password" replace />;
+  }
+
   return <Navigate to={dashboards[role] || fallback} replace />;
 }
 
 export default App;
+
+
+
 

@@ -17,9 +17,10 @@ const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
 
 function LeaveRequests() {
   const role = getSessionValue('kavyaRole') || 'employee';
+  const isAdminOrHr = role === 'admin' || role === 'hr';
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
-  const canReviewRequests = role === 'admin' || role === 'hr' || role === 'teamLead' || role === 'projectManager';
+  const canReviewRequests = isAdminOrHr || role === 'teamLead' || role === 'projectManager';
   const [requests, setRequests] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
@@ -56,7 +57,7 @@ function LeaveRequests() {
       return teamLeadMemberIds.includes(request.employeeId);
     }
 
-    if (role === 'admin' || role === 'hr') {
+    if (isAdminOrHr) {
       return true;
     }
 
@@ -160,7 +161,7 @@ function LeaveRequests() {
 
   const columns = [
     ...leaveColumns,
-    ...(role === 'admin' || role === 'hr' ? [{
+    ...(isAdminOrHr ? [{
       key: 'ownerRole',
       label: 'Requested By',
       render: (row) => formatRequesterRole(row.ownerRole),
@@ -941,5 +942,6 @@ function getLeaveBalanceTone(name) {
 }
 
 export default LeaveRequests;
+
 
 

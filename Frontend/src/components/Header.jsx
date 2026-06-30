@@ -69,6 +69,31 @@ function Header({ role, onMenuClick }) {
     };
   }, [role, userId]);
 
+  useEffect(() => {
+    if (!showNotifications) {
+      return undefined;
+    }
+
+    const handleNotificationPointerDown = (event) => {
+      if (notificationWrapRef.current && !notificationWrapRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    const handleNotificationKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handleNotificationPointerDown);
+    document.addEventListener('keydown', handleNotificationKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleNotificationPointerDown);
+      document.removeEventListener('keydown', handleNotificationKeyDown);
+    };
+  }, [showNotifications]);
   const runSearch = () => {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;

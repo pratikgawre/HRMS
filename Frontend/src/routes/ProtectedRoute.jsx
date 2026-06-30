@@ -1,14 +1,30 @@
+import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import MandatoryPasswordChangeModal from '../components/MandatoryPasswordChangeModal.jsx';
 import { syncSessionFromAccessUser } from '../utils/auth.js';
 import { getSessionValue } from '../utils/appSession.js';
 
 function ProtectedRoute({ allowedRoles }) {
   const location = useLocation();
+  const [, setSessionVersion] = useState(0);
+
+  useEffect(() => {
+    const refreshSession = () => setSessionVersion((current) => current + 1);
+
+    window.addEventListener('kavyaSessionChanged', refreshSession);
+    return () => window.removeEventListener('kavyaSessionChanged', refreshSession);
+  }, []);
+
   const session = syncSessionFromAccessUser();
   const role = session.role || getSessionValue('kavyaRole');
+  const mustChangePassword = Boolean(getSessionValue('kavyaMustChangePassword')) || Boolean(session.mustChangePassword);
 
   if (!session.ok || !role) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  if (mustChangePassword) {
+    return <MandatoryPasswordChangeModal />;
   }
 
   if (!allowedRoles.includes(role)) {
@@ -27,4 +43,3 @@ function ProtectedRoute({ allowedRoles }) {
 }
 
 export default ProtectedRoute;
-

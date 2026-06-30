@@ -19,8 +19,10 @@ public class AppUser {
   private String employeeName;
   private String status;
   private String lastLogin;
-
-  public String getId() { return id; }
+  private String passwordResetToken;
+  private String passwordResetTokenExpiresAt;
+  private Boolean mustChangePassword;
+public String getId() { return id; }
   public void setId(String id) { this.id = id; }
   public String getUserId() { return userId; }
   public void setUserId(String userId) { this.userId = userId; }
@@ -46,4 +48,10 @@ public class AppUser {
   public void setStatus(String status) { this.status = status; }
   public String getLastLogin() { return lastLogin; }
   public void setLastLogin(String lastLogin) { this.lastLogin = lastLogin; }
+  public String getPasswordResetToken() { return passwordResetToken; }
+  public void setPasswordResetToken(String passwordResetToken) { this.passwordResetToken = passwordResetToken; }
+  public String getPasswordResetTokenExpiresAt() { return passwordResetTokenExpiresAt; }
+  public void setPasswordResetTokenExpiresAt(String passwordResetTokenExpiresAt) { this.passwordResetTokenExpiresAt = passwordResetTokenExpiresAt; }
+  public Boolean getMustChangePassword() { return mustChangePassword; }
+  public void setMustChangePassword(Boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
 }

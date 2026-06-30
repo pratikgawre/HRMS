@@ -1,5 +1,7 @@
 package com.kavya.hrms.controller;
 
+import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
@@ -17,27 +19,40 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kavya.hrms.dto.LoginRequest;
 import com.kavya.hrms.dto.LoginResponse;
+import com.kavya.hrms.dto.ChangePasswordRequest;
+import com.kavya.hrms.dto.PasswordResetConfirmationRequest;
+import com.kavya.hrms.dto.PasswordResetRequest;
+import com.kavya.hrms.dto.PasswordResetResponse;
 import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.AuthSession;
 import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.AuthSessionRepository;
+import com.kavya.hrms.service.PasswordResetEmailService;
+import com.kavya.hrms.service.PasswordResetEmailService.DeliveryResult;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+  private static final Duration RESET_TOKEN_TTL = Duration.ofMinutes(15);
+  private final SecureRandom secureRandom = new SecureRandom();
   private final AppUserRepository appUserRepository;
   private final AuthSessionRepository authSessionRepository;
+  private final PasswordResetEmailService passwordResetEmailService;
   private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-  public AuthController(AppUserRepository appUserRepository, AuthSessionRepository authSessionRepository) {
+  public AuthController(
+      AppUserRepository appUserRepository,
+      AuthSessionRepository authSessionRepository,
+      PasswordResetEmailService passwordResetEmailService) {
     this.appUserRepository = appUserRepository;
     this.authSessionRepository = authSessionRepository;
+    this.passwordResetEmailService = passwordResetEmailService;
   }
 
   @PostMapping("/login")
   public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-    String email = normalizeEmail(request.getEmail());
-    String password = request == null ? "" : String.valueOf(request.getPassword());
+    String email = normalizeEmail(request == null ? null : request.getEmail());
+    String password = request == null || request.getPassword() == null ? "" : String.valueOf(request.getPassword());
 
     return appUserRepository.findAllByEmailIgnoreCase(email).stream()
         .findFirst()
@@ -57,6 +72,121 @@ public class AuthController {
         .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials")));
   }
 
+  @PostMapping("/forgot-password")
+  public ResponseEntity<PasswordResetResponse> forgotPassword(@RequestBody PasswordResetRequest request) {
+    String email = normalizeEmail(request == null ? null : request.getEmail());
+    if (email.isBlank()) {
+      return ResponseEntity.badRequest().body(resetResponse(false, false, email, "", "", "Email is required"));
+    }
+
+    return appUserRepository.findAllByEmailIgnoreCase(email).stream()
+        .findFirst()
+        .map(user -> {
+          String resetToken = generateResetToken();
+          String expiresAt = Instant.now().plus(RESET_TOKEN_TTL).toString();
+          DeliveryResult delivery = passwordResetEmailService.sendResetCode(user, resetToken, expiresAt);
+
+          if (delivery.isConfigured() && !delivery.isSent()) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(resetResponse(false, false, email, "", "", delivery.getMessage()));
+          }
+
+          user.setPasswordResetToken(resetToken);
+          user.setPasswordResetTokenExpiresAt(expiresAt);
+          appUserRepository.save(user);
+
+          if (!delivery.isConfigured()) {
+            return ResponseEntity.ok(resetResponse(true, false, email, resetToken, expiresAt,
+                "Email service is not configured. Local reset code generated for development use."));
+          }
+
+          return ResponseEntity.ok(resetResponse(true, true, email, "", expiresAt, delivery.getMessage()));
+        })
+        .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(resetResponse(false, false, email, "", "", "No account found for this email address")));
+  }
+
+  @PostMapping("/reset-password")
+  public ResponseEntity<PasswordResetResponse> resetPassword(@RequestBody PasswordResetConfirmationRequest request) {
+    String email = normalizeEmail(request == null ? null : request.getEmail());
+    String token = request == null || request.getToken() == null ? "" : String.valueOf(request.getToken()).trim();
+    String newPassword = request == null || request.getNewPassword() == null ? "" : String.valueOf(request.getNewPassword());
+
+    if (email.isBlank() || token.isBlank() || newPassword.isBlank()) {
+      return ResponseEntity.badRequest().body(resetResponse(false, false, email, "", "", "Email, reset code and new password are required"));
+    }
+
+    if (newPassword.trim().length() < 6) {
+      return ResponseEntity.badRequest().body(resetResponse(false, false, email, "", "", "Password must be at least 6 characters long"));
+    }
+
+    return appUserRepository.findAllByEmailIgnoreCase(email).stream()
+        .findFirst()
+        .map(user -> {
+          if (!isResetTokenValid(user, token)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(resetResponse(false, false, email, "", "", "Reset code is invalid or expired"));
+          }
+
+          String trimmedPassword = newPassword.trim();
+          user.setPassword(trimmedPassword);
+          user.setPasswordHash(passwordEncoder.encode(trimmedPassword));
+          user.setPasswordResetToken(null);
+          user.setPasswordResetTokenExpiresAt(null);
+          appUserRepository.save(user);
+          return ResponseEntity.ok(resetResponse(true, true, email, "", "", "Password updated successfully"));
+        })
+        .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(resetResponse(false, false, email, "", "", "No account found for this email address")));
+  }
+
+  @PostMapping("/change-password")
+  public ResponseEntity<LoginResponse> changePassword(
+      @RequestHeader(value = "Authorization", required = false) String authorization,
+      @RequestBody ChangePasswordRequest request) {
+    String token = extractToken(authorization);
+    if (token.isBlank()) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found"));
+    }
+
+    String newPassword = request == null || request.getNewPassword() == null ? "" : request.getNewPassword().trim();
+    String confirmPassword = request == null || request.getConfirmPassword() == null ? "" : request.getConfirmPassword().trim();
+    if (newPassword.isBlank() || confirmPassword.isBlank()) {
+      return ResponseEntity.badRequest().body(failed("Password and confirm password are required"));
+    }
+
+    if (!newPassword.equals(confirmPassword)) {
+      return ResponseEntity.badRequest().body(failed("Password and confirm password do not match"));
+    }
+
+    if (newPassword.length() < 8) {
+      return ResponseEntity.badRequest().body(failed("Password must be at least 8 characters long"));
+    }
+
+    return authSessionRepository.findById(token)
+        .map(session -> appUserRepository.findAllByEmailIgnoreCase(normalizeEmail(session.getEmail())).stream()
+            .findFirst()
+            .map(user -> {
+              user.setPassword(newPassword);
+              user.setPasswordHash(passwordEncoder.encode(newPassword));
+              user.setMustChangePassword(false);
+              user.setPasswordResetToken(null);
+              user.setPasswordResetTokenExpiresAt(null);
+              appUserRepository.save(user);
+
+              session.setMustChangePassword(false);
+              session.setLastSeenAt(Instant.now().toString());
+              authSessionRepository.save(session);
+
+              LoginResponse response = okResponse(session);
+              response.setMustChangePassword(false);
+              response.setMessage("Password updated successfully");
+              return ResponseEntity.ok(response);
+            })
+            .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(failed("No account found for this session"))))
+        .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found")));
+  }
   @GetMapping("/session")
   public ResponseEntity<LoginResponse> currentSession(
       @RequestHeader(value = "Authorization", required = false) String authorization) {
@@ -67,6 +197,7 @@ public class AuthController {
 
     return authSessionRepository.findById(token)
         .map(session -> {
+          syncSessionFromUser(session);
           session.setLastSeenAt(Instant.now().toString());
           authSessionRepository.save(session);
           return ResponseEntity.ok(okResponse(session));
@@ -85,6 +216,19 @@ public class AuthController {
     return ResponseEntity.noContent().build();
   }
 
+  private void syncSessionFromUser(AuthSession session) {
+    appUserRepository.findAllByEmailIgnoreCase(normalizeEmail(session.getEmail())).stream()
+        .findFirst()
+        .ifPresent(user -> {
+          session.setUserId(user.getUserId());
+          session.setEmail(user.getEmail());
+          session.setRole(normalizeRole(user.getRole()));
+          session.setEmployeeId(user.getEmployeeId());
+          session.setEmployeeName(user.getEmployeeName());
+          session.setStatus(user.getStatus());
+          session.setMustChangePassword(Boolean.TRUE.equals(user.getMustChangePassword()));
+        });
+  }
   private LoginResponse okResponse(AppUser user, String token, String lastLogin) {
     LoginResponse response = new LoginResponse();
     response.setOk(true);
@@ -95,7 +239,8 @@ public class AuthController {
     response.setEmployeeId(user.getEmployeeId());
     response.setEmployeeName(user.getEmployeeName());
     response.setToken(token);
-    response.setMessage("Login successful");
+    response.setMustChangePassword(Boolean.TRUE.equals(user.getMustChangePassword()));
+    response.setMessage(Boolean.TRUE.equals(user.getMustChangePassword()) ? "Password change required" : "Login successful");
     return response;
   }
 
@@ -109,34 +254,53 @@ public class AuthController {
     response.setEmployeeId(session.getEmployeeId());
     response.setEmployeeName(session.getEmployeeName());
     response.setToken(session.getToken());
-    response.setMessage("Session active");
+    response.setMustChangePassword(Boolean.TRUE.equals(session.getMustChangePassword()));
+    response.setMessage(Boolean.TRUE.equals(session.getMustChangePassword()) ? "Password change required" : "Session active");
     return response;
+  }
+
+  private PasswordResetResponse resetResponse(boolean ok, boolean emailSent, String email, String resetToken, String expiresAt, String message) {
+    PasswordResetResponse response = new PasswordResetResponse();
+    response.setOk(ok);
+    response.setEmailSent(emailSent);
+    response.setEmail(email);
+    response.setResetToken(resetToken);
+    response.setExpiresAt(expiresAt);
+    response.setMessage(message);
+    return response;
+  }
+
+  private String generateResetToken() {
+    return String.format(Locale.ROOT, "%06d", secureRandom.nextInt(1_000_000));
+  }
+
+  private boolean isResetTokenValid(AppUser user, String token) {
+    String storedToken = user.getPasswordResetToken() == null ? "" : user.getPasswordResetToken().trim();
+    String storedExpiresAt = user.getPasswordResetTokenExpiresAt() == null ? "" : user.getPasswordResetTokenExpiresAt().trim();
+    if (storedToken.isBlank() || storedExpiresAt.isBlank()) {
+      return false;
+    }
+
+    try {
+      Instant expiresAt = Instant.parse(storedExpiresAt);
+      return expiresAt.isAfter(Instant.now()) && storedToken.equals(token.trim());
+    } catch (Exception ex) {
+      return false;
+    }
   }
 
   private String normalizeRole(String role) {
     if (role == null)
       return "Employee";
     String normalized = role.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
-    switch (normalized) {
-      case "superadmin":
-      case "admin":
-        return "Super Admin";
-      case "hrmanager":
-      case "hr":
-        return "HR Manager";
-      case "projectmanager":
-      case "manager":
-      case "projectmanagerrole":
-        return "Project Manager";
-      case "teamlead":
-      case "teamleader":
-        return "Team Lead";
-      case "employee":
-      case "staff":
-        return "Employee";
-      default:
-        return role.trim();
-    }
+    return switch (normalized) {
+      case "superadmin", "admin" -> "Super Admin";
+      case "hrmanager", "hr" -> "HR Manager";
+      case "projectmanager", "manager", "projectmanagerrole" -> "Project Manager";
+      case "teamlead", "teamleader" -> "Team Lead";
+      case "employee", "staff" -> "Employee";
+      default -> role.trim();
+    };
   }
 
   private boolean passwordMatches(String rawPassword, AppUser user) {
@@ -174,6 +338,7 @@ public class AuthController {
     session.setLastLogin(now);
     session.setCreatedAt(now);
     session.setLastSeenAt(now);
+    session.setMustChangePassword(Boolean.TRUE.equals(user.getMustChangePassword()));
     return session;
   }
 

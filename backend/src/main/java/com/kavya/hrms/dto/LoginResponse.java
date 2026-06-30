@@ -9,7 +9,8 @@ public class LoginResponse {
   private String userId;
   private String lastLogin;
   private String token;
-  private String message;
+  private boolean mustChangePassword;
+private String message;
 
   public boolean isOk() { return ok; }
   public void setOk(boolean ok) { this.ok = ok; }
@@ -27,6 +28,8 @@ public class LoginResponse {
   public void setLastLogin(String lastLogin) { this.lastLogin = lastLogin; }
   public String getToken() { return token; }
   public void setToken(String token) { this.token = token; }
+  public boolean isMustChangePassword() { return mustChangePassword; }
+  public void setMustChangePassword(boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
   public String getMessage() { return message; }
   public void setMessage(String message) { this.message = message; }
 }
