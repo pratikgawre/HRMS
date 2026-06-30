@@ -6,16 +6,15 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import org.springframework.stereotype.Service;
-import org.springframework.lang.Nullable;
 
 import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.Notification;
 import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.NotificationRepository;
+import org.springframework.stereotype.Service;
 
 @Service
 public class NotificationService {
@@ -86,6 +85,7 @@ public class NotificationService {
     removeUserIds(targetUserIds, excludedUserIds);
     return notifyUserIds(targetUserIds, title, message, sourceType, sourceId, createdByRole, createdByName);
   }
+
   public List<Notification> notifyUsers(
       Collection<String> userIds,
       String title,
@@ -190,7 +190,9 @@ public class NotificationService {
     notification.setCreatedByName(createdByName);
 
     if (matches.size() > 1) {
-      notificationRepository.deleteAll(matches.subList(1, matches.size()));
+      for (int i = 1; i < matches.size(); i++) {
+        notificationRepository.delete(Objects.requireNonNull(matches.get(i)));
+      }
     }
 
     return notificationRepository.save(notification);
@@ -233,8 +235,8 @@ public class NotificationService {
     String normalized = normalizeRole(role);
     if ("all".equals(normalized)) {
       return appUserRepository.findAll().stream()
-        .filter(this::isActiveUser)
-          .map(AppUser::getUserId)
+          .filter(this::isActiveUser)
+          .map(user -> user == null ? "" : user.getUserId())
           .filter(value -> !isBlank(value))
           .collect(Collectors.toCollection(LinkedHashSet::new));
     }
@@ -242,7 +244,7 @@ public class NotificationService {
     return appUserRepository.findAll().stream()
         .filter(this::isActiveUser)
         .filter(user -> normalized.equals(normalizeRole(user.getRole())))
-        .map(AppUser::getUserId)
+        .map(user -> user == null ? "" : user.getUserId())
         .filter(value -> !isBlank(value))
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }
@@ -265,7 +267,7 @@ public class NotificationService {
             || normalizedIdentities.contains(normalizeIdentity(user.getEmployeeId()))
             || normalizedIdentities.contains(normalizeIdentity(user.getEmail()))
             || normalizedIdentities.contains(normalizeIdentity(user.getEmployeeName())))
-        .map(AppUser::getUserId)
+        .map(user -> user == null ? "" : user.getUserId())
         .filter(value -> !isBlank(value))
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }

@@ -36,7 +36,6 @@ function LeaveRequests() {
   const [queueFilter, setQueueFilter] = useState('all');
   const [reviewingRequestIds, setReviewingRequestIds] = useState(() => new Set());
   const tableRef = useRef(null);
-  const isAdminOrHr = role === 'admin' || role === 'hr';
   const leaveSummary = useMemo(
     () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee)),
     [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],

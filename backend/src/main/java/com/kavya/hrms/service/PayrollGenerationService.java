@@ -61,7 +61,7 @@ public class PayrollGenerationService {
     Map<String, PayrollRecord> existingRecords = payrollRecordRepository.findByMonthAndYear(normalizedMonth, normalizedYear).stream()
         .filter(record -> record.getEmployeeId() != null && !record.getEmployeeId().isBlank())
         .collect(Collectors.toMap(
-            PayrollRecord::getEmployeeId,
+            record -> record.getEmployeeId(),
             record -> record,
             (left, right) -> right,
             HashMap::new));
@@ -427,22 +427,16 @@ public class PayrollGenerationService {
     return firstNonBlank(employee.getDisplayName(), employee.getName(), "Employee");
   }
 
-  @SafeVarargs
-  @Nullable
-  private <T> T firstNonBlank(T... values) {
-    for (T value : values) {
-      if (value == null) {
-        continue;
-      }
-      if (value instanceof String stringValue) {
-        if (!stringValue.isBlank()) {
-          return value;
+  private String firstNonBlank(String... values) {
+    for (String value : values) {
+      if (value != null) {
+        String trimmed = value.trim();
+        if (!trimmed.isBlank()) {
+          return trimmed;
         }
-      } else {
-        return value;
       }
     }
-    return values.length > 0 ? values[values.length - 1] : null;
+    return "";
   }
 
   private static final class AttendanceSummary {

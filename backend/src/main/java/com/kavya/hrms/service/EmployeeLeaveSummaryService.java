@@ -1,15 +1,6 @@
 package com.kavya.hrms.service;
 
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
-
 import com.kavya.hrms.dto.EmployeeLeaveSummaryResponse;
-import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.LeaveRequest;
 import com.kavya.hrms.model.SystemSettings;
 import com.kavya.hrms.repository.AppUserRepository;
@@ -17,7 +8,6 @@ import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
 import java.util.List;
 import java.util.Optional;
-import java.util.Objects;
 import org.springframework.http.HttpStatus;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
@@ -43,8 +33,9 @@ public class EmployeeLeaveSummaryService {
     String resolvedEmployeeId = resolveEmployeeId(userId, employeeId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Employee identity not found"));
 
-    Optional<AppUser> user = appUserRepository.findByEmployeeId(resolvedEmployeeId);
-    String employeeName = user.map(appUser -> appUser.getEmployeeName()).orElse("");
+    String employeeName = appUserRepository.findByEmployeeId(resolvedEmployeeId)
+        .map(user -> user.getEmployeeName())
+        .orElse("");
 
     long totalAllotted = resolveTotalAllottedLeaves();
     long totalTaken = calculateTotalTakenLeaves(resolvedEmployeeId);
@@ -66,7 +57,8 @@ public class EmployeeLeaveSummaryService {
 
     if (userId != null && !userId.isBlank()) {
       return appUserRepository.findByUserId(userId.trim())
-          .map(AppUser::getEmployeeId);
+          .map(user -> user.getEmployeeId())
+          .filter(value -> !value.isBlank());
     }
 
     return Optional.empty();
@@ -74,14 +66,13 @@ public class EmployeeLeaveSummaryService {
 
   private long resolveTotalAllottedLeaves() {
     List<SystemSettings.LeaveTypeSetting> leaveTypes = systemSettingsRepository.findById(DEFAULT_SETTINGS_ID)
-      .map(SystemSettings::getLeaveTypes)
-      .filter(types -> types != null && !types.isEmpty())
-      .orElseGet(this::buildDefaultLeaveTypes);
+        .map(settings -> settings == null ? null : settings.getLeaveTypes())
+        .filter(types -> types != null && !types.isEmpty())
+        .orElseGet(this::buildDefaultLeaveTypes);
 
     return leaveTypes.stream()
-      .filter(Objects::nonNull)
-      .mapToLong(leaveType -> normalizeDays(leaveType.getDays()))
-      .sum();
+        .mapToLong(leaveType -> normalizeDays(leaveType.getDays()))
+        .sum();
   }
 
   private List<SystemSettings.LeaveTypeSetting> buildDefaultLeaveTypes() {
@@ -107,10 +98,9 @@ public class EmployeeLeaveSummaryService {
   private long calculateTotalTakenLeaves(String employeeId) {
     List<LeaveRequest> requests = leaveRequestRepository.findByEmployeeId(employeeId);
     return requests.stream()
-      .filter(Objects::nonNull)
-      .filter(request -> isApproved(request.getStatus()))
-      .mapToLong(request -> normalizeDays(request.getDays()))
-      .sum();
+        .filter(request -> isApproved(request.getStatus()))
+        .mapToLong(request -> normalizeDays(request.getDays()))
+        .sum();
   }
 
   private boolean isApproved(@Nullable String status) {

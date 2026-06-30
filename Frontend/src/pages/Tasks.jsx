@@ -17,15 +17,6 @@ import {
 } from '../utils/teamLeadAssignments.js';
 import { taskColumns } from './taskColumns.js';
 
-export const taskColumns = [
-  { key: 'id', label: 'Task ID' },
-  { key: 'title', label: 'Task' },
-  { key: 'owner', label: 'Assignee' },
-  { key: 'priority', label: 'Priority' },
-  { key: 'due', label: 'Due' },
-  { key: 'status', label: 'Status' },
-];
-
 export const employeeTaskColumns = [
   { key: 'id', label: 'Task ID' },
   { key: 'title', label: 'Task Title' },

@@ -1,19 +1,18 @@
 package com.kavya.hrms.controller;
 
-import com.kavya.hrms.model.AppUser;
-import com.kavya.hrms.model.Employee;
-import com.kavya.hrms.repository.AppUserRepository;
-import com.kavya.hrms.repository.EmployeeRepository;
-import com.kavya.hrms.service.EmployeeWelcomeEmailService;
-import com.kavya.hrms.service.NotificationAudience;
-import com.kavya.hrms.service.NotificationService;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,10 +23,19 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
+
+import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.model.Employee;
+import com.kavya.hrms.repository.AppUserRepository;
+import com.kavya.hrms.repository.EmployeeRepository;
+import com.kavya.hrms.service.EmployeeWelcomeEmailService;
+import com.kavya.hrms.service.NotificationAudience;
+import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/employees")
@@ -66,7 +74,7 @@ public class EmployeeController {
       @RequestBody Employee employee,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Employee saved = employeeRepository.save(normalizeEmployeeIdentity(employee));
+    Employee saved = employeeRepository.save(Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null"));
     resetEmployeeLoginCredentials(saved);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
@@ -95,7 +103,7 @@ public class EmployeeController {
     List<Employee> normalizedEmployees = (employees == null ? java.util.Collections.<Employee>emptyList() : employees).stream()
         .map(this::normalizeEmployeeIdentity)
         .collect(Collectors.toList());
-    List<Employee> saved = employeeRepository.saveAll(normalizedEmployees);
+    List<Employee> saved = employeeRepository.saveAll(Objects.requireNonNull(normalizedEmployees));
     syncCredentialEmailsForBulkSave(saved, existingByKey, shouldSendCredentialUpdates(sendCredentialUpdates), credentialUpdateEmployeeId);
 
     if (existingCount > 0) {
@@ -198,7 +206,7 @@ public class EmployeeController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     employee.setEmployeeId(employeeId);
-    Employee saved = employeeRepository.save(normalizeEmployeeIdentity(employee));
+    Employee saved = employeeRepository.save(Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null"));
     resetEmployeeLoginCredentials(saved);
     employeeWelcomeEmailService.sendCredentialUpdateEmail(saved);
     notificationService.notifyRoles(
@@ -234,7 +242,7 @@ public class EmployeeController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Employee ID is required.");
     }
 
-    Employee employee = resolveOrCreateEmployee(resolvedEmployeeId, accessRole, userId);
+    Employee employee = Objects.requireNonNull(resolveOrCreateEmployee(resolvedEmployeeId, accessRole, userId));
     String extension = resolveExtension(safeFile.getOriginalFilename(), contentType);
     String fileName = resolvedEmployeeId + "-" + UUID.randomUUID() + extension;
     Path uploadDirectory = PROFILE_PHOTO_DIRECTORY.toAbsolutePath().normalize();
@@ -269,7 +277,7 @@ public class EmployeeController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Employee ID is required.");
     }
 
-    Employee employee = resolveOrCreateEmployee(resolvedEmployeeId, accessRole, userId);
+    Employee employee = Objects.requireNonNull(resolveOrCreateEmployee(resolvedEmployeeId, accessRole, userId));
     deleteManagedProfilePhoto(employee.getProfilePicture());
     employee.setProfilePicture("");
     Employee savedEmployee = employeeRepository.save(employee);
@@ -535,22 +543,6 @@ public class EmployeeController {
         : (firstNonBlank(employee.getFirstName()) + " " + firstNonBlank(employee.getLastName())).trim();
   }
 
-  private String firstNonBlank(String... values) {
-    if (values == null) {
-      return "";
-    }
-
-    for (String value : values) {
-      if (value != null) {
-        String trimmed = value.trim();
-        if (!trimmed.isBlank()) {
-          return trimmed;
-        }
-      }
-    }
-    return "";
-  }
-
   private String buildEmployeeMessage(Employee employee, String action) {
     String name = employee != null && employee.getDisplayName() != null ? employee.getDisplayName() : "Employee";
     String department = employee != null && employee.getDepartment() != null ? employee.getDepartment()
@@ -558,34 +550,30 @@ public class EmployeeController {
     return name + " was " + action + " in " + department + ".";
   }
 
-  private <T> List<T> safeList(List<T> values) {
-    return values == null ? new ArrayList<>() : new ArrayList<>(values);
-  }
-
   private Employee resolveOrCreateEmployee(String employeeId, String accessRole, String userId) {
-    Employee existingEmployee = resolveEmployee(employeeId).orElse(null);
-    if (existingEmployee != null) {
-      return existingEmployee;
+    Optional<Employee> existingEmployee = resolveEmployee(employeeId);
+    if (existingEmployee.isPresent()) {
+      return existingEmployee.get();
     }
 
-    AppUser user = appUserRepository.findByEmployeeId(employeeId)
-        .or(() -> appUserRepository.findByUserId(normalizeValue(userId)))
-        .orElse(null);
+    Optional<AppUser> matchedUser = appUserRepository.findByEmployeeId(employeeId)
+        .or(() -> appUserRepository.findByUserId(normalizeValue(userId)));
+    AppUser user = matchedUser.orElseGet(AppUser::new);
 
     Employee employee = new Employee();
     employee.setEmployeeId(employeeId);
     employee.setEmployeeCode(employeeId);
     employee.setId(employeeId);
-    employee.setUserId(user == null ? normalizeValue(userId) : user.getUserId());
-    employee.setEmail(user == null ? "" : user.getEmail());
-    employee.setDisplayName(user == null ? employeeId : firstNonBlank(user.getEmployeeName(), user.getEmail(), employeeId));
+    employee.setUserId(firstNonBlank(user.getUserId(), normalizeValue(userId)));
+    employee.setEmail(firstNonBlank(user.getEmail()));
+    employee.setDisplayName(firstNonBlank(user.getEmployeeName(), user.getEmail(), employeeId));
     employee.setName(employee.getDisplayName());
-    employee.setAccessRole(firstNonBlank(accessRole, user == null ? "" : user.getRole(), "Employee"));
+    employee.setAccessRole(firstNonBlank(accessRole, user.getRole(), "Employee"));
     employee.setJobTitle(employee.getAccessRole());
     employee.setRole(employee.getAccessRole());
     employee.setDepartment(resolveDepartment(employee.getAccessRole()));
     employee.setAvatar(resolveAvatar(employee.getDisplayName()));
-    employee.setProfilePicture(user == null ? "" : normalizeValue(user.getProfilePicture()));
+    employee.setProfilePicture(normalizeValue(user.getProfilePicture()));
     return employeeRepository.save(employee);
   }
 
