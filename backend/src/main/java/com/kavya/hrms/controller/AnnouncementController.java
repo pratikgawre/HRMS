@@ -41,7 +41,6 @@ public class AnnouncementController {
   public List<Announcement> list(@RequestParam(required = false) String category) {
     List<Announcement> announcements = loadAnnouncementsSafely();
     return announcements.stream()
-        .filter(Objects::nonNull)
         .filter(announcement -> category == null
             || category.isBlank()
             || equalsIgnoreCase(announcement.getCategory(), category))
@@ -57,15 +56,17 @@ public class AnnouncementController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     Announcement saved = announcementRepository
         .save(Objects.requireNonNull(announcement, "announcement must not be null"));
+    String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+    String safeUserId = Objects.requireNonNullElse(userId, "");
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "New announcement posted",
         saved.getTitle() + " - " + saved.getCategory(),
         "announcement",
         saved.getId(),
-        accessRole,
+        safeAccessRole,
         "System",
-        userId);
+        safeUserId);
     return saved;
   }
 
@@ -74,7 +75,7 @@ public class AnnouncementController {
     List<Announcement> safeAnnouncements = safeList(announcements);
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
-    List<Announcement> saved = announcementRepository.saveAll(safeAnnouncements);
+    List<Announcement> saved = announcementRepository.saveAll(Objects.requireNonNull(safeAnnouncements));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.companyWideRecipients(),
@@ -84,7 +85,7 @@ public class AnnouncementController {
           "bulk",
           "admin",
           "System",
-          null);
+          "");
     }
     return saved;
   }
@@ -98,15 +99,17 @@ public class AnnouncementController {
     Announcement safeAnnouncement = announcement == null ? new Announcement() : announcement;
     safeAnnouncement.setId(id);
     Announcement saved = announcementRepository.save(safeAnnouncement);
+    String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+    String safeUserId = Objects.requireNonNullElse(userId, "");
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "Announcement updated",
         asString(saved.getTitle()) + " was updated.",
         "announcement",
         asString(saved.getId()),
-        accessRole,
+        safeAccessRole,
         "System",
-        userId);
+        safeUserId);
     return saved;
   }
 
@@ -115,23 +118,25 @@ public class AnnouncementController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String nonNullId = id == null ? "" : id;
-    Announcement current = announcementRepository.findById(nonNullId).orElse(null);
+    String nonNullId = Objects.requireNonNull(id, "announcement id must not be null");
+    Announcement current = announcementRepository.findById(nonNullId).orElseGet(Announcement::new);
     announcementRepository.deleteById(nonNullId);
     String title = "An announcement";
     String currentTitle = current.getTitle();
     if (currentTitle != null && !currentTitle.isBlank()) {
       title = currentTitle;
     }
+    String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+    String safeUserId = Objects.requireNonNullElse(userId, "");
     notificationService.notifyRoles(
         NotificationAudience.companyWideRecipients(),
         "Announcement removed",
         title + " was removed.",
         "announcement",
         nonNullId,
-        accessRole,
+        safeAccessRole,
         "System",
-        userId);
+        safeUserId);
   }
 
   private String asString(Object value) {
@@ -143,7 +148,17 @@ public class AnnouncementController {
   }
 
   private <T> List<T> safeList(List<T> values) {
-    return values == null ? new ArrayList<>() : new ArrayList<>(values);
+    List<T> result = new ArrayList<>();
+    if (values == null) {
+      return result;
+    }
+
+    for (T value : values) {
+      if (value != null) {
+        result.add(value);
+      }
+    }
+    return result;
   }
 
   private List<Announcement> readAnnouncementsFromDocuments() {

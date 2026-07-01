@@ -1,11 +1,10 @@
 package com.kavya.hrms.controller;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.LinkedHashSet;
-import java.util.ArrayList;
 import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -72,7 +71,7 @@ public class AttendanceController {
     List<AttendanceRecord> safeRecords = safeList(records);
     long existingCount = attendanceRecordRepository.count();
     attendanceRecordRepository.deleteAll();
-    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(safeRecords);
+    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(Objects.requireNonNull(safeRecords));
     if (existingCount > 0) {
       notifyAttendanceChange(saved, "Attendance updated", accessRole, userId, "updated");
     }
@@ -81,14 +80,14 @@ public class AttendanceController {
 
   private void notifyAttendanceChange(List<AttendanceRecord> records, String title, String accessRole, String userId,
       String verb) {
-    Set<String> employeeIds = records.stream()
-        .filter(record -> record != null)
-        .map(record -> record.getEmployeeId())
+    List<AttendanceRecord> safeRecords = records == null ? List.<AttendanceRecord>of() : records;
+    Set<String> employeeIds = safeRecords.stream()
+        .map(record -> record == null ? "" : record.getEmployeeId())
         .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.toCollection(LinkedHashSet::new));
 
     Set<String> employeeUserIds = appUserRepository.findByEmployeeIdIn(employeeIds).stream()
-        .map(user -> user == null ? null : user.getUserId())
+        .map(user -> user == null ? "" : user.getUserId())
         .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.toCollection(LinkedHashSet::new));
 

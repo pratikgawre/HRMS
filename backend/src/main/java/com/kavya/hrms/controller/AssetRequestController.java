@@ -50,7 +50,7 @@ public class AssetRequestController {
     RequestStatusUpdate safePayload = payload == null ? new RequestStatusUpdate() : payload;
     return repository.findById(safeId)
         .map((request) -> {
-          request.setStatus(safePayload.getStatus());
+          request.setStatus(Objects.requireNonNull(safePayload.getStatus(), "status must not be null"));
           request.setResolution(safePayload.getResolution());
           request.setHandledBy(safePayload.getHandledBy());
           return ResponseEntity.ok(repository.save(request));

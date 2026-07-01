@@ -8,9 +8,10 @@ import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.TaskRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.time.OffsetDateTime;
+import java.util.Objects;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -57,22 +58,22 @@ public class TaskController {
   }
 
   @GetMapping("/assigned-to/{assignedToId}")
-  public List<TaskItem> listByAssignee(@PathVariable("assignedToId") String assignedToId) {
+  public List<TaskItem> listByAssignee(@PathVariable String assignedToId) {
     return taskRepository.findByAssignedToId(assignedToId);
   }
 
   @GetMapping("/assigned-by/{assignedById}")
-  public List<TaskItem> listByAssignedBy(@PathVariable("assignedById") String assignedById) {
+  public List<TaskItem> listByAssignedBy(@PathVariable String assignedById) {
     return taskRepository.findByAssignedById(assignedById);
   }
 
   @GetMapping("/owner/{owner}")
-  public List<TaskItem> listByOwner(@PathVariable("owner") String owner) {
+  public List<TaskItem> listByOwner(@PathVariable String owner) {
     return taskRepository.findByOwnerIgnoreCase(owner);
   }
 
   @GetMapping("/assignee-name/{assignedToName}")
-  public List<TaskItem> listByAssigneeName(@PathVariable("assignedToName") String assignedToName) {
+  public List<TaskItem> listByAssigneeName(@PathVariable String assignedToName) {
     return taskRepository.findByAssignedToNameIgnoreCase(assignedToName);
   }
 
@@ -81,22 +82,15 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem safeTask = task == null ? new TaskItem() : task;
+    TaskItem safeTask = Objects.requireNonNull(task, "task must not be null");
     hydrateTeamLeadFields(safeTask);
+    syncProjectAssignment(safeTask);
     if (safeTask.getCreatedDateTime() == null || safeTask.getCreatedDateTime().isBlank()) {
       safeTask.setCreatedDateTime(OffsetDateTime.now().toString());
     }
     TaskItem saved = taskRepository.save(safeTask);
     syncProjectAssignment(saved);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task created",
-        buildTaskMessage(saved, "created"),
-        "task",
-        saved.getId(),
-        accessRole,
-        "System",
-        userId);
+    notifyTaskAssigned(saved, accessRole);
     return saved;
   }
 
@@ -108,7 +102,7 @@ public class TaskController {
     List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
-    List<TaskItem> saved = taskRepository.saveAll(safeTasks);
+    List<TaskItem> saved = taskRepository.saveAll(Objects.requireNonNull(safeTasks));
     if (existingCount > 0) {
       notificationService.notifyRolesExcept(
           NotificationAudience.taskStatusRecipients(),
@@ -125,43 +119,122 @@ public class TaskController {
 
   @PutMapping("/{id}")
   public TaskItem update(
-      @PathVariable("id") String id,
+      @PathVariable String id,
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem safeTask = task == null ? new TaskItem() : task;
-    safeTask.setId(id);
+    String safeId = Objects.requireNonNull(id, "task id must not be null");
+    TaskItem safeTask = Objects.requireNonNull(task, "task must not be null");
+    TaskItem previous = taskRepository.findById(safeId).orElseGet(TaskItem::new);
+    safeTask.setId(safeId);
+    java.util.Optional<TaskItem> existing = taskRepository.findById(safeId);
+    if ((safeTask.getCreatedDateTime() == null || safeTask.getCreatedDateTime().isBlank()) && existing.isPresent()) {
+      safeTask.setCreatedDateTime(existing.get().getCreatedDateTime());
+    }
     hydrateTeamLeadFields(safeTask);
+    syncProjectAssignment(safeTask);
     TaskItem saved = taskRepository.save(safeTask);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task updated",
-        buildTaskMessage(saved, "updated"),
-        "task",
-        saved.getId(),
-        accessRole,
-        "System",
-        userId);
+    notifyTaskUpdated(saved, previous, accessRole, userId);
+    return saved;
+  }
+
+  @PatchMapping("/{id}/status")
+  public TaskItem updateStatus(
+      @PathVariable String id,
+      @RequestBody TaskStatusRequest request,
+      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
+      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    String safeId = Objects.requireNonNull(id, "task id must not be null");
+    TaskItem current = taskRepository.findById(safeId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    String requestedStatus = request == null ? "" : Objects.requireNonNullElse(request.getStatus(), "");
+    String currentStatus = Objects.requireNonNullElse(current.getStatus(), "");
+    String nextStatus = firstNonBlank(requestedStatus, currentStatus);
+    Query query = new Query(Criteria.where("id").is(safeId));
+    Update update = new Update().set("status", nextStatus);
+    mongoTemplate.updateFirst(query, update, TaskItem.class);
+    TaskItem saved = taskRepository.findById(safeId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    notifyTaskChangeSafely(saved, "Task updated", "updated", Objects.requireNonNullElse(accessRole, ""),
+        Objects.requireNonNullElse(userId, ""));
     return saved;
   }
 
   @DeleteMapping("/{id}")
   public void delete(
-      @PathVariable("id") String id,
+      @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String nonNullId = id == null ? "" : id;
-    TaskItem current = taskRepository.findById(nonNullId).orElse(null);
-    taskRepository.deleteById(nonNullId);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task removed",
-        buildTaskMessage(current, "removed"),
+    String safeId = Objects.requireNonNull(id, "task id must not be null");
+    TaskItem current = taskRepository.findById(safeId).orElseGet(TaskItem::new);
+    taskRepository.deleteById(safeId);
+    notifyTaskRemoved(current, accessRole, userId);
+  }
+
+  private void notifyTaskAssigned(TaskItem task, String accessRole) {
+    String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+    String safeTaskId = task == null ? "" : Objects.requireNonNullElse(task.getId(), "");
+    notificationService.notifyUserIdentities(
+        taskRecipientIdentities(task),
+        "Task assigned",
+        buildTaskMessage(task, "assigned"),
         "task",
-        nonNullId,
-        accessRole,
-        "System",
-        userId);
+        safeTaskId,
+        safeAccessRole,
+        "System");
+  }
+
+  private void notifyTaskUpdated(TaskItem task, TaskItem previous, String accessRole, String actorUserId) {
+    if (hasStatusChanged(task, previous)) {
+      String message = buildTaskStatusMessage(task, previous);
+      String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+      String safeActorUserId = Objects.requireNonNullElse(actorUserId, "");
+      String safeTaskId = task == null ? "" : Objects.requireNonNullElse(task.getId(), "");
+      notificationService.notifyRolesAndIdentitiesExcept(
+          NotificationAudience.taskStatusRecipients(),
+          taskManagerIdentities(task),
+          excludedIds(safeActorUserId),
+          "Task status updated",
+          message,
+          "task",
+          safeTaskId,
+          safeAccessRole,
+          "System");
+      return;
+    }
+
+    if (hasAssigneeChanged(task, previous)) {
+      notifyTaskAssigned(task, accessRole);
+    }
+  }
+
+  private void notifyTaskRemoved(TaskItem task, String accessRole, String actorUserId) {
+    String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+    String safeTaskId = task == null ? "" : Objects.requireNonNullElse(task.getId(), "");
+    notificationService.notifyRolesExcept(
+        NotificationAudience.taskStatusRecipients(),
+        excludedIds(Objects.requireNonNullElse(actorUserId, "")),
+        "Task removed",
+        buildTaskMessage(task, "removed"),
+        "task",
+        safeTaskId,
+        safeAccessRole,
+        "System");
+  }
+
+  private void notifyTaskChangeSafely(TaskItem task, String title, String verb, String accessRole, String userId) {
+    if (task == null) {
+      return;
+    }
+    String safeTaskId = Objects.requireNonNullElse(task.getId(), "");
+
+    notificationService.notifyRolesExcept(
+        NotificationAudience.taskStatusRecipients(),
+        excludedIds(Objects.requireNonNullElse(userId, "")),
+        title,
+        buildTaskMessage(task, verb),
+        "task",
+        safeTaskId,
+        Objects.requireNonNullElse(accessRole, ""),
+        "System");
   }
 
   private String buildTaskMessage(TaskItem task, String action) {

@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -93,7 +94,7 @@ public class UserController {
     normalized.setStatus(user.getStatus());
     normalized.setLastLogin(user.getLastLogin());
     normalized.setMustChangePassword(user.getMustChangePassword());
-return normalized;
+    return normalized;
   }
 
   private AppUser mergeUsers(AppUser current, AppUser next) {
@@ -115,7 +116,7 @@ return normalized;
     merged.setStatus(firstNonBlank(current.getStatus(), next.getStatus()));
     merged.setLastLogin(firstNonBlank(current.getLastLogin(), next.getLastLogin()));
     merged.setMustChangePassword(Boolean.TRUE.equals(current.getMustChangePassword()) || Boolean.TRUE.equals(next.getMustChangePassword()));
-return merged;
+    return merged;
   }
 
   @Nullable
