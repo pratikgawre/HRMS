@@ -22,7 +22,6 @@ import com.kavya.hrms.repository.LeaveRequestRepository;
 import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.SystemSettingsRepository;
 import com.kavya.hrms.repository.TaskRepository;
-import java.util.Objects;
 
 @Configuration
 public class DataSeeder {

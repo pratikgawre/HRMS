@@ -196,4 +196,11 @@ public class PayrollController {
     return value == null || value.trim().isEmpty();
   }
 
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(values);
+  }
+
 }
+
+
+

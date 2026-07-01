@@ -18,7 +18,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -31,7 +30,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpStatus;
@@ -653,6 +651,22 @@ public class EmployeeController {
     return value == null ? "" : value.trim();
   }
 
+  private String firstNonBlank(String... values) {
+    if (values == null) {
+      return "";
+    }
+
+    for (String value : values) {
+      if (value != null) {
+        String trimmed = value.trim();
+        if (!trimmed.isEmpty()) {
+          return trimmed;
+        }
+      }
+    }
+
+    return "";
+  }
 
   private String resolveAvatar(String displayName) {
     String[] parts = firstNonBlank(displayName, "User").split("\\s+");
@@ -685,3 +699,6 @@ public class EmployeeController {
     return "General";
   }
 }
+
+
+

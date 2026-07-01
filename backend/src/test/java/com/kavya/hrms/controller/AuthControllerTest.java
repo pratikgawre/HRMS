@@ -8,8 +8,16 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
+import com.kavya.hrms.dto.ChangePasswordRequest;
 import com.kavya.hrms.dto.LoginRequest;
 import com.kavya.hrms.dto.LoginResponse;
 import com.kavya.hrms.dto.PasswordResetConfirmationRequest;
@@ -21,22 +29,22 @@ import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.AuthSessionRepository;
 import com.kavya.hrms.service.PasswordResetEmailService;
 
-@org.junit.jupiter.api.extension.ExtendWith(org.mockito.junit.jupiter.MockitoExtension.class)
+@ExtendWith(MockitoExtension.class)
 @SuppressWarnings("all")
 class AuthControllerTest {
-    @org.mockito.Mock
+    @Mock
     private AppUserRepository appUserRepository;
 
-    @org.mockito.Mock
+    @Mock
     private PasswordResetEmailService passwordResetEmailService;
 
-    @org.mockito.Mock
+    @Mock
     private AuthSessionRepository authSessionRepository;
 
-    @org.mockito.InjectMocks
+    @InjectMocks
     private AuthController authController;
 
-    @org.junit.jupiter.api.Test
+    @Test
     void loginShouldAcceptPlainPasswordAndReturnSuccess() {
         AppUser user = new AppUser();
         user.setEmail("Admin@Example.com");
@@ -48,7 +56,7 @@ class AuthControllerTest {
         user.setStatus("Active");
 
         when(appUserRepository.findAllByEmailIgnoreCase("admin@example.com"))
-            .thenReturn(java.util.Collections.singletonList(user));
+            .thenReturn(Collections.singletonList(user));
         when(authSessionRepository.save(any(AuthSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
         LoginRequest request = new LoginRequest();
         request.setEmail("Admin@Example.com");
@@ -63,7 +71,7 @@ class AuthControllerTest {
         assertEquals("Super Admin", body.getRole());
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void forgotPasswordShouldSendEmailAndNotExposeTokenWhenMailIsConfigured() {
         AppUser user = new AppUser();
         user.setEmail("employee@example.com");
@@ -75,7 +83,7 @@ class AuthControllerTest {
         user.setStatus("Active");
 
         when(appUserRepository.findAllByEmailIgnoreCase("employee@example.com"))
-            .thenReturn(java.util.Collections.singletonList(user));
+            .thenReturn(Collections.singletonList(user));
         when(passwordResetEmailService.sendResetCode(any(AppUser.class), any(String.class), any(String.class)))
             .thenReturn(PasswordResetEmailService.DeliveryResult.sent());
 
@@ -92,7 +100,7 @@ class AuthControllerTest {
         assertNotNull(body.getExpiresAt());
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void forgotPasswordShouldExposeTokenOnlyWhenMailIsNotConfigured() {
         AppUser user = new AppUser();
         user.setEmail("employee@example.com");
@@ -104,7 +112,7 @@ class AuthControllerTest {
         user.setStatus("Active");
 
         when(appUserRepository.findAllByEmailIgnoreCase("employee@example.com"))
-            .thenReturn(java.util.Collections.singletonList(user));
+            .thenReturn(Collections.singletonList(user));
         when(passwordResetEmailService.sendResetCode(any(AppUser.class), any(String.class), any(String.class)))
             .thenReturn(PasswordResetEmailService.DeliveryResult.notConfigured());
 
@@ -121,7 +129,7 @@ class AuthControllerTest {
         assertEquals(6, body.getResetToken().length());
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void resetPasswordShouldUpdateStoredPassword() {
         AppUser user = new AppUser();
         user.setEmail("employee@example.com");
@@ -132,11 +140,12 @@ class AuthControllerTest {
         user.setEmployeeName("Aarav Sharma");
         user.setUserId("USR-KV001");
         user.setStatus("Active");
+        user.setMustChangePassword(true);
         user.setPasswordResetToken("123456");
         user.setPasswordResetTokenExpiresAt(Instant.now().plusSeconds(600).toString());
 
         when(appUserRepository.findAllByEmailIgnoreCase("employee@example.com"))
-            .thenReturn(java.util.Collections.singletonList(user));
+            .thenReturn(Collections.singletonList(user));
 
         PasswordResetConfirmationRequest request = new PasswordResetConfirmationRequest();
         request.setEmail("employee@example.com");
@@ -150,7 +159,51 @@ class AuthControllerTest {
         assertTrue(body.isOk());
         assertEquals("newPass123", user.getPassword());
         assertTrue(user.getPasswordHash() != null && !user.getPasswordHash().isBlank());
+        assertTrue(!Boolean.TRUE.equals(user.getMustChangePassword()));
         assertNull(user.getPasswordResetToken());
         assertNull(user.getPasswordResetTokenExpiresAt());
+    }
+
+    @Test
+    void changePasswordShouldRequireMatchingCurrentPasswordAndClearMustChangePassword() {
+        AppUser user = new AppUser();
+        user.setEmail("employee@example.com");
+        user.setPassword("Temp@123");
+        user.setRole("employee");
+        user.setEmployeeId("KV001");
+        user.setEmployeeName("Aarav Sharma");
+        user.setUserId("USR-KV001");
+        user.setStatus("Active");
+        user.setMustChangePassword(true);
+
+        AuthSession session = new AuthSession();
+        session.setToken("token-123");
+        session.setEmail("employee@example.com");
+        session.setRole("Employee");
+        session.setEmployeeId("KV001");
+        session.setEmployeeName("Aarav Sharma");
+        session.setStatus("Active");
+        session.setMustChangePassword(true);
+
+        when(authSessionRepository.findById("token-123")).thenReturn(Optional.of(session));
+        when(appUserRepository.findAllByEmailIgnoreCase("employee@example.com"))
+            .thenReturn(Collections.singletonList(user));
+        when(authSessionRepository.save(any(AuthSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ChangePasswordRequest request = new ChangePasswordRequest();
+        request.setCurrentPassword("Temp@123");
+        request.setNewPassword("NewPass@123");
+        request.setConfirmPassword("NewPass@123");
+
+        ResponseEntity<LoginResponse> response = authController.changePassword("Bearer token-123", request);
+        LoginResponse body = java.util.Objects.requireNonNull(response.getBody(), "Response body should not be null");
+
+        assertEquals(200, response.getStatusCode().value());
+        assertTrue(body.isOk());
+        assertTrue(!body.isMustChangePassword());
+        assertEquals("NewPass@123", user.getPassword());
+        assertTrue(user.getPasswordHash() != null && !user.getPasswordHash().isBlank());
+        assertTrue(!Boolean.TRUE.equals(user.getMustChangePassword()));
+        assertTrue(!Boolean.TRUE.equals(session.getMustChangePassword()));
     }
 }

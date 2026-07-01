@@ -219,22 +219,6 @@ public class TaskController {
         "System");
   }
 
-  private void notifyTaskChangeSafely(TaskItem task, String title, String verb, String accessRole, String userId) {
-    if (task == null) {
-      return;
-    }
-    String safeTaskId = Objects.requireNonNullElse(task.getId(), "");
-
-    notificationService.notifyRolesExcept(
-        NotificationAudience.taskStatusRecipients(),
-        excludedIds(Objects.requireNonNullElse(userId, "")),
-        title,
-        buildTaskMessage(task, verb),
-        "task",
-        safeTaskId,
-        Objects.requireNonNullElse(accessRole, ""),
-        "System");
-  }
 
   private String buildTaskMessage(TaskItem task, String action) {
     String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";

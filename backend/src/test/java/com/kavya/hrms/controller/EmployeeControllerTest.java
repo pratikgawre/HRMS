@@ -6,42 +6,41 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import com.kavya.hrms.model.Employee;
 import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.model.Employee;
 import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.EmployeeWelcomeEmailService;
 import com.kavya.hrms.service.NotificationService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-@ExtendWith(MockitoExtension.class)
 class EmployeeControllerTest {
-  @Mock
   private EmployeeRepository employeeRepository;
-
-  @Mock
   private AppUserRepository appUserRepository;
-
-  @Mock
   private NotificationService notificationService;
-
-  @Mock
   private EmployeeWelcomeEmailService employeeWelcomeEmailService;
-
-  @InjectMocks
   private EmployeeController employeeController;
 
+  @BeforeEach
+  void setUp() {
+    employeeRepository = mock(EmployeeRepository.class);
+    appUserRepository = mock(AppUserRepository.class);
+    notificationService = mock(NotificationService.class);
+    employeeWelcomeEmailService = mock(EmployeeWelcomeEmailService.class);
+    employeeController = new EmployeeController(
+        employeeRepository,
+        appUserRepository,
+        notificationService,
+        employeeWelcomeEmailService);
+  }
+
   @Test
-  @SuppressWarnings("null")
   void updateShouldResetLinkedUserCredentialsAndSendCredentialEmail() {
     Employee employee = buildEmployee("KV009", "Riya", "Shah", "Engineering");
     AppUser user = new AppUser();
@@ -58,6 +57,8 @@ class EmployeeControllerTest {
     doReturn(user).when(appUserRepository).save(user);
     when(employeeWelcomeEmailService.buildLoginEmail(any(Employee.class))).thenReturn("riya.shah@kavyainfoweb.com");
     when(employeeWelcomeEmailService.buildTemporaryPassword(any(Employee.class))).thenReturn("Riya@123");
+    when(employeeWelcomeEmailService.sendCredentialUpdateEmail(any(Employee.class)))
+        .thenReturn(EmployeeWelcomeEmailService.DeliveryResult.sent("Credential update email sent."));
 
     Employee saved = employeeController.update("KV009", employee, "HR Manager", "HR-001");
 
@@ -74,7 +75,6 @@ class EmployeeControllerTest {
   }
 
   @Test
-  @SuppressWarnings("null")
   void bulkSaveShouldSendCredentialUpdateOnlyForRequestedEmployee() {
     Employee existingTarget = buildEmployee("KV009", "Riya", "Shah", "Engineering");
     Employee existingOther = buildEmployee("KV010", "Arjun", "Mehta", "Engineering");
@@ -92,6 +92,8 @@ class EmployeeControllerTest {
     doReturn(targetUser).when(appUserRepository).save(targetUser);
     when(employeeWelcomeEmailService.buildLoginEmail(any(Employee.class))).thenReturn("riya.shah@kavyainfoweb.com");
     when(employeeWelcomeEmailService.buildTemporaryPassword(any(Employee.class))).thenReturn("Riya@123");
+    when(employeeWelcomeEmailService.sendCredentialUpdateEmail(any(Employee.class)))
+        .thenReturn(EmployeeWelcomeEmailService.DeliveryResult.sent("Credential update email sent."));
 
     employeeController.bulkSave(
         java.util.Arrays.asList(updatedTarget, updatedOther),
