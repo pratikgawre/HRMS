@@ -6,7 +6,6 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Locale;
 import java.util.Objects;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,11 +17,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import com.kavya.hrms.model.Project;
-import com.kavya.hrms.repository.ProjectRepository;
-import com.kavya.hrms.service.NotificationAudience;
-import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/projects")
@@ -70,10 +64,10 @@ public class ProjectController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<Project> bulkSave(
       @RequestBody List<Project> projects,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole) {
+    List<Project> safeProjects = safeList(projects).stream().filter(Objects::nonNull).toList();
     long existingCount = projectRepository.count();
     projectRepository.deleteAll();
     List<Project> saved = projectRepository.saveAll(safeProjects);
@@ -104,7 +98,7 @@ public class ProjectController {
 
   @DeleteMapping("/{id}")
   public void delete(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole) {
     Project current = projectRepository.findById(id).orElse(null);
     projectRepository.deleteById(id);

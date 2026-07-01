@@ -71,12 +71,9 @@ public class AnnouncementController {
 
   @PostMapping("/bulk")
   public List<Announcement> bulkSave(@RequestBody List<Announcement> announcements) {
-    List<Announcement> safeAnnouncements = safeList(announcements);
+    List<Announcement> safeAnnouncements = safeList(announcements).stream().filter(Objects::nonNull).toList();
     long existingCount = announcementRepository.count();
     announcementRepository.deleteAll();
-    List<Announcement> safeAnnouncements = announcements == null
-        ? List.<Announcement>of()
-        : announcements.stream().filter(Objects::nonNull).toList();
     List<Announcement> saved = announcementRepository.saveAll(safeAnnouncements);
     if (existingCount > 0) {
       notificationService.notifyRoles(

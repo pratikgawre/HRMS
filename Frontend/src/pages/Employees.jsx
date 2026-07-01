@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import * as indiaStateDistrict from 'india-state-district';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { people } from '../data/dummyData.js';
-import { getStoredEmployees, saveStoredEmployees, setEmployeesCache, upsertEmployeeLogin } from '../utils/employeeStorage.js';
-import { safeApiRequest } from '../utils/api.js';
+import {
+  reconcileDeletedEmployees,
+  saveStoredEmployees,
+  setEmployeesCache,
+  unmarkEmployeeDeleted,
+} from '../utils/employeeStorage.js';
+import { apiRequest, deleteEmployee, safeApiRequest } from '../utils/api.js';
 import { getUsers, saveUsers, setUsersCache } from '../utils/user-management.js';
 import { ACCESS_ROLE_OPTIONS, normalizeAccessRole } from '../utils/role-access.js';
 import { getSessionValue } from '../utils/appSession.js';
@@ -153,13 +158,7 @@ const fieldHints = {
   packageAmount: 'Required. Enter the employee package amount.',
   dateOfBirth: 'Required. Select a past date.',
 };
-const fallbackEmployeeEmails = {
-  KV001: 'aarav@kavya.hr',
-  KV002: 'meera@kavya.hr',
-  KV003: 'kabir@kavya.hr',
-  KV004: 'isha@kavya.hr',
-  KV005: 'rohan@kavya.hr',
-};
+
 const EMPLOYEE_DELETE_UNDO_MS = 6000;
 
 const employeeSteps = [
@@ -241,7 +240,7 @@ const employeeSteps = [
 
 function Employees() {
   const location = useLocation();
-  const [employees, setEmployees] = useState(() => getUserEnteredEmployees());
+  const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All');
   const [department, setDepartment] = useState('All Departments');
@@ -256,14 +255,44 @@ function Employees() {
   const [deleteTargetEmployee, setDeleteTargetEmployee] = useState(null);
   const [undoDeleteRecord, setUndoDeleteRecord] = useState(null);
   const [form, setForm] = useState(getEmptyEmployeeForm());
+  const [saveToast, setSaveToast] = useState(null);
+  const [isSavingEmployee, setIsSavingEmployee] = useState(false);
 
   useEffect(() => {
-    const savedEmployees = getStoredEmployees([]);
-    const directoryEmployees = getUserEnteredEmployees();
+    let active = true;
 
-    if (directoryEmployees.length !== savedEmployees.length) {
-      saveStoredEmployees(directoryEmployees);
-    }
+    const loadEmployees = async () => {
+      try {
+        const employeeRows = await apiRequest('/employees');
+        if (!active) {
+          return;
+        }
+
+        const normalizedEmployees = normalizeEmployeeDirectoryRows(employeeRows);
+        reconcileDeletedEmployees(normalizedEmployees);
+        setEmployees(normalizedEmployees);
+        setEmployeesCache(normalizedEmployees);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setEmployees([]);
+        setEmployeesCache([]);
+        setMessage((current) => current || (error instanceof Error ? error.message : 'Unable to load employees right now.'));
+      }
+    };
+
+    loadEmployees();
+    const handleWindowFocus = () => {
+      loadEmployees();
+    };
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      active = false;
+      window.removeEventListener('focus', handleWindowFocus);
+    };
   }, []);
 
   useEffect(() => {
@@ -291,13 +320,31 @@ function Employees() {
     }
 
     const timerId = window.setTimeout(() => {
-      finalizeEmployeeDeletion(undoDeleteRecord);
+      setUndoDeleteRecord((current) => (
+        current?.employee && (current.employee.employeeCode || current.employee.id) === (undoDeleteRecord.employee.employeeCode || undoDeleteRecord.employee.id)
+          ? null
+          : current
+      ));
     }, EMPLOYEE_DELETE_UNDO_MS);
 
     return () => {
       window.clearTimeout(timerId);
     };
   }, [undoDeleteRecord]);
+
+  useEffect(() => {
+    if (!saveToast) {
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setSaveToast(null);
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [saveToast]);
 
   const summaryFilterRows = useMemo(() => employees.filter((person) => {
     if (summaryFilter === 'All') {
@@ -421,18 +468,19 @@ function Employees() {
   };
 
   const handleDeleteEmployee = async (employee) => {
-    const employeeId = employee.employeeCode || employee.id;
+    const employeeId = employee.employeeId || employee.employeeCode || employee.id || employee.email;
     if (!employeeId) {
       setMessage('Employee ID not found. Unable to delete this record.');
       return;
     }
 
     const employeeName = employee.displayName || employee.name || employeeId;
+    const employeeKey = getEmployeeRecordKey(employee);
     setMessage('');
 
     try {
       const previousEmployees = [...employees];
-      const nextEmployees = previousEmployees.filter((item) => (item.employeeCode || item.id) !== employeeId);
+      const nextEmployees = previousEmployees.filter((item) => getEmployeeRecordKey(item) !== employeeKey);
       const userRows = await safeApiRequest('/users', []);
       const availableUsers = Array.isArray(userRows) && userRows.length > 0 ? userRows : getUsers();
       const currentEmployeeEmail = String(employee.email || '').trim().toLowerCase();
@@ -448,14 +496,15 @@ function Employees() {
         ? availableUsers.filter((user) => user.userId !== matchingUser.userId)
         : availableUsers;
 
+      await deleteEmployee(employeeId);
       setEmployees(nextEmployees);
       setEmployeesCache(nextEmployees);
       setUsersCache(nextUsers);
-      if (selectedEmployee && (selectedEmployee.employeeCode || selectedEmployee.id) === employeeId) {
+      if (selectedEmployee && getEmployeeRecordKey(selectedEmployee) === employeeKey) {
         setSelectedEmployee(null);
         setIsPreviewOpen(false);
       }
-      if (editingEmployee && (editingEmployee.employeeCode || editingEmployee.id) === employeeId) {
+      if (editingEmployee && getEmployeeRecordKey(editingEmployee) === employeeKey) {
         setEditingEmployee(null);
         setIsModalOpen(false);
       }
@@ -476,29 +525,6 @@ function Employees() {
     }
   };
 
-  const finalizeEmployeeDeletion = async (record) => {
-    if (!record?.employee) {
-      return;
-    }
-
-    try {
-      await saveStoredEmployees(record.nextEmployees);
-      await saveUsers(record.nextUsers);
-      setUndoDeleteRecord((current) => (
-        current?.employee && (current.employee.employeeCode || current.employee.id) === (record.employee.employeeCode || record.employee.id)
-          ? null
-          : current
-      ));
-    } catch (error) {
-      setEmployees(record.previousEmployees);
-      setEmployeesCache(record.previousEmployees);
-      setUsersCache(record.previousUsers);
-      setUndoDeleteRecord(null);
-      const errorMessage = error instanceof Error ? error.message : 'Unable to delete employee right now.';
-      setMessage(errorMessage);
-    }
-  };
-
   const undoDeleteEmployee = async () => {
     if (!undoDeleteRecord?.employee) {
       return;
@@ -510,6 +536,8 @@ function Employees() {
       setEmployeesCache(undoDeleteRecord.previousEmployees);
       setUsersCache(undoDeleteRecord.previousUsers);
       setUndoDeleteRecord(null);
+      await saveStoredEmployees(undoDeleteRecord.previousEmployees);
+      await saveUsers(undoDeleteRecord.previousUsers);
       setMessage(`${employeeToRestore.displayName || employeeToRestore.name || employeeToRestore.employeeCode || employeeToRestore.id} restored successfully.`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unable to restore employee right now.';
@@ -517,45 +545,81 @@ function Employees() {
     }
   };
 
-  const saveEmployee = (event) => {
+  const refreshUsersCacheInBackground = () => {
+    void safeApiRequest('/users', getUsers()).then((userRows) => {
+      if (Array.isArray(userRows)) {
+        setUsersCache(userRows);
+      }
+    });
+  };
+
+  const saveEmployee = async (event) => {
     event.preventDefault();
+    if (isSavingEmployee) {
+      return;
+    }
+
     const validationError = getEmployeeValidationError(form);
     if (validationError) {
       setMessage(validationError);
       return;
     }
 
-    const payload = normalizeEmployee(form);
+    const isEditing = Boolean(editingEmployee);
+    setMessage('');
+    setIsSavingEmployee(true);
+    setSaveToast({
+      text: isEditing ? 'Saving changes...' : 'Saving employee...',
+      tone: 'notice',
+    });
 
-    if (editingEmployee) {
-      setEmployees((current) => {
-        const next = current.map((employee) => (
-          employee.id === editingEmployee.id ? { ...employee, ...payload } : employee
+    try {
+      const payload = normalizeEmployee(form);
+      unmarkEmployeeDeleted(payload);
+
+      if (editingEmployee) {
+        const savedEmployee = await saveEmployeeRecord(payload, true);
+        const next = employees.map((employee) => (
+          employee.id === editingEmployee.id ? { ...employee, ...savedEmployee } : employee
         ));
-        saveStoredEmployees(next, { sendCredentialUpdates: true, credentialUpdateEmployeeId: payload.employeeCode || payload.id });
-        upsertEmployeeLogin(payload, { forceCredentialReset: true });
-        return next;
-      });
-      setSelectedEmployee((current) => (current?.id === editingEmployee.id ? { ...current, ...payload } : current));
-      setCredentialNotice(getEmployeeCredentialNotice(payload));
-      setMessage('Employee details updated successfully. New login credentials were sent to the employee email.');
-    } else {
-      const newEmployee = {
-        id: payload.employeeCode,
-        ...payload,
-      };
-      setEmployees((current) => {
-        const next = [newEmployee, ...current];
-        saveStoredEmployees(next);
-        upsertEmployeeLogin(newEmployee);
-        return next;
-      });
-      setSelectedEmployee(newEmployee);
-      setCredentialNotice(getEmployeeCredentialNotice(newEmployee));
-      setMessage('Employee added successfully. Share these login credentials with the employee.');
-    }
+        const successMessage = getEmployeeSaveMessage(savedEmployee, true);
 
-    setIsModalOpen(false);
+        setEmployees(next);
+        setEmployeesCache(next);
+        setSelectedEmployee((current) => (current?.id === editingEmployee.id ? { ...current, ...savedEmployee } : current));
+        setCredentialNotice(getEmployeeCredentialNotice(savedEmployee));
+        setMessage(successMessage);
+        setSaveToast({ text: getEmployeeSaveToastMessage(true), tone: 'success' });
+      } else {
+        const newEmployee = {
+          id: payload.employeeCode,
+          ...payload,
+        };
+        const savedEmployee = await saveEmployeeRecord(newEmployee, false);
+        const savedEmployeeKey = getEmployeeRecordKey(savedEmployee);
+        const next = [
+          savedEmployee,
+          ...employees.filter((employee) => getEmployeeRecordKey(employee) !== savedEmployeeKey),
+        ];
+        const successMessage = getEmployeeSaveMessage(savedEmployee, false);
+
+        setEmployees(next);
+        setEmployeesCache(next);
+        setSelectedEmployee(savedEmployee);
+        setCredentialNotice(getEmployeeCredentialNotice(savedEmployee));
+        setMessage(successMessage);
+        setSaveToast({ text: getEmployeeSaveToastMessage(false), tone: 'success' });
+      }
+
+      setIsModalOpen(false);
+      refreshUsersCacheInBackground();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unable to save employee right now.';
+      setMessage(errorMessage);
+      setSaveToast({ text: errorMessage, tone: 'error' });
+    } finally {
+      setIsSavingEmployee(false);
+    }
   };
 
   return (
@@ -570,6 +634,7 @@ function Employees() {
       )}
 
       {credentialNotice && <EmployeeCredentialNotice credentials={credentialNotice} />}
+      <EmployeeSaveToast toast={saveToast} onClose={() => setSaveToast(null)} />
 
       <div className="card-grid">
         {summary.map((item) => <DashboardCard key={item.label} {...item} />)}
@@ -660,6 +725,8 @@ function Employees() {
           title={editingEmployee ? 'Edit Employee' : 'Add Employee'}
           onClose={() => setIsModalOpen(false)}
           onSubmit={saveEmployee}
+          isSaving={isSavingEmployee}
+          submitLabel={editingEmployee ? 'Save Changes' : 'Save Employee'}
         />
       )}
 
@@ -680,7 +747,7 @@ function EmployeeCredentialNotice({ credentials }) {
       <div>
         <p className="eyebrow">Login Credentials</p>
         <h3>{credentials.employeeName}</h3>
-        <span>Credentials will be sent to {credentials.notificationEmail || 'the email on file'}.</span>
+        <span>{getCredentialDeliveryText(credentials)}</span>
       </div>
       <dl>
         <div>
@@ -816,7 +883,7 @@ function Avatar({ employee, className = '' }) {
   return <span className={classes}>{employee.avatar}</span>;
 }
 
-function EmployeeModal({ form, setForm, title, onClose, onSubmit }) {
+function EmployeeModal({ form, setForm, title, onClose, onSubmit, isSaving = false, submitLabel = 'Save Employee' }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [fileErrors, setFileErrors] = useState({});
   const [sameAsAboveAddress, setSameAsAboveAddress] = useState(false);
@@ -1075,16 +1142,17 @@ function EmployeeModal({ form, setForm, title, onClose, onSubmit }) {
       <section className="payroll-modal employee-modal" role="dialog" aria-modal="true" aria-label={title}>
         <div className="payroll-modal-head">
           <h3>{title}</h3>
-          <button type="button" onClick={onClose} aria-label="Close employee modal"><i className="ri-close-line" aria-hidden="true" /></button>
+          <button type="button" onClick={onClose} aria-label="Close employee modal" disabled={isSaving}><i className="ri-close-line" aria-hidden="true" /></button>
         </div>
 
-        <form className="employee-step-form" onSubmit={onSubmit}>
+        <form className="employee-step-form" onSubmit={onSubmit} aria-busy={isSaving}>
           <div className="employee-step-tabs" aria-label="Employee form steps">
             {employeeSteps.map((step, index) => (
               <button
                 key={step.title}
                 type="button"
                 className={index === stepIndex ? 'active' : ''}
+                disabled={isSaving}
                 onClick={() => {
                   if (index <= stepIndex || canContinue) {
                     setStepIndex(index);
@@ -1135,20 +1203,20 @@ function EmployeeModal({ form, setForm, title, onClose, onSubmit }) {
           </div>
 
           <div className="employee-form-actions">
-            <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
+            <button className="payroll-secondary" type="button" onClick={onClose} disabled={isSaving}>Cancel</button>
             {!isFirstStep && (
-              <button className="payroll-secondary" type="button" onClick={() => setStepIndex((current) => current - 1)}>
+              <button className="payroll-secondary" type="button" disabled={isSaving} onClick={() => setStepIndex((current) => current - 1)}>
                 Previous
               </button>
             )}
             {!isLastStep && (
-              <button className="payroll-primary" type="button" disabled={!canContinue} onClick={() => setStepIndex((current) => current + 1)}>
+              <button className="payroll-primary" type="button" disabled={isSaving || !canContinue} onClick={() => setStepIndex((current) => current + 1)}>
                 Next
               </button>
             )}
             {isLastStep && (
-              <button className="payroll-primary" type="submit" disabled={!canContinue}>
-                Save Employee
+              <button className="payroll-primary" type="submit" disabled={isSaving || !canContinue}>
+                {isSaving ? 'Saving...' : submitLabel}
               </button>
             )}
           </div>
@@ -1216,23 +1284,21 @@ function getEmptyEmployeeForm() {
   };
 }
 
-function getUserEnteredEmployees() {
-  const savedEmployees = getStoredEmployees([]);
-  return mergeEmployees([
-    ...people.map(getEmployeeFromFallbackPerson),
-    ...savedEmployees.map(normalizeDirectoryEmployee),
-  ]).filter((employee) => !isAdminEmployee(employee));
-}
+function normalizeEmployeeDirectoryRows(rows) {
+  const employeeMap = new Map();
 
-function getEmployeeFromFallbackPerson(person) {
-  return normalizeDirectoryEmployee({
-    ...person,
-    employeeCode: person.id,
-    displayName: person.name,
-    email: fallbackEmployeeEmails[person.id] || '',
-    jobTitle: person.role,
-    employmentType: 'Full Time',
+  (Array.isArray(rows) ? rows : []).forEach((employee) => {
+    const normalizedEmployee = normalizeDirectoryEmployee(employee);
+    const key = getEmployeeRecordKey(normalizedEmployee);
+
+    if (!key || isAdminEmployee(normalizedEmployee)) {
+      return;
+    }
+
+    employeeMap.set(key, { ...(employeeMap.get(key) || {}), ...normalizedEmployee });
   });
+
+  return Array.from(employeeMap.values());
 }
 
 function normalizeDirectoryEmployee(employee) {
@@ -1243,34 +1309,19 @@ function normalizeDirectoryEmployee(employee) {
   return {
     ...employee,
     id: employee.id || employeeCode,
+    employeeId: employee.employeeId || employeeCode,
     employeeCode,
     displayName,
     name: displayName,
     jobTitle,
     role: jobTitle,
     email: employee.email || '',
-    department: employee.department || '',
+    department: employee.department || employee.departmentName || employee.team || '',
     accessRole: normalizeAccessRole(employee.accessRole || 'Employee'),
     status: employee.status || 'Active',
     employmentType: employee.employmentType || 'Full Time',
     avatar: employee.avatar || getInitials(displayName),
   };
-}
-
-function mergeEmployees(employees) {
-  const employeeMap = new Map();
-
-  employees.forEach((employee) => {
-    const key = String(employee.employeeCode || employee.id || employee.email || '').trim().toLowerCase();
-
-    if (!key) {
-      return;
-    }
-
-    employeeMap.set(key, { ...(employeeMap.get(key) || {}), ...employee });
-  });
-
-  return Array.from(employeeMap.values());
 }
 
 function isAdminEmployee(employee) {
@@ -1326,6 +1377,126 @@ function normalizeEmployee(form) {
   };
 }
 
+function getEmployeeRecordKey(employee) {
+  return String(employee?.employeeCode || employee?.id || employee?.employeeId || employee?.email || '').trim().toLowerCase();
+}
+
+function sanitizeApiProfilePicture(value) {
+  const normalizedValue = String(value || '').trim();
+  if (!normalizedValue || normalizedValue.startsWith('data:image/') || normalizedValue.startsWith('blob:')) {
+    return '';
+  }
+  return normalizedValue;
+}
+
+function buildEmployeeApiPayload(employee) {
+  const employeeId = employee.employeeCode || employee.id || employee.employeeId;
+  const { generatedUsername, generatedPassword, credentialEmailConfigured, credentialEmailSent, credentialEmailMessage, ...employeePayload } = employee;
+
+  return {
+    ...employeePayload,
+    employeeId,
+    employeeCode: employeeId,
+    id: employeeId,
+    displayName: employee.displayName || employee.name,
+    name: employee.displayName || employee.name,
+    email: employee.email || '',
+    department: employee.department || '',
+    jobTitle: employee.jobTitle || employee.role || '',
+    role: employee.jobTitle || employee.role || '',
+    status: employee.status || 'Active',
+    aadhaarCardNo: employee.aadhaarCardNo || '',
+    panCardNo: employee.panCardNo || '',
+    pfUanNo: employee.pfUanNo || '',
+    esiNo: employee.esiNo || '',
+    aadhaarDocument: employee.aadhaarDocument || '',
+    panDocument: employee.panDocument || '',
+    profilePicture: sanitizeApiProfilePicture(employee.profilePicture),
+    mobileNo: employee.mobileNo || '',
+    packageAmount: employee.packageAmount || '',
+  };
+}
+
+async function saveEmployeeRecord(employee, isEditing) {
+  const employeeId = employee.employeeCode || employee.id || employee.employeeId;
+  const savedEmployee = await apiRequest(isEditing ? `/employees/${encodeURIComponent(employeeId)}` : '/employees', {
+    method: isEditing ? 'PUT' : 'POST',
+    body: JSON.stringify(buildEmployeeApiPayload(employee)),
+  });
+
+  return {
+    ...employee,
+    ...(savedEmployee || {}),
+    generatedUsername: employee.generatedUsername,
+    generatedPassword: employee.generatedPassword,
+  };
+}
+
+function getEmployeeSaveMessage(employee, isUpdate) {
+  const action = isUpdate ? 'updated' : 'added';
+  const emailTarget = String(employee.email || '').trim() || 'the employee email';
+
+  if (employee.credentialEmailSent === true) {
+    return isUpdate
+      ? `Employee details updated successfully. New login credentials were sent to ${emailTarget}.`
+      : `Employee added successfully. Login credentials were sent to ${emailTarget}.`;
+  }
+
+  if (employee.credentialEmailConfigured === false) {
+    return `Employee ${action} successfully, but email service is not configured. Share credentials manually.`;
+  }
+
+  if (employee.credentialEmailSent === false) {
+    return `Employee ${action} successfully, but credential email was not sent: ${employee.credentialEmailMessage || 'check SMTP settings.'}`;
+  }
+
+  return isUpdate
+    ? 'Employee details updated successfully. Share the refreshed credentials with the employee.'
+    : 'Employee added successfully. Share these login credentials with the employee.';
+}
+
+function getEmployeeSaveToastMessage(isUpdate) {
+  return isUpdate ? 'Employee changes saved successfully.' : 'Employee saved successfully.';
+}
+
+function EmployeeSaveToast({ toast, onClose }) {
+  if (!toast) {
+    return null;
+  }
+
+  const tone = toast.tone || 'success';
+  const iconClassName = tone === 'error'
+    ? 'ri-error-warning-line'
+    : tone === 'notice'
+      ? 'ri-loader-4-line'
+      : 'ri-checkbox-circle-fill';
+  const label = tone === 'error' ? 'Warning' : tone === 'notice' ? 'Saving' : 'Success';
+  const toastMarkup = (
+    <div className={`project-toast is-${tone}`} role="status" aria-live="polite">
+      <span className="project-toast__icon" aria-hidden="true">
+        <i className={iconClassName} />
+      </span>
+      <div className="project-toast__copy">
+        <span>{label}</span>
+        <strong>{toast.text}</strong>
+      </div>
+      <button type="button" className="project-toast__close" onClick={onClose} aria-label="Dismiss notification">
+        <i className="ri-close-line" aria-hidden="true" />
+      </button>
+      <span className="project-toast__accent" aria-hidden="true" />
+    </div>
+  );
+
+  let portalRoot = document.querySelector('.project-toast-portal');
+  if (!portalRoot) {
+    portalRoot = document.createElement('div');
+    portalRoot.className = 'project-toast-portal';
+    document.body.appendChild(portalRoot);
+  }
+
+  return createPortal(toastMarkup, portalRoot);
+}
+
 function getEmployeeCredentialNotice(employee) {
   const loginId = String(employee.generatedUsername || '').trim().toLowerCase() || buildEmployeeLoginEmail(employee);
   const passwordBase = (employee.firstName || 'Employee').toLowerCase();
@@ -1338,7 +1509,26 @@ function getEmployeeCredentialNotice(employee) {
     notificationEmail: String(employee.email || '').trim().toLowerCase(),
     password: password,
     accessRole: normalizeAccessRole(employee.accessRole),
+    credentialEmailConfigured: employee.credentialEmailConfigured,
+    credentialEmailSent: employee.credentialEmailSent,
+    credentialEmailMessage: employee.credentialEmailMessage,
   };
+}
+
+function getCredentialDeliveryText(credentials) {
+  if (credentials.credentialEmailSent === true) {
+    return `Credentials were sent to ${credentials.notificationEmail || 'the email on file'}.`;
+  }
+
+  if (credentials.credentialEmailConfigured === false) {
+    return 'Email service is not configured. Share these credentials manually.';
+  }
+
+  if (credentials.credentialEmailSent === false) {
+    return credentials.credentialEmailMessage || 'Credential email was not sent. Share these credentials manually.';
+  }
+
+  return `Share these credentials with ${credentials.notificationEmail || 'the employee'}.`;
 }
 
 function buildEmployeeLoginEmail(employee) {

@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.logging.Logger;
 import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -190,8 +189,9 @@ public class AssetController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Asset current = assetRepository.findById(id).orElseGet(Asset::new);
-    assetRepository.deleteById(id);
+    String safeId = Objects.requireNonNull(id, "asset id must not be null");
+    Asset current = assetRepository.findById(safeId).orElseGet(Asset::new);
+    assetRepository.deleteById(safeId);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset removed",

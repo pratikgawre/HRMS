@@ -139,6 +139,42 @@ function isHrPayrollEmployee(record) {
     || roleValue.includes('human resource');
 }
 
+async function savePayrollRecordSnapshot(record) {
+  const normalizedRecord = normalizePayrollRecords([record])[0];
+  if (!normalizedRecord?.employeeId || !normalizedRecord?.month || !normalizedRecord?.year) {
+    throw new Error('Salary record details are incomplete.');
+  }
+
+  const savedRecord = await apiRequest('/payroll', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...normalizedRecord,
+      netSalary: getNetSalary(normalizedRecord),
+    }),
+  });
+
+  return normalizePayrollRecords([savedRecord])[0] || normalizedRecord;
+}
+
+async function markPayrollRecordPaid(record) {
+  const savedRecord = await savePayrollRecordSnapshot(record);
+  const paidRecord = await apiRequest(`/payroll/${encodeURIComponent(savedRecord.id)}/mark-paid`, { method: 'PATCH' });
+  await refreshStoredPayrollRecords();
+  return normalizePayrollRecords([paidRecord])[0] || { ...savedRecord, status: 'Paid' };
+}
+
+async function loadPayrollPayslip(record) {
+  if (!record?.employeeId || !record?.month || !record?.year) {
+    throw new Error('Salary record details are incomplete.');
+  }
+
+  const payslipRecord = await apiRequest(
+    `/payroll/payslip?employeeId=${encodeURIComponent(record.employeeId)}&month=${encodeURIComponent(record.month)}&year=${encodeURIComponent(record.year)}`,
+  );
+
+  return normalizePayrollRecords([payslipRecord])[0] || normalizePayrollRecords([record])[0] || record;
+}
+
 function Payroll() {
   const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
@@ -250,12 +286,35 @@ function Payroll() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+
     refreshStoredPayrollRecords()
       .then((recordsFromDatabase) => {
+        if (!active) {
+          return;
+        }
+
         setSavedPayrollRecords(recordsFromDatabase);
         setStatusOverrides(getInitialPayrollStatuses(recordsFromDatabase));
       })
       .catch(() => {});
+
+    const syncPayrollRecordsFromCache = () => {
+      if (!active) {
+        return;
+      }
+
+      const cachedRecords = getStoredPayrollRecords();
+      setSavedPayrollRecords(cachedRecords);
+      setStatusOverrides(getInitialPayrollStatuses(cachedRecords));
+    };
+
+    window.addEventListener('kavyaPayrollRecordsChanged', syncPayrollRecordsFromCache);
+
+    return () => {
+      active = false;
+      window.removeEventListener('kavyaPayrollRecordsChanged', syncPayrollRecordsFromCache);
+    };
   }, []);
 
 
@@ -384,17 +443,17 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
 
   const toggleStatus = async (recordId) => {
     const record = records.find((item) => item.id === recordId);
-    if (!record || isMarkPaidDisabled(record.month, record.year, record.status)) {
+    if (!record || isMarkPaidDisabled(record.month, record.year, record.status) || getNetSalary(record) <= 0) {
       return;
     }
 
     try {
-      await apiRequest(`/payroll/${encodeURIComponent(recordId)}/mark-paid`, { method: 'PATCH' });
+      const paidRecord = await markPayrollRecordPaid(record);
       setStatusOverrides((current) => ({
         ...current,
-        [recordId]: 'Paid',
+        [paidRecord.id]: 'Paid',
       }));
-      setMessage('Payroll payment status updated successfully');
+      setMessage('Payroll payment status updated successfully. Payslip is now available.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to mark salary as paid');
     }
@@ -437,25 +496,25 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
     });
   };
 
-  const handlePayslipClick = (record) => {
+  const handlePayslipClick = async (record) => {
     if (!record?.employeeId || !record?.month || !record?.year) {
       return;
     }
 
-    if (!isPaidStatus(record.status)) {
-      setMessage('Payslip is available only after the salary is marked as paid.');
-      return;
+    try {
+      const payslipRecord = await loadPayrollPayslip(record);
+      setMessage('');
+      setSelectedPayslip(payslipRecord);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to load payslip.');
     }
-
-    setMessage('');
-    setSelectedPayslip(record);
   };
 
   return (
     <>
       <Hero title="Payroll Management" copy="Manage employee salary records, generate payslips, and track paid or unpaid payroll status." />
 
-      <Section title="Payslip Filter" action={role === 'teamLead' ? '' : 'Employee'}>
+
       {role === 'hr' && (
         <>
       <Section
@@ -643,9 +702,13 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
                         <button
                           type="button"
                           onClick={() => toggleStatus(record.id)}
-                          disabled={isMarkPaidDisabled(record.month, record.year, record.status)}
-                          aria-disabled={isMarkPaidDisabled(record.month, record.year, record.status)}
-                          title={isMarkPaidDisabled(record.month, record.year, record.status) ? 'Salary can only be processed after the month is completed.' : 'Mark salary as paid'}
+                          disabled={isMarkPaidDisabled(record.month, record.year, record.status) || getNetSalary(record) <= 0}
+                          aria-disabled={isMarkPaidDisabled(record.month, record.year, record.status) || getNetSalary(record) <= 0}
+                          title={getNetSalary(record) <= 0
+                            ? 'Only non-zero payroll records can be marked as paid.'
+                            : (isMarkPaidDisabled(record.month, record.year, record.status)
+                                ? 'Salary can only be processed after the month is completed.'
+                                : 'Mark salary as paid')}
                         >
                           <i className="ri-exchange-dollar-line" aria-hidden="true" />
                           {isPaidStatus(record.status) ? 'Paid' : 'Mark Paid'}
@@ -717,34 +780,34 @@ function PayrollSalaryTable({ records, setStatusOverrides, focusRecordId = '' })
   const toggleStatus = async (recordId) => {
     const safeRecords = Array.isArray(records) ? records : [];
     const record = safeRecords.find((item) => item.id === recordId);
-    if (!record || isMarkPaidDisabled(record.month, record.year, record.status)) {
+    if (!record || isMarkPaidDisabled(record.month, record.year, record.status) || getNetSalary(record) <= 0) {
       return;
     }
 
     try {
-      await apiRequest(`/payroll/${encodeURIComponent(recordId)}/mark-paid`, { method: 'PATCH' });
+      const paidRecord = await markPayrollRecordPaid(record);
       setStatusOverrides((current) => ({
         ...current,
-        [recordId]: 'Paid',
+        [paidRecord.id]: 'Paid',
       }));
-      setMessage('Payroll payment status updated successfully');
+      setMessage('Payroll payment status updated successfully. Payslip is now available.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to mark salary as paid');
     }
   };
 
-  const handlePayslipClick = (record) => {
+  const handlePayslipClick = async (record) => {
     if (!record?.employeeId || !record?.month || !record?.year) {
       return;
     }
 
-    if (!isPaidStatus(record.status)) {
-      setMessage('Payslip is available only after the salary is marked as paid.');
-      return;
+    try {
+      const payslipRecord = await loadPayrollPayslip(record);
+      setMessage('');
+      setSelectedPayslip(payslipRecord);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to load payslip.');
     }
-
-    setMessage('');
-    setSelectedPayslip(record);
   };
 
   return (
@@ -2058,6 +2121,7 @@ function numberToWords(value) {
 }
 
 export default Payroll;
+
 
 
 

@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,7 +45,7 @@ public class UserController {
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
     List<AppUser> safeUsers = safeList(users);
-    List<AppUser> deduplicatedUsers = new ArrayList<>(deduplicateUsers(safeUsers));
+    List<AppUser> deduplicatedUsers = new ArrayList<>(dedupeUsers(safeUsers));
     return appUserRepository.saveAll(deduplicatedUsers);
   }
 

@@ -3,6 +3,7 @@ package com.kavya.hrms.controller;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.kavya.hrms.model.Project;
 import com.kavya.hrms.repository.ProjectRepository;
+import com.kavya.hrms.service.NotificationService;
 
 @WebMvcTest(ProjectController.class)
 class ProjectControllerTest {
@@ -24,12 +26,16 @@ class ProjectControllerTest {
     @MockitoBean
     private ProjectRepository projectRepository;
 
+    @MockitoBean
+    private NotificationService notificationService;
+
     @Test
     void deleteProjectEndpointShouldResolvePathVariable() throws Exception {
         Project project = new Project();
         project.setId("proj-1");
         project.setName("Alpha");
 
+        assertNotNull(notificationService);
         when(projectRepository.findById("proj-1")).thenReturn(Optional.of(project));
 
         mockMvc.perform(delete("/api/projects/proj-1"))

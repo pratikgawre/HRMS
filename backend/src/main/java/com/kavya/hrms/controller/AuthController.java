@@ -255,9 +255,7 @@ public class AuthController {
   }
 
   private LoginResponse okResponse(AuthSession session) {
-    AppUser user = appUserRepository.findByUserId(session.getUserId())
-        .or(() -> appUserRepository.findByEmailIgnoreCase(session.getEmail()))
-        .orElse(null);
+    AppUser user = resolveSessionUser(session);
     LoginResponse response = new LoginResponse();
     response.setOk(true);
     response.setUserId(session.getUserId());
@@ -272,6 +270,38 @@ public class AuthController {
     response.setMustChangePassword(Boolean.TRUE.equals(session.getMustChangePassword()));
     response.setMessage(Boolean.TRUE.equals(session.getMustChangePassword()) ? "Password change required" : "Session active");
     return response;
+  }
+
+  private AppUser resolveSessionUser(@Nullable AuthSession session) {
+    if (session == null) {
+      return null;
+    }
+
+    String email = normalizeEmail(session.getEmail());
+    if (!email.isBlank()) {
+      Optional<AppUser> emailMatch = appUserRepository.findAllByEmailIgnoreCase(email).stream().findFirst();
+      if (emailMatch.isPresent()) {
+        return emailMatch.get();
+      }
+    }
+
+    String userId = normalizeValue(session.getUserId());
+    if (!userId.isBlank()) {
+      Optional<AppUser> userIdMatch = appUserRepository.findAllByUserId(userId).stream()
+          .filter(user -> email.isBlank() || email.equals(normalizeEmail(user.getEmail())))
+          .findFirst()
+          .or(() -> appUserRepository.findAllByUserId(userId).stream().findFirst());
+      if (userIdMatch.isPresent()) {
+        return userIdMatch.get();
+      }
+    }
+
+    String employeeId = normalizeValue(session.getEmployeeId());
+    if (!employeeId.isBlank()) {
+      return appUserRepository.findAllByEmployeeId(employeeId).stream().findFirst().orElse(null);
+    }
+
+    return null;
   }
 
   private PasswordResetResponse resetResponse(boolean ok, boolean emailSent, String email, String resetToken, String expiresAt, String message) {
@@ -307,6 +337,7 @@ public class AuthController {
   private String normalizeRole(String role) {
     if (role == null) {
       return "Employee";
+    }
     String normalized = role.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
     return switch (normalized) {
       case "superadmin", "admin" -> "Super Admin";
@@ -340,6 +371,8 @@ public class AuthController {
     response.setMessage(message);
     return response;
   }
+
+  private record LegacyAccount(String password, String role, String employeeId, String employeeName) {}
 
   private Optional<AppUser> buildLegacyAccount(String email, String password) {
     LegacyAccount account = switch (email) {
@@ -391,6 +424,10 @@ public class AuthController {
     return email.trim().toLowerCase(Locale.ROOT);
   }
 
+  private String normalizeValue(@Nullable String value) {
+    return value == null ? "" : value.trim();
+  }
+
   private String extractToken(@Nullable String authorization) {
     if (authorization == null) {
       return "";
@@ -404,3 +441,4 @@ public class AuthController {
     return trimmed;
   }
 }
+

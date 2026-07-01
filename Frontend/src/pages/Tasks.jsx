@@ -15,7 +15,6 @@ import {
   getProjectAssigneeOptions,
   getSelectableTeamLeadProjects,
 } from '../utils/teamLeadAssignments.js';
-import { taskColumns } from './taskColumns.js';
 
 export const taskColumns = [
   { key: 'id', label: 'Task ID' },

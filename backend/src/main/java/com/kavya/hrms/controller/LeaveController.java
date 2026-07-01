@@ -49,7 +49,7 @@ public class LeaveController {
     if (accessRole != null && !accessRole.isBlank()) {
       safeRequest.setOwnerRole(accessRole);
     }
-    LeaveRequest saved = leaveRequestRepository.save(request);
+    LeaveRequest saved = leaveRequestRepository.save(safeRequest);
     notifyLeaveSubmitted(saved, accessRole, userId);
     return saved;
   }
@@ -59,8 +59,7 @@ public class LeaveController {
     List<LeaveRequest> safeRequests = safeList(requests);
     long existingCount = leaveRequestRepository.count();
     leaveRequestRepository.deleteAll();
-    List<LeaveRequest> saved = leaveRequestRepository.saveAll(
-        requests == null ? List.of() : requests.stream().filter(Objects::nonNull).toList());
+    List<LeaveRequest> saved = leaveRequestRepository.saveAll(safeRequests.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
       notificationService.notifyRolesExcept(
           NotificationAudience.leaveApproverRecipients(),
@@ -82,8 +81,9 @@ public class LeaveController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     LeaveRequest previous = leaveRequestRepository.findById(id).orElse(null);
-    request.setId(id);
-    LeaveRequest saved = leaveRequestRepository.save(request);
+    LeaveRequest safeRequest = request == null ? new LeaveRequest() : request;
+    safeRequest.setId(id);
+    LeaveRequest saved = leaveRequestRepository.save(safeRequest);
     notifyLeaveUpdated(saved, previous, accessRole, userId);
     return saved;
   }
@@ -181,5 +181,9 @@ public class LeaveController {
       return "Rejected";
     }
     return status == null || status.isBlank() ? "Updated" : status.trim();
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

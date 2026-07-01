@@ -10,7 +10,14 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.List;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.http.HttpStatus;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,7 +33,6 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
-  private static final Logger log = LoggerFactory.getLogger(TaskController.class);
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
   private final EmployeeRepository employeeRepository;
@@ -95,7 +101,7 @@ public class TaskController {
     List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
-    List<TaskItem> saved = taskRepository.saveAll(tasks == null ? List.of() : tasks.stream().filter(Objects::nonNull).toList());
+    List<TaskItem> saved = taskRepository.saveAll(safeTasks.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
       notificationService.notifyRolesExcept(
           NotificationAudience.taskStatusRecipients(),
@@ -141,7 +147,7 @@ public class TaskController {
     Update update = new Update().set("status", nextStatus);
     mongoTemplate.updateFirst(query, update, TaskItem.class);
     TaskItem saved = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
-    notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
+    notifyTaskUpdated(saved, current, accessRole, userId);
     return saved;
   }
 
@@ -418,5 +424,17 @@ public class TaskController {
 
   private <T> List<T> safeList(List<T> values) {
     return values == null ? new ArrayList<>() : new ArrayList<>(values);
+  }
+
+  public static class TaskStatusRequest {
+    private String status;
+
+    public String getStatus() {
+      return status;
+    }
+
+    public void setStatus(String status) {
+      this.status = status;
+    }
   }
 }

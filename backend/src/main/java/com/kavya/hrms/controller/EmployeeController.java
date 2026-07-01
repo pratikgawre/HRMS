@@ -7,13 +7,19 @@ import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.EmployeeWelcomeEmailService;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -23,6 +29,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -77,7 +84,7 @@ public class EmployeeController {
         accessRole,
         "System",
         userId);
-    employeeWelcomeEmailService.sendWelcomeEmail(saved);
+    applyCredentialEmailStatus(saved, employeeWelcomeEmailService.sendWelcomeEmail(saved));
     return saved;
   }
 
@@ -130,7 +137,7 @@ public class EmployeeController {
       Employee existing = safeExistingByKey.get(key);
       if (existing == null) {
         resetEmployeeLoginCredentials(employee);
-        employeeWelcomeEmailService.sendWelcomeEmail(employee);
+        applyCredentialEmailStatus(employee, employeeWelcomeEmailService.sendWelcomeEmail(employee));
         continue;
       }
 
@@ -139,9 +146,19 @@ public class EmployeeController {
           && handledExistingKeys.add(key)
           && hasEmployeeProfileChanged(existing, employee)) {
         resetEmployeeLoginCredentials(employee);
-        employeeWelcomeEmailService.sendCredentialUpdateEmail(employee);
+        applyCredentialEmailStatus(employee, employeeWelcomeEmailService.sendCredentialUpdateEmail(employee));
       }
     }
+  }
+
+  private void applyCredentialEmailStatus(Employee employee, EmployeeWelcomeEmailService.DeliveryResult delivery) {
+    if (employee == null || delivery == null) {
+      return;
+    }
+
+    employee.setCredentialEmailConfigured(delivery.isConfigured());
+    employee.setCredentialEmailSent(delivery.isSent());
+    employee.setCredentialEmailMessage(delivery.getMessage());
   }
 
   private boolean shouldSendCredentialUpdateForEmployee(String requestedUpdateKey, String key, Employee employee) {
@@ -200,7 +217,7 @@ public class EmployeeController {
     employee.setEmployeeId(employeeId);
     Employee saved = employeeRepository.save(normalizeEmployeeIdentity(employee));
     resetEmployeeLoginCredentials(saved);
-    employeeWelcomeEmailService.sendCredentialUpdateEmail(saved);
+    applyCredentialEmailStatus(saved, employeeWelcomeEmailService.sendCredentialUpdateEmail(saved));
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Employee profile updated",
@@ -558,10 +575,6 @@ public class EmployeeController {
     return name + " was " + action + " in " + department + ".";
   }
 
-  private <T> List<T> safeList(List<T> values) {
-    return values == null ? new ArrayList<>() : new ArrayList<>(values);
-  }
-
   private Employee resolveOrCreateEmployee(String employeeId, String accessRole, String userId) {
     Employee existingEmployee = resolveEmployee(employeeId).orElse(null);
     if (existingEmployee != null) {
@@ -654,15 +667,6 @@ public class EmployeeController {
     return value == null ? "" : value.trim();
   }
 
-  private String firstNonBlank(String... values) {
-    for (String value : values) {
-      String normalized = normalizeValue(value);
-      if (!normalized.isBlank()) {
-        return normalized;
-      }
-    }
-    return "";
-  }
 
   private String resolveAvatar(String displayName) {
     String[] parts = firstNonBlank(displayName, "User").split("\\s+");
