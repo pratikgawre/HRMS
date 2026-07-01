@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/users")
-@SuppressWarnings("null")
 public class UserController {
   private final AppUserRepository appUserRepository;
 
@@ -29,7 +28,6 @@ public class UserController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
     return appUserRepository.saveAll(dedupeUsers(users));
   }

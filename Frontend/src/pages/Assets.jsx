@@ -840,7 +840,7 @@ function EmployeeAssetsView() {
           return;
         }
 
-        const normalizedAssets = normalizeEmployeeAssetRows(Array.isArray(assetRows) ? assetRows : []);
+        const normalizedAssets = normalizeEmployeeAssetRows(Array.isArray(assetRows) ? assetRows : [], currentEmployee);
         console.info('[Assets] employee fetch response', {
           assetCount: Array.isArray(assetRows) ? assetRows.length : 0,
           sampleDates: Array.isArray(assetRows)
@@ -1426,9 +1426,12 @@ function createSeedRequests(employee, assets) {
       requestTypeLabel: 'Replacement',
       reason: 'Damaged',
       description: 'The keyboard area is getting hot and the lid is showing visible wear.',
+      currentDate: '24 Apr 2026',
+      dueDate: assets[0].dueDate || '',
       requestDate: '24 Apr 2026',
       status: 'Pending',
       employeeId,
+      employeeName: employee.displayName || employee.name || employee.employeeName || '',
     },
     {
       id: 'RPR-102',
@@ -1440,9 +1443,12 @@ function createSeedRequests(employee, assets) {
       requestTypeLabel: 'Repair',
       issue: 'Battery Issue',
       description: 'Bluetooth keeps disconnecting and the battery drains much faster than normal.',
+      currentDate: '22 Apr 2026',
+      dueDate: assets[1].dueDate || '',
       requestDate: '22 Apr 2026',
       status: 'In Progress',
       employeeId,
+      employeeName: employee.displayName || employee.name || employee.employeeName || '',
     },
     {
       id: 'RET-103',
@@ -1454,9 +1460,12 @@ function createSeedRequests(employee, assets) {
       requestTypeLabel: 'Return',
       reason: 'Project completed and the device is no longer required.',
       remarks: 'Please collect this week. I will keep the device ready at the reception desk.',
+      currentDate: '20 Apr 2026',
+      dueDate: assets[2].dueDate || '',
       requestDate: '20 Apr 2026',
       status: 'Returned',
       employeeId,
+      employeeName: employee.displayName || employee.name || employee.employeeName || '',
     },
   ];
 }
@@ -1482,6 +1491,8 @@ function normalizeAssetRequest(request, index = 0) {
     description: request.description || '',
     remarks: request.remarks || '',
     screenshot: request.screenshot || '',
+    currentDate: formatDateForDisplay(request.currentDate || request.createdDate || request.requestDate || ''),
+    dueDate: formatDateForDisplay(request.dueDate || request.asset?.dueDate || ''),
     requestDate: request.requestDate || request.createdDate || '',
     status: request.status || 'Pending',
     resolution: request.resolution || '',
@@ -1512,7 +1523,10 @@ function filterAnnouncementsForSection(items, keywords) {
   });
 }
 
-function normalizeEmployeeAssetRows(rows) {
+function normalizeEmployeeAssetRows(rows, currentEmployee = {}) {
+  const currentEmployeeId = String(currentEmployee.employeeId || currentEmployee.employeeCode || currentEmployee.id || '').trim();
+  const currentEmployeeName = String(currentEmployee.employee || currentEmployee.employeeName || currentEmployee.displayName || '').trim();
+
   return (Array.isArray(rows) ? rows : []).map((asset, index) => ({
     id: asset.id || asset.asset_id || asset.assetId || `AST-${String(index + 1)}`,
     assetCode: asset.asset_code || asset.assetCode || asset.id || `AST-${String(index + 1)}`,
@@ -1525,11 +1539,40 @@ function normalizeEmployeeAssetRows(rows) {
     dueDate: formatDateForDisplay(asset.dueDate || asset.due_date || asset.returnDate || asset.return_date || ''),
     condition: asset.condition || 'Good',
     status: asset.status || 'Assigned',
-    assignedToEmployeeId: asset.employee_id || asset.employeeId || asset.assignedToEmployeeId || '',
-    assignedTo: asset.employee_name || asset.employeeName || asset.assignedTo || '',
-    employeeName: asset.employee_name || asset.employeeName || asset.assignedTo || '',
+    assignedToEmployeeId: asset.employee_id || asset.employeeId || asset.assignedToEmployeeId || currentEmployeeId || '',
+    assignedTo: asset.employee_name || asset.employeeName || asset.assignedTo || currentEmployeeName || '',
+    employeeName: resolveEmployeeName({
+      currentEmployeeId,
+      currentEmployeeName,
+      employeeName: asset.employee_name || asset.employeeName || '',
+      assignedTo: asset.assignedTo || '',
+      assignedToEmployeeId: asset.employee_id || asset.employeeId || asset.assignedToEmployeeId || '',
+    }),
     imageUrl: asset.imageUrl || createPlaceholderAssetImage(asset.asset_name || asset.assetName || 'Asset', '#0f9f9a'),
   }));
+}
+
+function resolveEmployeeName({ currentEmployeeId, currentEmployeeName, employeeName, assignedTo, assignedToEmployeeId }) {
+  const directName = String(employeeName || '').trim();
+  if (directName && !looksLikeEmployeeCode(directName)) {
+    return directName;
+  }
+
+  const assignedToText = String(assignedTo || '').trim();
+  if (assignedToText && !looksLikeEmployeeCode(assignedToText)) {
+    return assignedToText;
+  }
+
+  const resolvedId = String(assignedToEmployeeId || '').trim();
+  if (currentEmployeeId && (resolvedId === currentEmployeeId || assignedToText === currentEmployeeId)) {
+    return currentEmployeeName || directName || assignedToText || currentEmployeeId;
+  }
+
+  return currentEmployeeName || directName || assignedToText || '-';
+}
+
+function looksLikeEmployeeCode(value) {
+  return /^[A-Za-z]{2,}\d+$/.test(String(value || '').trim());
 }
 
 function normalizeAssetAssignments(rows) {

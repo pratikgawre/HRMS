@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/employees")
-@SuppressWarnings("null")
 public class EmployeeController {
   private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
@@ -33,7 +32,6 @@ public class EmployeeController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public Employee create(
       @RequestBody Employee employee,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -52,7 +50,6 @@ public class EmployeeController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<Employee> bulkSave(
       @RequestBody List<Employee> employees,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -94,7 +91,6 @@ public class EmployeeController {
   }
 
   @DeleteMapping("/{employeeId}")
-  @SuppressWarnings("null")
   public void delete(
       @PathVariable String employeeId,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,

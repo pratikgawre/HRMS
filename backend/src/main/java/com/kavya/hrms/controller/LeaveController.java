@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/leaves")
-@SuppressWarnings("null")
 public class LeaveController {
   private final LeaveRequestRepository leaveRequestRepository;
   private final AppUserRepository appUserRepository;
@@ -53,7 +52,6 @@ public class LeaveController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<LeaveRequest> bulkSave(@RequestBody List<LeaveRequest> requests) {
     long existingCount = leaveRequestRepository.count();
     leaveRequestRepository.deleteAll();

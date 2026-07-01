@@ -19,7 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
 @ExtendWith(MockitoExtension.class)
-@SuppressWarnings("null")
 class AuthControllerTest {
     @Mock
     private AppUserRepository appUserRepository;

@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/asset-requests")
-@SuppressWarnings("null")
 public class AssetRequestController {
   private final AssetRequestRepository repository;
 
@@ -35,7 +34,17 @@ public class AssetRequestController {
 
   @PostMapping
   public AssetRequest create(@RequestBody AssetRequest request) {
-    request.setCreatedDate(ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu")));
+    String now = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"));
+    String currentDate = firstNonBlank(request.getCurrentDate(), request.getCreatedDate(), now);
+    request.setCurrentDate(currentDate);
+    request.setCreatedDate(firstNonBlank(request.getCreatedDate(), currentDate));
+    request.setDueDate(firstNonBlank(request.getDueDate(), ""));
+    request.setEmployeeId(firstNonBlank(request.getEmployeeId(), ""));
+    request.setEmployeeName(firstNonBlank(request.getEmployeeName(), ""));
+    request.setAssetId(firstNonBlank(request.getAssetId(), ""));
+    request.setAssetCode(firstNonBlank(request.getAssetCode(), ""));
+    request.setAssetName(firstNonBlank(request.getAssetName(), ""));
+    request.setRequestType(firstNonBlank(request.getRequestType(), "replacement"));
     if (request.getStatus() == null || request.getStatus().isBlank()) {
       request.setStatus("Pending");
     }
@@ -43,7 +52,6 @@ public class AssetRequestController {
   }
 
   @PatchMapping("/{id}/status")
-  @SuppressWarnings("null")
   public ResponseEntity<AssetRequest> updateStatus(@PathVariable String id, @RequestBody RequestStatusUpdate payload) {
     return repository.findById(id)
         .map((request) -> {
@@ -83,5 +91,19 @@ public class AssetRequestController {
     public void setHandledBy(String handledBy) {
       this.handledBy = handledBy;
     }
+  }
+
+  private String firstNonBlank(String... values) {
+    if (values == null) {
+      return "";
+    }
+
+    for (String value : values) {
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+
+    return "";
   }
 }

@@ -489,9 +489,14 @@ function Tasks() {
       ...selectedTask,
       status: form.status,
     };
+    const taskKey = selectedTask.id || selectedTask.taskCode || selectedTask.backendId;
+    if (!taskKey) {
+      setMessage('Task identifier is missing.');
+      return;
+    }
 
     try {
-      const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
+      const saved = await apiRequest(`/tasks/${taskKey}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: nextTask.status }),
       });
@@ -502,8 +507,8 @@ function Tasks() {
       setIsStatusModalOpen(false);
       setSelectedTask(null);
       setMessage('Task status updated successfully.');
-    } catch {
-      setMessage('Task status could not be updated right now.');
+    } catch (error) {
+      setMessage(error instanceof Error && error.message ? error.message : 'Task status could not be updated right now.');
     }
   };
 
@@ -830,9 +835,14 @@ function EmployeeTasksView() {
       ...selectedTask,
       status: form.status,
     };
+    const taskKey = selectedTask.id || selectedTask.taskCode || selectedTask.backendId;
+    if (!taskKey) {
+      setMessage('Task identifier is missing.');
+      return;
+    }
 
     try {
-      const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
+      const saved = await apiRequest(`/tasks/${taskKey}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: nextTask.status }),
       });
@@ -846,8 +856,8 @@ function EmployeeTasksView() {
         message: 'Task status updated successfully.',
         type: 'success',
       });
-    } catch {
-      setMessage('Task status could not be updated right now.');
+    } catch (error) {
+      setMessage(error instanceof Error && error.message ? error.message : 'Task status could not be updated right now.');
     }
   };
 

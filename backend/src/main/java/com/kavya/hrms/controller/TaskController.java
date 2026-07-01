@@ -31,7 +31,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/tasks")
-@SuppressWarnings("null")
 public class TaskController {
   private static final Logger log = LoggerFactory.getLogger(TaskController.class);
   private final TaskRepository taskRepository;
@@ -102,7 +101,6 @@ public class TaskController {
   }
 
   @PostMapping("/bulk")
-  @SuppressWarnings("null")
   public List<TaskItem> bulkSave(
       @RequestBody List<TaskItem> tasks,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
@@ -155,18 +153,22 @@ public class TaskController {
       @RequestBody TaskStatusRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem current = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    TaskItem current = taskRepository.findById(id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
     String nextStatus = firstNonBlank(request == null ? null : request.getStatus(), current.getStatus());
-    Query query = new Query(Criteria.where("id").is(id));
-    Update update = new Update().set("status", nextStatus);
-    mongoTemplate.updateFirst(query, update, TaskItem.class);
-    TaskItem saved = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
-    notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
-    return saved;
+
+    try {
+      current.setStatus(nextStatus);
+      TaskItem saved = taskRepository.save(current);
+      notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
+      return saved;
+    } catch (Exception ex) {
+      log.error("Failed to update task status for id={} status={}", id, nextStatus, ex);
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Task status could not be updated");
+    }
   }
 
   @DeleteMapping("/{id}")
-  @SuppressWarnings("null")
   public void delete(
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,

@@ -16,6 +16,8 @@ public class AssetRequest {
   private String description;
   private String screenshot;
   private String status;
+  private String currentDate;
+  private String dueDate;
   private String createdDate;
   private String resolution;
   private String handledBy;
@@ -40,6 +42,10 @@ public class AssetRequest {
   public void setScreenshot(String screenshot) { this.screenshot = screenshot; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
+  public String getCurrentDate() { return currentDate; }
+  public void setCurrentDate(String currentDate) { this.currentDate = currentDate; }
+  public String getDueDate() { return dueDate; }
+  public void setDueDate(String dueDate) { this.dueDate = dueDate; }
   public String getCreatedDate() { return createdDate; }
   public void setCreatedDate(String createdDate) { this.createdDate = createdDate; }
   public String getResolution() { return resolution; }

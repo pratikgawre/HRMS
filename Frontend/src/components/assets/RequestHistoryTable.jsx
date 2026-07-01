@@ -22,6 +22,10 @@ function RequestHistoryTable({
               <th>Request ID</th>
               <th>Asset</th>
               <th>{renderIssue ? 'Issue' : 'Reason'}</th>
+              <th>Current Date</th>
+              <th>Due Date</th>
+              <th>Employee ID</th>
+              <th>Employee Name</th>
               <th>Request Date</th>
               <th>Status</th>
             </tr>
@@ -29,7 +33,7 @@ function RequestHistoryTable({
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td className="table-empty" colSpan={5}>
+                <td className="table-empty" colSpan={9}>
                   <EmptyRequestState title={emptyMessage} />
                 </td>
               </tr>
@@ -45,7 +49,11 @@ function RequestHistoryTable({
                 <td data-label={renderIssue ? 'Issue' : 'Reason'}>
                   {renderIssue ? renderIssue(request) : renderReason(request)}
                 </td>
-                <td data-label="Request Date">{request.requestDate}</td>
+                <td data-label="Current Date">{request.currentDate || request.requestDate || '-'}</td>
+                <td data-label="Due Date">{request.dueDate || '-'}</td>
+                <td data-label="Employee ID">{request.employeeId || '-'}</td>
+                <td data-label="Employee Name">{request.employeeName || '-'}</td>
+                <td data-label="Request Date">{request.requestDate || request.currentDate || '-'}</td>
                 <td data-label="Status">
                   <span className={`status status-${statusClassName(request.status)}`}>{request.status}</span>
                 </td>

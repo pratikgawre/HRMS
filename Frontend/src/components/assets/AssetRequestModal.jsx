@@ -293,6 +293,8 @@ export function buildRequestPayload({ type, asset, draft, requestId, requestDate
     description: draft.description,
     remarks: draft.remarks,
     screenshot: draft.screenshot,
+    currentDate: requestDate,
+    dueDate: asset.dueDate || asset.returnDate || '',
     requestDate,
     status: type === 'return' ? 'Pending Approval' : 'Pending',
   };

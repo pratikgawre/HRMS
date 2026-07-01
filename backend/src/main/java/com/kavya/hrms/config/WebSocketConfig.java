@@ -10,7 +10,6 @@ import com.kavya.hrms.websocket.SettingsWebSocketHandler;
 
 @Configuration
 @EnableWebSocket
-@SuppressWarnings("null")
 public class WebSocketConfig implements WebSocketConfigurer {
   private final @NonNull SettingsWebSocketHandler settingsWebSocketHandler;
 

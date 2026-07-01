@@ -24,7 +24,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/payroll")
-@SuppressWarnings("null")
 public class PayrollController {
   private static final String CURRENT_MONTH_LIMIT_MESSAGE = "Current month salary can only be marked as paid between the 1st and 15th.";
   private static final String FUTURE_PERIOD_LIMIT_MESSAGE = "Salary payments cannot be processed for future payroll periods.";
@@ -82,7 +81,6 @@ public class PayrollController {
   }
 
   @PostMapping
-  @SuppressWarnings("null")
   public ResponseEntity<Object> save(@RequestBody PayrollRecord record) {
     if (record == null || isBlank(record.getEmployeeId()) || isBlank(record.getMonth()) || isBlank(record.getYear())) {
       return badRequest("Employee, month, and year are required.");
@@ -139,7 +137,6 @@ public class PayrollController {
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
     List<PayrollRecord> safeRecords = records == null ? List.of() : records;
-    @SuppressWarnings("null")
     List<PayrollRecord> saved = payrollRecordRepository.saveAll(safeRecords);
     return saved;
   }

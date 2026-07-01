@@ -22,7 +22,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
 
 @Configuration
-@SuppressWarnings("null")
 public class DataSeeder {
   @Bean
   CommandLineRunner seedData(
