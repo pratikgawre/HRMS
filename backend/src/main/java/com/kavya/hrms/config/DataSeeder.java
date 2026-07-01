@@ -26,7 +26,7 @@ import com.kavya.hrms.repository.TaskRepository;
 @Configuration
 public class DataSeeder {
   @Bean
-  public CommandLineRunner seedData(
+  CommandLineRunner seedData(
       AppUserRepository appUserRepository,
       LeaveRequestRepository leaveRequestRepository,
       AnnouncementRepository announcementRepository,

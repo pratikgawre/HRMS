@@ -9,10 +9,11 @@ public class LoginResponse {
   private String avatar;
   private String profilePicture;
   private String userId;
+  private String status;
   private String lastLogin;
   private String token;
   private boolean mustChangePassword;
-private String message;
+  private String message;
 
   public boolean isOk() { return ok; }
   public void setOk(boolean ok) { this.ok = ok; }
@@ -30,6 +31,8 @@ private String message;
   public void setProfilePicture(String profilePicture) { this.profilePicture = profilePicture; }
   public String getUserId() { return userId; }
   public void setUserId(String userId) { this.userId = userId; }
+  public String getStatus() { return status; }
+  public void setStatus(String status) { this.status = status; }
   public String getLastLogin() { return lastLogin; }
   public void setLastLogin(String lastLogin) { this.lastLogin = lastLogin; }
   public String getToken() { return token; }

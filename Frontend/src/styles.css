@@ -5523,6 +5523,19 @@ button.attendance-summary-card.is-clickable:focus-visible {
   background: #2ea75e;
 }
 
+.project-toast.is-notice {
+  border-color: rgba(15, 159, 154, 0.24);
+}
+
+.project-toast.is-notice .project-toast__icon {
+  color: var(--primary);
+  background: rgba(15, 159, 154, 0.12);
+}
+
+.project-toast.is-notice .project-toast__accent {
+  background: var(--primary);
+}
+
 .project-toast.is-error {
   border-color: rgba(214, 79, 96, 0.24);
 }

@@ -10,8 +10,8 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
+import java.util.List;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -102,7 +102,7 @@ public class TaskController {
     List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
-    List<TaskItem> saved = taskRepository.saveAll(Objects.requireNonNull(safeTasks));
+    List<TaskItem> saved = taskRepository.saveAll(safeTasks.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
       notificationService.notifyRolesExcept(
           NotificationAudience.taskStatusRecipients(),
@@ -152,9 +152,8 @@ public class TaskController {
     Query query = new Query(Criteria.where("id").is(safeId));
     Update update = new Update().set("status", nextStatus);
     mongoTemplate.updateFirst(query, update, TaskItem.class);
-    TaskItem saved = taskRepository.findById(safeId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
-    notifyTaskChangeSafely(saved, "Task updated", "updated", Objects.requireNonNullElse(accessRole, ""),
-        Objects.requireNonNullElse(userId, ""));
+    TaskItem saved = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    notifyTaskUpdated(saved, current, accessRole, userId);
     return saved;
   }
 
@@ -220,22 +219,6 @@ public class TaskController {
         "System");
   }
 
-  private void notifyTaskChangeSafely(TaskItem task, String title, String verb, String accessRole, String userId) {
-    if (task == null) {
-      return;
-    }
-    String safeTaskId = Objects.requireNonNullElse(task.getId(), "");
-
-    notificationService.notifyRolesExcept(
-        NotificationAudience.taskStatusRecipients(),
-        excludedIds(Objects.requireNonNullElse(userId, "")),
-        title,
-        buildTaskMessage(task, verb),
-        "task",
-        safeTaskId,
-        Objects.requireNonNullElse(accessRole, ""),
-        "System");
-  }
 
   private String buildTaskMessage(TaskItem task, String action) {
     String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
@@ -456,5 +439,17 @@ public class TaskController {
 
   private <T> List<T> safeList(List<T> values) {
     return values == null ? new ArrayList<>() : new ArrayList<>(values);
+  }
+
+  public static class TaskStatusRequest {
+    private String status;
+
+    public String getStatus() {
+      return status;
+    }
+
+    public void setStatus(String status) {
+      this.status = status;
+    }
   }
 }

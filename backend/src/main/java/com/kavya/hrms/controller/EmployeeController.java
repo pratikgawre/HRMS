@@ -11,7 +11,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,8 +28,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpStatus;
@@ -86,7 +85,7 @@ public class EmployeeController {
         accessRole,
         "System",
         userId);
-    employeeWelcomeEmailService.sendWelcomeEmail(saved);
+    applyCredentialEmailStatus(saved, employeeWelcomeEmailService.sendWelcomeEmail(saved));
     return saved;
   }
 
@@ -138,7 +137,7 @@ public class EmployeeController {
       Employee existing = safeExistingByKey.get(key);
       if (existing == null) {
         resetEmployeeLoginCredentials(employee);
-        employeeWelcomeEmailService.sendWelcomeEmail(employee);
+        applyCredentialEmailStatus(employee, employeeWelcomeEmailService.sendWelcomeEmail(employee));
         continue;
       }
 
@@ -147,9 +146,19 @@ public class EmployeeController {
           && handledExistingKeys.add(key)
           && hasEmployeeProfileChanged(existing, employee)) {
         resetEmployeeLoginCredentials(employee);
-        employeeWelcomeEmailService.sendCredentialUpdateEmail(employee);
+        applyCredentialEmailStatus(employee, employeeWelcomeEmailService.sendCredentialUpdateEmail(employee));
       }
     }
+  }
+
+  private void applyCredentialEmailStatus(Employee employee, EmployeeWelcomeEmailService.DeliveryResult delivery) {
+    if (employee == null || delivery == null) {
+      return;
+    }
+
+    employee.setCredentialEmailConfigured(delivery.isConfigured());
+    employee.setCredentialEmailSent(delivery.isSent());
+    employee.setCredentialEmailMessage(delivery.getMessage());
   }
 
   private boolean shouldSendCredentialUpdateForEmployee(String requestedUpdateKey, String key, Employee employee) {
@@ -208,7 +217,7 @@ public class EmployeeController {
     employee.setEmployeeId(employeeId);
     Employee saved = employeeRepository.save(Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null"));
     resetEmployeeLoginCredentials(saved);
-    employeeWelcomeEmailService.sendCredentialUpdateEmail(saved);
+    applyCredentialEmailStatus(saved, employeeWelcomeEmailService.sendCredentialUpdateEmail(saved));
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Employee profile updated",
@@ -643,12 +652,19 @@ public class EmployeeController {
   }
 
   private String firstNonBlank(String... values) {
+    if (values == null) {
+      return "";
+    }
+
     for (String value : values) {
-      String normalized = normalizeValue(value);
-      if (!normalized.isBlank()) {
-        return normalized;
+      if (value != null) {
+        String trimmed = value.trim();
+        if (!trimmed.isEmpty()) {
+          return trimmed;
+        }
       }
     }
+
     return "";
   }
 
@@ -683,3 +699,6 @@ public class EmployeeController {
     return "General";
   }
 }
+
+
+

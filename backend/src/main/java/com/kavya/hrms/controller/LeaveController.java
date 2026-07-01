@@ -60,7 +60,7 @@ public class LeaveController {
     List<LeaveRequest> safeRequests = safeList(requests);
     long existingCount = leaveRequestRepository.count();
     leaveRequestRepository.deleteAll();
-    List<LeaveRequest> saved = leaveRequestRepository.saveAll(safeRequests);
+    List<LeaveRequest> saved = leaveRequestRepository.saveAll(safeRequests.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
       notificationService.notifyRolesExcept(
           NotificationAudience.leaveApproverRecipients(),
@@ -199,16 +199,6 @@ public class LeaveController {
   }
 
   private <T> List<T> safeList(List<T> values) {
-    List<T> safeValues = new ArrayList<>();
-    if (values == null) {
-      return safeValues;
-    }
-
-    for (T value : values) {
-      if (value != null) {
-        safeValues.add(value);
-      }
-    }
-    return safeValues;
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

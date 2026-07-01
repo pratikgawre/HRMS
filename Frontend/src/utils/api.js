@@ -25,16 +25,7 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     const text = await response.text();
-    let message = text || `Request failed: ${response.status}`;
-
-    try {
-      const payload = text ? JSON.parse(text) : null;
-      if (payload && typeof payload.message === 'string') {
-        message = payload.message;
-      }
-    } catch {
-      // Fall back to the raw response text below.
-    }
+    const message = formatApiError(text, response.status);
 
     throw new Error(message);
   }
@@ -77,7 +68,7 @@ export async function safeApiRequest(path, fallback, options = {}) {
 }
 
 export async function deleteEmployee(employeeId) {
-  return apiRequest(`/employees/${employeeId}`, { method: 'DELETE' });
+  return apiRequest(`/employees/${encodeURIComponent(employeeId)}`, { method: 'DELETE' });
 }
 
 export async function uploadEmployeeProfilePhoto(employeeId, file) {
@@ -94,5 +85,10 @@ export async function removeEmployeeProfilePhoto(employeeId) {
 }
 
 export async function deleteUser(userId) {
-  return apiRequest(`/users/${userId}`, { method: 'DELETE' });
+  return apiRequest(`/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
 }
+
+
+
+
+

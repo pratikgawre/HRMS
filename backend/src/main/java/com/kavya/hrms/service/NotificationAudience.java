@@ -9,43 +9,35 @@ public final class NotificationAudience {
   }
 
   public static String normalizeAccessRole(String accessRoleHeader) {
-    String value = String.valueOf(accessRoleHeader == null ? "" : accessRoleHeader).trim().toLowerCase(Locale.ROOT).replace(" ", "");
-    if ("admin".equals(value) || "superadmin".equals(value)) return "admin";
-    if ("hr".equals(value) || "hrmanager".equals(value)) return "hr";
-    if ("projectmanager".equals(value)) return "projectmanager";
-    if ("teamlead".equals(value)) return "teamlead";
-    if ("employee".equals(value)) return "employee";
-    return "employee";
+    String value = String.valueOf(accessRoleHeader == null ? "" : accessRoleHeader)
+        .trim()
+        .toLowerCase(Locale.ROOT)
+        .replace(" ", "");
+
+    return switch (value) {
+      case "admin", "superadmin" -> "admin";
+      case "hr", "hrmanager" -> "hr";
+      case "projectmanager" -> "projectmanager";
+      case "teamlead" -> "teamlead";
+      case "employee" -> "employee";
+      default -> "employee";
+    };
   }
 
   public static Set<String> operationalRecipients(String accessRoleHeader) {
-    Set<String> roles = new LinkedHashSet<>();
-    roles.add("admin");
-    roles.add(normalizeAccessRole(accessRoleHeader));
-    return roles;
+    return recipients("admin", normalizeAccessRole(accessRoleHeader));
   }
 
   public static Set<String> adminHrRecipients() {
-    Set<String> roles = new LinkedHashSet<>();
-    roles.add("admin");
-    roles.add("hr");
-    return roles;
+    return recipients("admin", "hr");
   }
 
   public static Set<String> leaveApproverRecipients() {
-    Set<String> roles = new LinkedHashSet<>();
-    roles.add("admin");
-    roles.add("hr");
-    roles.add("teamlead");
-    roles.add("projectmanager");
-    return roles;
+    return recipients("admin", "hr", "teamlead", "projectmanager");
   }
 
   public static Set<String> taskStatusRecipients() {
-    Set<String> roles = new LinkedHashSet<>();
-    roles.add("projectmanager");
-    roles.add("teamlead");
-    return roles;
+    return recipients("projectmanager", "teamlead");
   }
 
   public static Set<String> leaveRecipients(String accessRoleHeader) {
@@ -53,8 +45,14 @@ public final class NotificationAudience {
   }
 
   public static Set<String> companyWideRecipients() {
+    return recipients("all");
+  }
+
+  private static Set<String> recipients(String... values) {
     Set<String> roles = new LinkedHashSet<>();
-    roles.add("all");
+    for (String value : values) {
+      roles.add(value);
+    }
     return roles;
   }
 }

@@ -141,6 +141,7 @@ public class AuthController {
           user.setPasswordHash(passwordEncoder.encode(trimmedPassword));
           user.setPasswordResetToken(null);
           user.setPasswordResetTokenExpiresAt(null);
+          user.setMustChangePassword(false);
           appUserRepository.save(user);
           return ResponseEntity.ok(resetResponse(true, true, email, "", "", "Password updated successfully"));
         })
@@ -157,10 +158,11 @@ public class AuthController {
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found"));
     }
 
+    String currentPassword = request == null || request.getCurrentPassword() == null ? "" : request.getCurrentPassword().trim();
     String newPassword = request == null || request.getNewPassword() == null ? "" : request.getNewPassword().trim();
     String confirmPassword = request == null || request.getConfirmPassword() == null ? "" : request.getConfirmPassword().trim();
-    if (newPassword.isBlank() || confirmPassword.isBlank()) {
-      return ResponseEntity.badRequest().body(failed("Password and confirm password are required"));
+    if (currentPassword.isBlank() || newPassword.isBlank() || confirmPassword.isBlank()) {
+      return ResponseEntity.badRequest().body(failed("Current password, new password and confirm password are required"));
     }
 
     if (!newPassword.equals(confirmPassword)) {
@@ -175,6 +177,10 @@ public class AuthController {
         .map(session -> appUserRepository.findAllByEmailIgnoreCase(normalizeEmail(session.getEmail())).stream()
             .findFirst()
             .map(user -> {
+              if (!passwordMatches(currentPassword, user)) {
+                return ResponseEntity.badRequest().body(failed("Current password is incorrect"));
+              }
+
               user.setPassword(newPassword);
               user.setPasswordHash(passwordEncoder.encode(newPassword));
               user.setMustChangePassword(false);
@@ -241,6 +247,7 @@ public class AuthController {
     LoginResponse response = new LoginResponse();
     response.setOk(true);
     response.setUserId(user.getUserId());
+    response.setStatus(user.getStatus());
     response.setLastLogin(lastLogin);
     response.setRole(normalizeRole(user.getRole()));
     response.setEmail(user.getEmail());
@@ -255,12 +262,11 @@ public class AuthController {
   }
 
   private LoginResponse okResponse(AuthSession session) {
-    AppUser user = appUserRepository.findByUserId(session.getUserId())
-        .or(() -> appUserRepository.findByEmailIgnoreCase(session.getEmail()))
-        .orElseGet(AppUser::new);
+    AppUser user = resolveSessionUser(session);
     LoginResponse response = new LoginResponse();
     response.setOk(true);
     response.setUserId(session.getUserId());
+    response.setStatus(session.getStatus());
     response.setLastLogin(session.getLastLogin());
     response.setRole(normalizeRole(session.getRole()));
     response.setEmail(session.getEmail());
@@ -272,6 +278,38 @@ public class AuthController {
     response.setMustChangePassword(Boolean.TRUE.equals(session.getMustChangePassword()));
     response.setMessage(Boolean.TRUE.equals(session.getMustChangePassword()) ? "Password change required" : "Session active");
     return response;
+  }
+
+  private AppUser resolveSessionUser(@Nullable AuthSession session) {
+    if (session == null) {
+      return null;
+    }
+
+    String email = normalizeEmail(session.getEmail());
+    if (!email.isBlank()) {
+      Optional<AppUser> emailMatch = appUserRepository.findAllByEmailIgnoreCase(email).stream().findFirst();
+      if (emailMatch.isPresent()) {
+        return emailMatch.get();
+      }
+    }
+
+    String userId = normalizeValue(session.getUserId());
+    if (!userId.isBlank()) {
+      Optional<AppUser> userIdMatch = appUserRepository.findAllByUserId(userId).stream()
+          .filter(user -> email.isBlank() || email.equals(normalizeEmail(user.getEmail())))
+          .findFirst()
+          .or(() -> appUserRepository.findAllByUserId(userId).stream().findFirst());
+      if (userIdMatch.isPresent()) {
+        return userIdMatch.get();
+      }
+    }
+
+    String employeeId = normalizeValue(session.getEmployeeId());
+    if (!employeeId.isBlank()) {
+      return appUserRepository.findAllByEmployeeId(employeeId).stream().findFirst().orElse(null);
+    }
+
+    return null;
   }
 
   private PasswordResetResponse resetResponse(boolean ok, boolean emailSent, String email, String resetToken, String expiresAt, String message) {
@@ -308,7 +346,6 @@ public class AuthController {
     if (role == null) {
       return "Employee";
     }
-
     String normalized = role.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
     return switch (normalized) {
       case "superadmin", "admin" -> "Super Admin";
@@ -347,6 +384,8 @@ public class AuthController {
     return response;
   }
 
+  private record LegacyAccount(String password, String role, String employeeId, String employeeName) {}
+
   private Optional<AppUser> buildLegacyAccount(String email, String password) {
     LegacyAccount account = switch (email) {
       case "admin@gmail.com" -> new LegacyAccount("admin123", "admin", "ADMIN-001", "Admin Kavya");
@@ -369,13 +408,12 @@ public class AuthController {
     user.setEmployeeId(account.employeeId());
     user.setEmployeeName(account.employeeName());
     user.setStatus("Active");
+    user.setMustChangePassword(false);
     user.setTwoFactorEnabled(false);
     user.setTwoFactorSecret("");
     return Optional.of(user);
   }
 
-  private record LegacyAccount(String password, String role, String employeeId, String employeeName) {
-  }
 
   private AuthSession buildSession(AppUser user, String token, String now) {
     AuthSession session = new AuthSession();
@@ -400,6 +438,10 @@ public class AuthController {
     return email.trim().toLowerCase(Locale.ROOT);
   }
 
+  private String normalizeValue(@Nullable String value) {
+    return value == null ? "" : value.trim();
+  }
+
   private String extractToken(@Nullable String authorization) {
     if (authorization == null) {
       return "";
@@ -413,3 +455,7 @@ public class AuthController {
     return trimmed;
   }
 }
+
+
+
+

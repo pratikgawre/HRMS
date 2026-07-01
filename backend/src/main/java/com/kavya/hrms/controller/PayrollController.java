@@ -2,7 +2,6 @@ package com.kavya.hrms.controller;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -198,6 +197,10 @@ public class PayrollController {
   }
 
   private <T> List<T> safeList(List<T> values) {
-    return values == null ? new ArrayList<>() : new ArrayList<>(values);
+    return values == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(values);
   }
+
 }
+
+
+

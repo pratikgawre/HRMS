@@ -34,6 +34,7 @@ public class Asset {
   @Transient
   private String employeeName;
 
+
   private String condition;
   private String location;
 

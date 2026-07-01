@@ -1,5 +1,5 @@
 const TOKEN_STORAGE_KEY = 'kavyaAuthToken';
-// Keep session bootstrap on the same API origin as the rest of the app.
+const SESSION_STORAGE_KEY = 'kavyaSessionData';
 const API_BASE = '/api';
 
 let session = {};
@@ -10,6 +10,20 @@ function readToken() {
     return storage?.getItem(TOKEN_STORAGE_KEY) || '';
   } catch (_) {
     return '';
+  }
+}
+
+function readSessionSnapshot() {
+  try {
+    const value = storage?.getItem(SESSION_STORAGE_KEY) || '';
+    if (!value) {
+      return {};
+    }
+
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
   }
 }
 
@@ -24,14 +38,30 @@ function persistToken(token) {
   } catch (_) {}
 }
 
-function syncMemoryToken() {
+function persistSessionSnapshot() {
+  try {
+    if (Object.keys(session).length === 0) {
+      storage?.removeItem(SESSION_STORAGE_KEY);
+      return;
+    }
+
+    storage?.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  } catch (_) {}
+}
+
+function syncMemorySession() {
+  const snapshot = readSessionSnapshot();
+  if (snapshot && typeof snapshot === 'object') {
+    session = { ...snapshot };
+  }
+
   const token = readToken();
   if (token) {
     session.kavyaAuthToken = token;
   }
 }
 
-syncMemoryToken();
+syncMemorySession();
 
 export function setSessionValue(key, value) {
   if (key === 'kavyaAuthToken') {
@@ -41,12 +71,13 @@ export function setSessionValue(key, value) {
     session[key] = value;
   }
 
+  persistSessionSnapshot();
   window.dispatchEvent(new Event('kavyaSessionChanged'));
 }
 
 export function getSessionValue(key) {
-  if (key === 'kavyaAuthToken' && !session[key]) {
-    syncMemoryToken();
+  if (!(key in session)) {
+    syncMemorySession();
   }
 
   return session[key] || '';
@@ -57,6 +88,7 @@ export function removeSessionValue(key) {
   if (key === 'kavyaAuthToken') {
     persistToken('');
   }
+  persistSessionSnapshot();
   window.dispatchEvent(new Event('kavyaSessionChanged'));
 }
 
@@ -68,18 +100,29 @@ export function clearSessionValues(keys = []) {
     }
   });
 
+  persistSessionSnapshot();
   window.dispatchEvent(new Event('kavyaSessionChanged'));
 }
 
 export function getSessionSnapshot() {
+  syncMemorySession();
   return { ...session };
 }
 
 export async function bootstrapSessionFromBackend() {
+  syncMemorySession();
   const token = readToken();
 
   if (!token) {
     session = {};
+    persistSessionSnapshot();
+    window.dispatchEvent(new Event('kavyaSessionChanged'));
+    return session;
+  }
+
+  session.kavyaAuthToken = token;
+  if (Boolean(session.kavyaMustChangePassword)) {
+    persistSessionSnapshot();
     window.dispatchEvent(new Event('kavyaSessionChanged'));
     return session;
   }
@@ -94,6 +137,7 @@ export async function bootstrapSessionFromBackend() {
   if (!response || !response.ok) {
     session = {};
     persistToken('');
+    persistSessionSnapshot();
     window.dispatchEvent(new Event('kavyaSessionChanged'));
     return session;
   }
@@ -107,12 +151,13 @@ export async function bootstrapSessionFromBackend() {
     kavyaUserStatus: payload?.status || 'Active',
     kavyaEmployeeId: payload?.employeeId || '',
     kavyaEmployeeName: payload?.employeeName || '',
-    kavyaEmployeeAvatar: buildInitials(payload?.employeeName || ''),
-    kavyaEmployeePhoto: '',
+    kavyaEmployeeAvatar: payload?.avatar || buildInitials(payload?.employeeName || ''),
+    kavyaEmployeePhoto: payload?.profilePicture || '',
     kavyaUserId: payload?.userId || '',
     kavyaLastLogin: payload?.lastLogin || '',
     kavyaMustChangePassword: Boolean(payload?.mustChangePassword),
   };
+  persistSessionSnapshot();
   window.dispatchEvent(new Event('kavyaSessionChanged'));
   return session;
 }

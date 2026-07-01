@@ -82,15 +82,19 @@ public class EmployeeWelcomeEmailService {
       MimeMessage mimeMessage = mailSender.createMimeMessage();
       MimeMessageHelper message = new MimeMessageHelper(mimeMessage, true, "UTF-8");
       message.setTo(to);
-      message.setFrom(resolveFromAddress());
+      String sender = resolveFromAddress();
+      if (!sender.isBlank()) {
+        message.setFrom(sender);
+      }
       message.setSubject(subject);
       message.setText(plainTextMessage, htmlMessage);
 
       mailSender.send(mimeMessage);
-      log.info("{} sent to {} from {}.", emailType, to, resolveFromAddress());
+      log.info("{} sent to {} from {}.", emailType, to, sender.isBlank() ? "<smtp-default>" : sender);
       return DeliveryResult.sent(successMessage);
     } catch (MailException | MessagingException ex) {
-      log.error("Unable to send {} to {} from {}.", emailType, to, resolveFromAddress(), ex);
+      String sender = resolveFromAddress();
+      log.error("Unable to send {} to {} from {}.", emailType, to, sender.isBlank() ? "<smtp-default>" : sender, ex);
       return DeliveryResult.failed("Unable to send employee credential email: " + ex.getMessage());
     }
   }
@@ -103,7 +107,7 @@ public class EmployeeWelcomeEmailService {
     if (!username.isBlank()) {
       return username;
     }
-    return "no-reply@kavyainfoweb.com";
+    return "";
   }
 
   @NonNull
@@ -273,3 +277,4 @@ public class EmployeeWelcomeEmailService {
     public String getMessage() { return message; }
   }
 }
+

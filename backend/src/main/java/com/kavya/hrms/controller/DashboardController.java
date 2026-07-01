@@ -5,8 +5,8 @@ import com.kavya.hrms.dto.EmployeeDashboardSummary;
 import com.kavya.hrms.model.Asset;
 import com.kavya.hrms.model.AttendanceRecord;
 import com.kavya.hrms.model.LeaveRequest;
-import com.kavya.hrms.model.TaskItem;
 import com.kavya.hrms.model.SystemSettings;
+import com.kavya.hrms.model.TaskItem;
 import com.kavya.hrms.repository.AnnouncementRepository;
 import com.kavya.hrms.repository.AttendanceRecordRepository;
 import com.kavya.hrms.repository.AssetRepository;
@@ -18,8 +18,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.time.LocalDate;
@@ -263,7 +263,22 @@ public class DashboardController {
         || assignedTo.equals(normalizedEmployeeName);
   }
 
-  private record LeaveTotals(int remaining, int used) {
+  private static final class LeaveTotals {
+    private final int remaining;
+    private final int used;
+
+    private LeaveTotals(int remaining, int used) {
+      this.remaining = remaining;
+      this.used = used;
+    }
+
+    private int remaining() {
+      return remaining;
+    }
+
+    private int used() {
+      return used;
+    }
   }
 
   @GetMapping("/interviews/today")

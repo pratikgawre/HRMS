@@ -1,6 +1,8 @@
 package com.kavya.hrms.service;
 
 import com.kavya.hrms.model.AppUser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
@@ -10,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class PasswordResetEmailService {
+  private static final Logger log = LoggerFactory.getLogger(PasswordResetEmailService.class);
   private final ObjectProvider<JavaMailSender> mailSenderProvider;
   private final String host;
   private final String fromAddress;
@@ -28,6 +31,7 @@ public class PasswordResetEmailService {
 
   public DeliveryResult sendResetCode(AppUser user, String resetToken, String expiresAt) {
     if (host.isBlank()) {
+      log.warn("Password reset email skipped because spring.mail.host is blank.");
       return DeliveryResult.notConfigured();
     }
 
@@ -38,19 +42,25 @@ public class PasswordResetEmailService {
 
     JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
     if (mailSender == null) {
+      log.warn("Password reset email skipped because JavaMailSender bean is unavailable.");
       return DeliveryResult.notConfigured();
     }
 
     SimpleMailMessage message = new SimpleMailMessage();
     message.setTo(to);
-    message.setFrom(resolveFromAddress());
+    String sender = resolveFromAddress();
+    if (!sender.isBlank()) {
+      message.setFrom(sender);
+    }
     message.setSubject("Kavya HRMS password reset code");
     message.setText(buildMessage(user, resetToken, expiresAt));
 
     try {
       mailSender.send(message);
+      log.info("Password reset email sent to {} from {}.", to, sender.isBlank() ? "<smtp-default>" : sender);
       return DeliveryResult.sent();
     } catch (MailException ex) {
+      log.error("Unable to send password reset email to {} from {}.", to, sender.isBlank() ? "<smtp-default>" : sender, ex);
       return DeliveryResult.failed("Unable to send reset email: " + ex.getMessage());
     }
   }
@@ -62,7 +72,7 @@ public class PasswordResetEmailService {
     if (!username.isBlank()) {
       return username;
     }
-    return "no-reply@kavyahrms.local";
+    return "";
   }
 
   private String buildMessage(AppUser user, String resetToken, String expiresAt) {

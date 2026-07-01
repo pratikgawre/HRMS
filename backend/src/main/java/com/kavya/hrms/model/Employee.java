@@ -1,6 +1,7 @@
 package com.kavya.hrms.model;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "employees")
@@ -67,6 +68,12 @@ public class Employee {
   private String accountNo;
   private String ifscCode;
   private String packageAmount;
+  @Transient
+  private Boolean credentialEmailConfigured;
+  @Transient
+  private Boolean credentialEmailSent;
+  @Transient
+  private String credentialEmailMessage;
 
   public String getEmployeeId() { return employeeId; }
   public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
@@ -190,4 +197,10 @@ public class Employee {
   public void setIfscCode(String ifscCode) { this.ifscCode = ifscCode; }
   public String getPackageAmount() { return packageAmount; }
   public void setPackageAmount(String packageAmount) { this.packageAmount = packageAmount; }
+  public Boolean getCredentialEmailConfigured() { return credentialEmailConfigured; }
+  public void setCredentialEmailConfigured(Boolean credentialEmailConfigured) { this.credentialEmailConfigured = credentialEmailConfigured; }
+  public Boolean getCredentialEmailSent() { return credentialEmailSent; }
+  public void setCredentialEmailSent(Boolean credentialEmailSent) { this.credentialEmailSent = credentialEmailSent; }
+  public String getCredentialEmailMessage() { return credentialEmailMessage; }
+  public void setCredentialEmailMessage(String credentialEmailMessage) { this.credentialEmailMessage = credentialEmailMessage; }
 }
