@@ -120,9 +120,11 @@ function TeamAttendance() {
         const matchesStatus = status === 'All' || row.status === status;
         const matchesRange = isRowWithinSelectedRange(row, dateRange, selectedDate, selectedMonth);
         const query = searchText.trim().toLowerCase();
+        const isPageLevelQuery = query === 'team attendance' || query === 'team-attendance';
         const matchesSearch = !query
           || String(row.employee || '').toLowerCase().includes(query)
-          || String(row.employeeId || '').toLowerCase().includes(query);
+          || String(row.employeeId || '').toLowerCase().includes(query)
+          || isPageLevelQuery;
         return matchesStatus && matchesRange && matchesSearch;
       })
       .map((row) => ({
@@ -216,7 +218,7 @@ function TeamAttendance() {
     setMessage('Excel sheet download started.');
   }
 
-  function openCorrectDialog(row) {
+  function openRecommendDialog(row) {
     setEditingRow(row);
     setCorrectForm({
       checkIn: row.checkIn && row.checkIn !== '-' ? row.checkIn : '',
@@ -230,7 +232,7 @@ function TeamAttendance() {
     setEditingRow(null);
   }
 
-  function saveCorrectedRecord() {
+  function saveRecommendedRecord() {
     if (!editingRow) {
       return;
     }
@@ -393,10 +395,10 @@ function TeamAttendance() {
                     <button
                       className="payroll-secondary"
                       type="button"
-                      onClick={() => openCorrectDialog(row)}
+                      onClick={() => openRecommendDialog(row)}
                     >
                       <i className="ri-edit-line" aria-hidden="true" />
-                      Correct
+                      Recommend
                     </button>
                   ),
                 },
@@ -410,11 +412,11 @@ function TeamAttendance() {
 
       {editingRow && (
         <div className="smart-summary-backdrop" role="presentation" onClick={closeCorrectDialog}>
-          <section className="open-roles-modal" role="dialog" aria-modal="true" aria-label="Correct attendance record" onClick={(event) => event.stopPropagation()}>
+          <section className="open-roles-modal" role="dialog" aria-modal="true" aria-label="Recommend attendance record" onClick={(event) => event.stopPropagation()}>
             <div className="open-roles-modal-head">
               <div>
                 <p className="eyebrow">Attendance</p>
-                <h3>Correct record</h3>
+                <h3>Recommend record</h3>
               </div>
               <button type="button" onClick={closeCorrectDialog} aria-label="Close correction dialog">
                 <i className="ri-close-line" aria-hidden="true" />
@@ -476,9 +478,9 @@ function TeamAttendance() {
                 </div>
               </div>
               <div className="notification-actions">
-                <button className="attendance-save-btn" type="button" onClick={saveCorrectedRecord}>
+                <button className="attendance-save-btn" type="button" onClick={saveRecommendedRecord}>
                   <i className="ri-save-3-line" aria-hidden="true" />
-                  Save Correction
+                  Save Recommendation
                 </button>
                 <button type="button" onClick={closeCorrectDialog}>Cancel</button>
               </div>

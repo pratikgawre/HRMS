@@ -1,20 +1,23 @@
 package com.kavya.hrms.service;
 
-import com.kavya.hrms.model.AppUser;
-import com.kavya.hrms.model.Notification;
-import com.kavya.hrms.repository.AppUserRepository;
-import com.kavya.hrms.repository.NotificationRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.model.Notification;
+import com.kavya.hrms.repository.AppUserRepository;
+import com.kavya.hrms.repository.NotificationRepository;
 import org.springframework.stereotype.Service;
 
 @Service
+@SuppressWarnings("all")
 public class NotificationService {
   private final NotificationRepository notificationRepository;
   private final AppUserRepository appUserRepository;
@@ -47,13 +50,40 @@ public class NotificationService {
       String createdByRole,
       String createdByName,
       String createdByUserId) {
-    Set<String> targetUserIds = new LinkedHashSet<>();
-    for (String role : roles) {
-      targetUserIds.addAll(resolveUserIdsForRole(role));
-    }
+    Set<String> targetUserIds = resolveUserIdsForRoles(roles);
     if (!isBlank(createdByUserId)) {
       targetUserIds.add(createdByUserId);
     }
+    return notifyUserIds(targetUserIds, title, message, sourceType, sourceId, createdByRole, createdByName);
+  }
+
+  public List<Notification> notifyRolesExcept(
+      Collection<String> roles,
+      Collection<String> excludedUserIds,
+      String title,
+      String message,
+      String sourceType,
+      String sourceId,
+      String createdByRole,
+      String createdByName) {
+    Set<String> targetUserIds = resolveUserIdsForRoles(roles);
+    removeUserIds(targetUserIds, excludedUserIds);
+    return notifyUserIds(targetUserIds, title, message, sourceType, sourceId, createdByRole, createdByName);
+  }
+
+  public List<Notification> notifyRolesAndIdentitiesExcept(
+      Collection<String> roles,
+      Collection<String> identities,
+      Collection<String> excludedUserIds,
+      String title,
+      String message,
+      String sourceType,
+      String sourceId,
+      String createdByRole,
+      String createdByName) {
+    Set<String> targetUserIds = resolveUserIdsForRoles(roles);
+    targetUserIds.addAll(resolveUserIdsForIdentities(identities));
+    removeUserIds(targetUserIds, excludedUserIds);
     return notifyUserIds(targetUserIds, title, message, sourceType, sourceId, createdByRole, createdByName);
   }
 
@@ -71,18 +101,30 @@ public class NotificationService {
     return notifyUserIds(targetUserIds, title, message, sourceType, sourceId, createdByRole, createdByName);
   }
 
+  public List<Notification> notifyUserIdentities(
+      Collection<String> identities,
+      String title,
+      String message,
+      String sourceType,
+      String sourceId,
+      String createdByRole,
+      String createdByName) {
+    return notifyUserIds(resolveUserIdsForIdentities(identities), title, message, sourceType, sourceId, createdByRole, createdByName);
+  }
+
   public Notification markAsRead(String id, String userId) {
     if (isBlank(id) || isBlank(userId)) {
       return null;
     }
 
-    Notification notification = notificationRepository.findByIdAndUserId(id, userId).orElse(null);
-    if (notification == null) {
+    java.util.Optional<Notification> notification = notificationRepository.findByIdAndUserId(id, userId);
+    if (notification.isEmpty()) {
       return null;
     }
 
-    notification.setReadStatus(true);
-    return notificationRepository.save(notification);
+    Notification current = notification.get();
+    current.setReadStatus(true);
+    return notificationRepository.save(current);
   }
 
   public void clearForUser(String userId) {
@@ -111,22 +153,79 @@ public class NotificationService {
       return List.of();
     }
 
+    String createdAt = Instant.now().toString();
     List<Notification> notifications = new ArrayList<>();
     for (String userId : userIds) {
-      Notification notification = new Notification();
-      notification.setUserId(userId);
-      notification.setTitle(title);
-      notification.setMessage(message);
-      notification.setReadStatus(false);
-      notification.setCreatedAt(Instant.now().toString());
-      notification.setSourceType(sourceType);
-      notification.setSourceId(sourceId);
-      notification.setCreatedByRole(createdByRole);
-      notification.setCreatedByName(createdByName);
-      notifications.add(notification);
+      if (isBlank(userId)) {
+        continue;
+      }
+
+      notifications.add(upsertNotification(userId, title, message, sourceType, sourceId, createdByRole, createdByName, createdAt));
     }
 
-    return notificationRepository.saveAll(notifications);
+    return notifications;
+  }
+
+  private Notification upsertNotification(
+      String userId,
+      String title,
+      String message,
+      String sourceType,
+      String sourceId,
+      String createdByRole,
+      String createdByName,
+      String createdAt) {
+    List<Notification> matches = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+        .filter(notification -> isSameNotification(notification, title, message, sourceType, sourceId))
+        .collect(Collectors.toList());
+
+    Notification notification = matches.isEmpty() ? new Notification() : matches.get(0);
+    notification.setUserId(userId);
+    notification.setTitle(title);
+    notification.setMessage(message);
+    notification.setReadStatus(false);
+    notification.setCreatedAt(createdAt);
+    notification.setSourceType(sourceType);
+    notification.setSourceId(sourceId);
+    notification.setCreatedByRole(createdByRole);
+    notification.setCreatedByName(createdByName);
+
+    if (matches.size() > 1) {
+      for (int i = 1; i < matches.size(); i++) {
+        notificationRepository.delete(Objects.requireNonNull(matches.get(i)));
+      }
+    }
+
+    return notificationRepository.save(notification);
+  }
+
+  private boolean isSameNotification(
+      Notification notification,
+      String title,
+      String message,
+      String sourceType,
+      String sourceId) {
+    return notification != null
+        && sameText(notification.getTitle(), title)
+        && sameText(notification.getMessage(), message)
+        && sameText(notification.getSourceType(), sourceType)
+        && sameText(notification.getSourceId(), sourceId);
+  }
+
+  private boolean sameText(String left, String right) {
+    return normalizeIdentity(left).equals(normalizeIdentity(right));
+  }
+
+  private Set<String> resolveUserIdsForRoles(Collection<String> roles) {
+    if (roles == null || roles.isEmpty()) {
+      return new LinkedHashSet<>();
+    }
+
+    Set<String> targetUserIds = new LinkedHashSet<>();
+    for (String role : roles) {
+      targetUserIds.addAll(resolveUserIdsForRole(role));
+    }
+    return targetUserIds;
   }
 
   private Set<String> resolveUserIdsForRole(String role) {
@@ -138,16 +237,52 @@ public class NotificationService {
     if ("all".equals(normalized)) {
       return appUserRepository.findAll().stream()
           .filter(this::isActiveUser)
-          .map(AppUser::getUserId)
+          .map(user -> user == null ? "" : user.getUserId())
           .filter(value -> !isBlank(value))
           .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    return appUserRepository.findByRoleIgnoreCase(normalized).stream()
+    return appUserRepository.findAll().stream()
         .filter(this::isActiveUser)
-        .map(AppUser::getUserId)
+        .filter(user -> normalized.equals(normalizeRole(user.getRole())))
+        .map(user -> user == null ? "" : user.getUserId())
         .filter(value -> !isBlank(value))
         .collect(Collectors.toCollection(LinkedHashSet::new));
+  }
+
+  private Set<String> resolveUserIdsForIdentities(Collection<String> identities) {
+    Set<String> normalizedIdentities = identities == null
+        ? new LinkedHashSet<>()
+        : identities.stream()
+            .map(this::normalizeIdentity)
+            .filter(value -> !value.isBlank())
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+
+    if (normalizedIdentities.isEmpty()) {
+      return Set.of();
+    }
+
+    return appUserRepository.findAll().stream()
+        .filter(this::isActiveUser)
+        .filter(user -> normalizedIdentities.contains(normalizeIdentity(user.getUserId()))
+            || normalizedIdentities.contains(normalizeIdentity(user.getEmployeeId()))
+            || normalizedIdentities.contains(normalizeIdentity(user.getEmail()))
+            || normalizedIdentities.contains(normalizeIdentity(user.getEmployeeName())))
+        .map(user -> user == null ? "" : user.getUserId())
+        .filter(value -> !isBlank(value))
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+  }
+
+  private void removeUserIds(Set<String> targetUserIds, Collection<String> excludedUserIds) {
+    if (targetUserIds == null || targetUserIds.isEmpty() || excludedUserIds == null || excludedUserIds.isEmpty()) {
+      return;
+    }
+
+    Set<String> normalizedExcluded = excludedUserIds.stream()
+        .map(this::normalizeIdentity)
+        .filter(value -> !value.isBlank())
+        .collect(Collectors.toSet());
+    targetUserIds.removeIf(userId -> normalizedExcluded.contains(normalizeIdentity(userId)));
   }
 
   private boolean isActiveUser(AppUser user) {
@@ -165,13 +300,23 @@ public class NotificationService {
 
   private String normalizeRole(String role) {
     String value = String.valueOf(role == null ? "" : role).trim().toLowerCase(Locale.ROOT).replace(" ", "");
-    if ("admin".equals(value) || "superadmin".equals(value)) return "admin";
-    if ("hr".equals(value) || "hrmanager".equals(value)) return "hr";
-    if ("projectmanager".equals(value)) return "projectmanager";
-    if ("teamlead".equals(value)) return "teamlead";
-    if ("employee".equals(value)) return "employee";
-    if ("all".equals(value)) return "all";
+    if ("admin".equals(value) || "superadmin".equals(value))
+      return "admin";
+    if ("hr".equals(value) || "hrmanager".equals(value))
+      return "hr";
+    if ("projectmanager".equals(value))
+      return "projectmanager";
+    if ("teamlead".equals(value))
+      return "teamlead";
+    if ("employee".equals(value))
+      return "employee";
+    if ("all".equals(value))
+      return "all";
     return value;
+  }
+
+  private String normalizeIdentity(String value) {
+    return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
   }
 
   private boolean isBlank(String value) {

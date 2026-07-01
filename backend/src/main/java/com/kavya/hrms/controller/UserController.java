@@ -7,7 +7,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.lang.Nullable;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,19 +27,37 @@ public class UserController {
 
   @GetMapping
   public List<AppUser> list() {
-    return appUserRepository.findAll();
+    return new ArrayList<>(appUserRepository.findAll());
+  }
+
+  @DeleteMapping("/{userId}")
+  public void delete(@PathVariable String userId) {
+    if (userId == null || userId.isBlank()) {
+      return;
+    }
+
+    appUserRepository.findById(userId)
+        .or(() -> appUserRepository.findByUserId(userId))
+        .or(() -> appUserRepository.findByEmailIgnoreCase(userId))
+        .ifPresent(appUserRepository::delete);
   }
 
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
-    return appUserRepository.saveAll(dedupeUsers(users));
+    List<AppUser> safeUsers = safeList(users);
+    List<AppUser> deduplicatedUsers = new ArrayList<>(deduplicateUsers(safeUsers));
+    return appUserRepository.saveAll(deduplicatedUsers);
   }
 
-  private List<AppUser> dedupeUsers(List<AppUser> users) {
+  private List<AppUser> deduplicateUsers(List<AppUser> users) {
     Map<String, Integer> identityIndexes = new LinkedHashMap<>();
     List<AppUser> uniqueUsers = new ArrayList<>();
 
     for (AppUser user : users) {
+      if (user == null) {
+        continue;
+      }
+
       AppUser normalized = normalizeUser(user);
       Integer duplicateIndex = findDuplicateIndex(normalized, identityIndexes);
 
@@ -68,8 +89,11 @@ public class UserController {
     normalized.setIsActive(user.getIsActive());
     normalized.setEmployeeId(trimToNull(user.getEmployeeId()));
     normalized.setEmployeeName(trimToNull(user.getEmployeeName()));
+    normalized.setAvatar(trimToNull(user.getAvatar()));
+    normalized.setProfilePicture(trimToNull(user.getProfilePicture()));
     normalized.setStatus(user.getStatus());
     normalized.setLastLogin(user.getLastLogin());
+    normalized.setMustChangePassword(user.getMustChangePassword());
     return normalized;
   }
 
@@ -87,11 +111,15 @@ public class UserController {
     merged.setIsActive(Boolean.TRUE.equals(current.getIsActive()) || Boolean.TRUE.equals(next.getIsActive()));
     merged.setEmployeeId(firstNonBlank(current.getEmployeeId(), next.getEmployeeId()));
     merged.setEmployeeName(firstNonBlank(current.getEmployeeName(), next.getEmployeeName()));
+    merged.setAvatar(firstNonBlank(current.getAvatar(), next.getAvatar()));
+    merged.setProfilePicture(firstNonBlank(current.getProfilePicture(), next.getProfilePicture()));
     merged.setStatus(firstNonBlank(current.getStatus(), next.getStatus()));
     merged.setLastLogin(firstNonBlank(current.getLastLogin(), next.getLastLogin()));
+    merged.setMustChangePassword(Boolean.TRUE.equals(current.getMustChangePassword()) || Boolean.TRUE.equals(next.getMustChangePassword()));
     return merged;
   }
 
+  @Nullable
   private Integer findDuplicateIndex(AppUser user, Map<String, Integer> identityIndexes) {
     for (String key : getUserIdentityKeys(user)) {
       Integer duplicateIndex = identityIndexes.get(key);
@@ -130,6 +158,7 @@ public class UserController {
     return firstNonBlank(user.getEmployeeId(), user.getEmail(), "USR-" + System.currentTimeMillis());
   }
 
+  @Nullable
   private String trimToNull(String value) {
     if (value == null) {
       return null;
@@ -139,10 +168,12 @@ public class UserController {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
+  @Nullable
   private String lower(String value) {
     return value == null ? null : value.toLowerCase(Locale.ROOT);
   }
 
+  @Nullable
   private String firstNonBlank(String... values) {
     for (String value : values) {
       String trimmed = trimToNull(value);
@@ -151,5 +182,9 @@ public class UserController {
       }
     }
     return null;
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

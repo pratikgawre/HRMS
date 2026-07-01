@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.lang.Nullable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,34 +39,35 @@ public class AssetAssignmentController {
 
   @PostMapping
   public AssetAssignment create(@RequestBody AssetAssignment assignment) {
-    System.out.println("[AssetAssignmentController] create payload assetId=" + assignment.getAssetId()
-        + ", assignedDate=" + assignment.getAssignedDate()
-        + ", dueDate=" + assignment.getDueDate()
-        + ", returnDate=" + assignment.getReturnDate()
-        + ", employeeId=" + assignment.getEmployeeId()
-        + ", employeeName=" + assignment.getEmployeeName());
-    if (assignment.getAssignedDate() == null || assignment.getAssignedDate().isBlank()) {
-      assignment.setAssignedDate(ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu")));
+    AssetAssignment safeAssignment = assignment == null ? new AssetAssignment() : assignment;
+    System.out.println("[AssetAssignmentController] create payload assetId=" + safeAssignment.getAssetId()
+        + ", assignedDate=" + safeAssignment.getAssignedDate()
+        + ", dueDate=" + safeAssignment.getDueDate()
+        + ", returnDate=" + safeAssignment.getReturnDate()
+        + ", employeeId=" + safeAssignment.getEmployeeId()
+        + ", employeeName=" + safeAssignment.getEmployeeName());
+    if (safeAssignment.getAssignedDate() == null || safeAssignment.getAssignedDate().isBlank()) {
+      safeAssignment.setAssignedDate(ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu")));
     }
-    if (assignment.getDueDate() == null || assignment.getDueDate().isBlank()) {
-      assignment.setDueDate(assignment.getReturnDate());
+    if (safeAssignment.getDueDate() == null || safeAssignment.getDueDate().isBlank()) {
+      safeAssignment.setDueDate(safeAssignment.getReturnDate());
     }
-    if (assignment.getReturnDate() == null || assignment.getReturnDate().isBlank()) {
-      assignment.setReturnDate(assignment.getDueDate());
+    if (safeAssignment.getReturnDate() == null || safeAssignment.getReturnDate().isBlank()) {
+      safeAssignment.setReturnDate(safeAssignment.getDueDate());
     }
-    assignment.setAssignedDate(formatDisplayDate(assignment.getAssignedDate()));
-    assignment.setDueDate(formatDisplayDate(assignment.getDueDate()));
-    assignment.setReturnDate(formatDisplayDate(assignment.getReturnDate()));
-    if (assignment.getStatus() == null || assignment.getStatus().isBlank()) {
-      assignment.setStatus("Assigned");
+    safeAssignment.setAssignedDate(formatDisplayDate(safeAssignment.getAssignedDate()));
+    safeAssignment.setDueDate(formatDisplayDate(safeAssignment.getDueDate()));
+    safeAssignment.setReturnDate(formatDisplayDate(safeAssignment.getReturnDate()));
+    if (safeAssignment.getStatus() == null || safeAssignment.getStatus().isBlank()) {
+      safeAssignment.setStatus("Assigned");
     }
-    if (assignment.getDispatchReason() == null) {
-      assignment.setDispatchReason("");
+    if (safeAssignment.getDispatchReason() == null) {
+      safeAssignment.setDispatchReason("");
     }
-    if (assignment.getDispatchedBy() == null) {
-      assignment.setDispatchedBy("");
+    if (safeAssignment.getDispatchedBy() == null) {
+      safeAssignment.setDispatchedBy("");
     }
-    AssetAssignment saved = repository.save(assignment);
+    AssetAssignment saved = repository.save(safeAssignment);
     System.out.println("[AssetAssignmentController] create saved assetId=" + saved.getAssetId()
         + ", assignedDate=" + saved.getAssignedDate()
         + ", dueDate=" + saved.getDueDate()
@@ -77,12 +79,13 @@ public class AssetAssignmentController {
 
   @PatchMapping("/{id}/return")
   public ResponseEntity<AssetAssignment> returnAsset(@PathVariable String id, @RequestBody ReturnAssetRequest request) {
+    String safeId = id == null ? "" : id;
     ReturnAssetRequest safeRequest = request == null ? new ReturnAssetRequest() : request;
-    return repository.findById(id)
+    return repository.findById(safeId)
         .map((assignment) -> {
-          System.out.println("[AssetAssignmentController] return payload id=" + id
-              + ", returnDate=" + request.getReturnDate()
-              + ", condition=" + request.getCondition());
+          System.out.println("[AssetAssignmentController] return payload id=" + safeId
+              + ", returnDate=" + safeRequest.getReturnDate()
+              + ", condition=" + safeRequest.getCondition());
           String returnDate = safeRequest.getReturnDate();
           if (returnDate == null || returnDate.isBlank()) {
             returnDate = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"));
@@ -103,7 +106,7 @@ public class AssetAssignmentController {
 
   @DeleteMapping("/{id}")
   public void delete(@PathVariable String id) {
-    repository.deleteById(id);
+    repository.deleteById(id == null ? "" : id);
   }
 
   public static class ReturnAssetRequest {
@@ -127,6 +130,7 @@ public class AssetAssignmentController {
     }
   }
 
+  @Nullable
   private LocalDate parseDate(String value) {
     if (value == null) {
       return null;

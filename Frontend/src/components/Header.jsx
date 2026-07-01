@@ -88,32 +88,61 @@ function Header({ role, onMenuClick }) {
   }, [role, userId]);
 
   useEffect(() => {
-    const handleOutsideClick = (event) => {
-      if (!showNotifications) {
-        return;
-      }
+    if (!showNotifications) {
+      return undefined;
+    }
 
+    const handleNotificationPointerDown = (event) => {
       if (notificationWrapRef.current && !notificationWrapRef.current.contains(event.target)) {
         setShowNotifications(false);
       }
     };
 
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('touchstart', handleOutsideClick);
+    const handleNotificationKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handleNotificationPointerDown);
+    document.addEventListener('keydown', handleNotificationKeyDown);
 
     return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('touchstart', handleOutsideClick);
+      document.removeEventListener('pointerdown', handleNotificationPointerDown);
+      document.removeEventListener('keydown', handleNotificationKeyDown);
     };
   }, [showNotifications]);
-
   const runSearch = () => {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;
 
-    const directMatch = searchRoutes.find((entry) => {
-      return entry.keywords.some((keyword) => normalized.includes(keyword));
-    });
+    const directMatch = searchRoutes.reduce((bestMatch, entry, index) => {
+      const matchedKeyword = entry.keywords.find((keyword) => normalized.includes(keyword));
+      if (!matchedKeyword) {
+        return bestMatch;
+      }
+
+      const candidateScore = {
+        exact: normalized === matchedKeyword ? 2 : 1,
+        length: matchedKeyword.length,
+        index,
+      };
+
+      if (!bestMatch) {
+        return { entry, score: candidateScore };
+      }
+
+      const { score } = bestMatch;
+      if (candidateScore.exact !== score.exact) {
+        return candidateScore.exact > score.exact ? { entry, score: candidateScore } : bestMatch;
+      }
+
+      if (candidateScore.length !== score.length) {
+        return candidateScore.length > score.length ? { entry, score: candidateScore } : bestMatch;
+      }
+
+      return candidateScore.index < score.index ? { entry, score: candidateScore } : bestMatch;
+    }, null)?.entry;
     const targetPath = directMatch?.path || `${roleBasePath}/dashboard`;
     navigate(`${targetPath}?search=${encodeURIComponent(searchQuery.trim())}`);
   };
@@ -306,9 +335,9 @@ function getSearchRoutes(role) {
     ],
     teamLead: [
       { path: '/team-lead/dashboard', keywords: ['dashboard', 'overview', 'home'] },
-      { path: '/team-lead/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
-      { path: '/team-lead/team-attendance', keywords: ['team attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
-      { path: '/team-lead/my-attendance', keywords: ['my attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/team-lead/team-attendance', keywords: ['team attendance', 'team attendence', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/team-lead/attendance', keywords: ['my attendance', 'self attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
+      { path: '/team-lead/team', keywords: ['my team', 'employee', 'employees', 'team member', 'team members', 'member', 'people'] },
       { path: '/team-lead/leave-review', keywords: ['leave', 'vacation', 'absence'] },
       { path: '/team-lead/tasks', keywords: ['task', 'tasks', 'assignment'] },
       { path: '/team-lead/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },

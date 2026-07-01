@@ -5,12 +5,11 @@ import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
 import { getStoredEmployees, saveStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
-import { safeApiRequest } from '../utils/api.js';
+import { deleteUser as deleteUserRequest, safeApiRequest } from '../utils/api.js';
 import { ACCESS_ROLE_OPTIONS, USER_STATUS_OPTIONS, getRoleBadgeClass } from '../utils/role-access.js';
 import {
   buildUserAccess,
   createUserAccess,
-  deleteUserAccess,
   dedupeUsers,
   getInitials,
   getUsers,
@@ -263,22 +262,31 @@ function UserManagement() {
 
   const openDeleteConfirm = (user) => {
     setDeleteTarget(user);
+    setMessage('');
   };
 
   const closeDeleteConfirm = () => {
     setDeleteTarget(null);
   };
 
-  const deleteUser = () => {
+  const deleteUser = async () => {
     if (!deleteTarget) {
       return;
     }
 
-    const nextUsers = deleteUserAccess(deleteTarget.userId);
-    setUsers(dedupeUsers(nextUsers));
-    setUndoUser(deleteTarget);
-    setMessage(`${deleteTarget.employeeName} access deleted. You can undo this action for a short time.`);
-    setDeleteTarget(null);
+    const user = deleteTarget;
+    const nextUsers = dedupeUsers(users.filter((item) => !isSameUser(item, user)));
+
+    try {
+      await deleteUserRequest(user.userId || user.id || user.email);
+      setUsers(nextUsers);
+      setUsersCache(nextUsers);
+      setUndoUser(user);
+      setDeleteTarget(null);
+      setMessage(`${user.employeeName} access deleted successfully.`);
+    } catch (error) {
+      setMessage(error?.message || 'Unable to delete user access. Please try again.');
+    }
   };
 
   const undoDeleteUser = () => {
@@ -286,11 +294,12 @@ function UserManagement() {
       return;
     }
 
-    const nextUsers = dedupeUsers([undoUser, ...getUsers()]);
-    saveUsers(nextUsers);
-    setUsers(nextUsers);
+    const restoredUsers = dedupeUsers([...getUsers(), undoUser]);
+    setUsers(restoredUsers);
+    saveUsers(restoredUsers);
+    setUsersCache(restoredUsers);
+    setMessage(`${undoUser.employeeName} access restored.`);
     setUndoUser(null);
-    setMessage(`${undoUser.employeeName} access restored successfully.`);
   };
 
   return (
@@ -412,13 +421,13 @@ function UserModal({ form, setForm, employees, users, isEditing, title, onClose,
 
     return employees.filter((employee) => {
       const employeeId = String(employee.employeeCode || employee.id || '').trim().toLowerCase();
-      const email = String(employee.email || '').trim().toLowerCase();
+      const email = String(employee.generatedUsername || employee.email || '').trim().toLowerCase();
 
       if ((employeeId && existingEmployeeIds.has(employeeId)) || (email && existingEmails.has(email))) {
         return false;
       }
 
-      return `${employee.displayName || employee.name} ${employee.email} ${employee.employeeCode || employee.id}`.toLowerCase().includes(query);
+      return `${employee.displayName || employee.name} ${employee.generatedUsername || employee.email} ${employee.employeeCode || employee.id}`.toLowerCase().includes(query);
     }).slice(0, 8);
   }, [employeeSearch, employees, hasSelectedEmployee, isEditing, users]);
 
@@ -429,7 +438,7 @@ function UserModal({ form, setForm, employees, users, isEditing, title, onClose,
       ...current,
       employeeId: employee.employeeCode || employee.id,
       employeeName: employee.displayName || employee.name,
-      email: employee.email || '',
+      email: employee.generatedUsername || employee.email || '',
       department: employee.department || employee.departmentName || 'General',
       designation: employee.jobTitle || employee.role || '',
     }));
@@ -471,7 +480,7 @@ function UserModal({ form, setForm, employees, users, isEditing, title, onClose,
                     <span>{employee.avatar || getInitials(employee.displayName || employee.name)}</span>
                     <div>
                       <strong>{employee.displayName || employee.name}</strong>
-                      <small>{employee.employeeCode || employee.id} - {employee.email}</small>
+                      <small>{employee.employeeCode || employee.id} - {employee.generatedUsername || employee.email}</small>
                     </div>
                   </button>
                 ))}
@@ -600,6 +609,27 @@ function isHrExcludedUser(user) {
   return employeeId === 'admin-001'
     || email === 'admin@gmail.com'
     || employeeName === 'admin kavya';
+}
+
+function isSameUser(left, right) {
+  const leftKeys = [
+    left?.userId,
+    left?.id,
+    left?.employeeId,
+    left?.email,
+  ].map(normalizeIdentity).filter(Boolean);
+  const rightKeys = new Set([
+    right?.userId,
+    right?.id,
+    right?.employeeId,
+    right?.email,
+  ].map(normalizeIdentity).filter(Boolean));
+
+  return leftKeys.some((key) => rightKeys.has(key));
+}
+
+function normalizeIdentity(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 function getPermissionText(role) {

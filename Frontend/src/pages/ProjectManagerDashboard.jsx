@@ -5,7 +5,7 @@ import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { safeApiRequest } from '../utils/api.js';
 import { getEmployeeLeaveSummary, normalizeLeaveTypes, DEFAULT_LEAVE_TYPES } from '../utils/leaveBalance.js';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section } from './AdminDashboard.jsx';
-import { taskColumns } from './Tasks.jsx';
+import { taskColumns } from './taskColumns.js';
 
 const DASHBOARD_REFRESH_MS = 15000;
 const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];

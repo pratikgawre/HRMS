@@ -6,10 +6,13 @@ public class LoginResponse {
   private String email;
   private String employeeId;
   private String employeeName;
+  private String avatar;
+  private String profilePicture;
   private String userId;
   private String lastLogin;
   private String token;
-  private String message;
+  private boolean mustChangePassword;
+private String message;
 
   public boolean isOk() { return ok; }
   public void setOk(boolean ok) { this.ok = ok; }
@@ -21,12 +24,18 @@ public class LoginResponse {
   public void setEmployeeId(String employeeId) { this.employeeId = employeeId; }
   public String getEmployeeName() { return employeeName; }
   public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
+  public String getAvatar() { return avatar; }
+  public void setAvatar(String avatar) { this.avatar = avatar; }
+  public String getProfilePicture() { return profilePicture; }
+  public void setProfilePicture(String profilePicture) { this.profilePicture = profilePicture; }
   public String getUserId() { return userId; }
   public void setUserId(String userId) { this.userId = userId; }
   public String getLastLogin() { return lastLogin; }
   public void setLastLogin(String lastLogin) { this.lastLogin = lastLogin; }
   public String getToken() { return token; }
   public void setToken(String token) { this.token = token; }
+  public boolean isMustChangePassword() { return mustChangePassword; }
+  public void setMustChangePassword(boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
   public String getMessage() { return message; }
   public void setMessage(String message) { this.message = message; }
 }
