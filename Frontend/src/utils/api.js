@@ -8,18 +8,19 @@ export async function apiRequest(path, options = {}) {
   const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId');
   const employeeId = getSessionValue('kavyaEmployeeId');
   const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const { headers: optionHeaders, ...requestOptions } = options;
   const headers = {
     ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(accessRole ? { 'X-Kavya-Access-Role': accessRole } : {}),
     ...(userId ? { 'X-Kavya-User-Id': userId } : {}),
     ...(employeeId ? { 'X-Kavya-Employee-Id': employeeId } : {}),
-    ...(options.headers || {}),
+    ...(optionHeaders || {}),
   };
 
   const response = await fetch(`${API_BASE}${path}`, {
+    ...requestOptions,
     headers,
-    ...options,
   });
 
   if (!response.ok) {
