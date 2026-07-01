@@ -49,11 +49,7 @@ public class UserController {
     return appUserRepository.saveAll(deduplicatedUsers);
   }
 
-  private List<AppUser> dedupeUsers(List<AppUser> users) {
-    if (users == null || users.isEmpty()) {
-      return List.of();
-    }
-
+  private List<AppUser> deduplicateUsers(List<AppUser> users) {
     Map<String, Integer> identityIndexes = new LinkedHashMap<>();
     List<AppUser> uniqueUsers = new ArrayList<>();
 
@@ -98,7 +94,7 @@ public class UserController {
     normalized.setStatus(user.getStatus());
     normalized.setLastLogin(user.getLastLogin());
     normalized.setMustChangePassword(user.getMustChangePassword());
-return normalized;
+    return normalized;
   }
 
   private AppUser mergeUsers(AppUser current, AppUser next) {
@@ -120,7 +116,7 @@ return normalized;
     merged.setStatus(firstNonBlank(current.getStatus(), next.getStatus()));
     merged.setLastLogin(firstNonBlank(current.getLastLogin(), next.getLastLogin()));
     merged.setMustChangePassword(Boolean.TRUE.equals(current.getMustChangePassword()) || Boolean.TRUE.equals(next.getMustChangePassword()));
-return merged;
+    return merged;
   }
 
   @Nullable

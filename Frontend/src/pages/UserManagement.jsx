@@ -259,6 +259,7 @@ function UserManagement() {
   };
 
   const openDeleteConfirm = (user) => {
+<<<<<<< HEAD
     if (!user?.hasAccessAccount) {
       setMessage('This employee does not have a user access account yet.');
       return;
@@ -268,6 +269,12 @@ function UserManagement() {
     setMessage('');
   };
 
+=======
+    setDeleteTarget(user);
+    setMessage('');
+  };
+
+>>>>>>> c42bad385187181d6722e79e4a6355b8b547c33b
   const closeDeleteConfirm = () => {
     setDeleteTarget(null);
   };
@@ -277,6 +284,7 @@ function UserManagement() {
       return;
     }
 
+<<<<<<< HEAD
     const targetUser = deleteTarget;
     const previousUsers = users;
     const nextUsers = dedupeUsers(users.filter((item) => !isSameUser(item, targetUser)));
@@ -292,15 +300,33 @@ function UserManagement() {
       setUsers(previousUsers);
       setUsersCache(previousUsers);
       setUndoUser(null);
+=======
+    const user = deleteTarget;
+    const nextUsers = dedupeUsers(users.filter((item) => !isSameUser(item, user)));
+
+    try {
+      await deleteUserRequest(user.userId || user.id || user.email);
+      setUsers(nextUsers);
+      setUsersCache(nextUsers);
+      setUndoUser(user);
+      setDeleteTarget(null);
+      setMessage(`${user.employeeName} access deleted successfully.`);
+    } catch (error) {
+>>>>>>> c42bad385187181d6722e79e4a6355b8b547c33b
       setMessage(error?.message || 'Unable to delete user access. Please try again.');
     }
   };
 
+<<<<<<< HEAD
   const undoDeleteUser = async () => {
+=======
+  const undoDeleteUser = () => {
+>>>>>>> c42bad385187181d6722e79e4a6355b8b547c33b
     if (!undoUser) {
       return;
     }
 
+<<<<<<< HEAD
     const restoredUsers = dedupeUsers([undoUser, ...users]);
     setUsers(restoredUsers);
     setUsersCache(restoredUsers);
@@ -312,6 +338,14 @@ function UserManagement() {
     } catch (error) {
       setMessage(error?.message || 'User access restored locally, but could not sync to the server.');
     }
+=======
+    const restoredUsers = dedupeUsers([...getUsers(), undoUser]);
+    setUsers(restoredUsers);
+    saveUsers(restoredUsers);
+    setUsersCache(restoredUsers);
+    setMessage(`${undoUser.employeeName} access restored.`);
+    setUndoUser(null);
+>>>>>>> c42bad385187181d6722e79e4a6355b8b547c33b
   };
 
   return (

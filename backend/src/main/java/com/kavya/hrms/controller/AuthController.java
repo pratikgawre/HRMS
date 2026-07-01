@@ -11,7 +11,6 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -70,7 +69,8 @@ public class AuthController {
         .map(user -> {
           String now = Instant.now().toString();
           user.setLastLogin(now);
-          appUserRepository.save(user);
+          AppUser safeUser = Objects.requireNonNull(user, "user");
+          appUserRepository.save(safeUser);
 
           String token = UUID.randomUUID().toString();
           AuthSession session = buildSession(user, token, now);
@@ -264,8 +264,8 @@ public class AuthController {
     response.setEmail(session.getEmail());
     response.setEmployeeId(session.getEmployeeId());
     response.setEmployeeName(session.getEmployeeName());
-    response.setAvatar(user == null ? "" : user.getAvatar());
-    response.setProfilePicture(user == null ? "" : user.getProfilePicture());
+    response.setAvatar(user.getAvatar());
+    response.setProfilePicture(user.getProfilePicture());
     response.setToken(session.getToken());
     response.setMustChangePassword(Boolean.TRUE.equals(session.getMustChangePassword()));
     response.setMessage(Boolean.TRUE.equals(session.getMustChangePassword()) ? "Password change required" : "Session active");
@@ -349,7 +349,11 @@ public class AuthController {
     };
   }
 
-  private boolean passwordMatches(@Nullable String rawPassword, @NonNull AppUser user) {
+  private boolean passwordMatches(@Nullable String rawPassword, @Nullable AppUser user) {
+    if (user == null) {
+      return false;
+    }
+
     String entered = rawPassword == null ? "" : rawPassword;
     String storedPassword = user.getPassword() == null ? "" : user.getPassword();
     String storedHash = user.getPasswordHash() == null ? "" : user.getPasswordHash();
@@ -399,6 +403,9 @@ public class AuthController {
     user.setTwoFactorEnabled(false);
     user.setTwoFactorSecret("");
     return Optional.of(user);
+  }
+
+  private record LegacyAccount(String password, String role, String employeeId, String employeeName) {
   }
 
   private AuthSession buildSession(AppUser user, String token, String now) {

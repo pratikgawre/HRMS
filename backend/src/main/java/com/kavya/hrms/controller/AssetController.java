@@ -132,10 +132,14 @@ public class AssetController {
       @RequestBody List<Asset> assets,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    List<Asset> safeAssets = assets == null ? List.of() : assets.stream().filter(Objects::nonNull).toList();
+    List<Asset> safeAssets = assets == null ? List.of() : assets;
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
-    List<Asset> saved = assetRepository.saveAll(safeAssets.stream().map(this::normalizeAssetResponse).toList());
+    List<Asset> normalizedAssets = safeAssets.stream()
+        .map(this::normalizeAssetResponse)
+        .filter(Objects::nonNull)
+        .toList();
+    List<Asset> saved = assetRepository.saveAll(Objects.requireNonNull(normalizedAssets));
     if (existingCount > 0) {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),

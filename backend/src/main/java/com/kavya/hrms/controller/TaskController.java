@@ -82,12 +82,13 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    hydrateTeamLeadFields(task);
-    syncProjectAssignment(task);
-    if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
-      task.setCreatedDateTime(OffsetDateTime.now().toString());
+    TaskItem safeTask = Objects.requireNonNull(task, "task must not be null");
+    hydrateTeamLeadFields(safeTask);
+    syncProjectAssignment(safeTask);
+    if (safeTask.getCreatedDateTime() == null || safeTask.getCreatedDateTime().isBlank()) {
+      safeTask.setCreatedDateTime(OffsetDateTime.now().toString());
     }
-    TaskItem saved = taskRepository.save(task);
+    TaskItem saved = taskRepository.save(safeTask);
     syncProjectAssignment(saved);
     notifyTaskAssigned(saved, accessRole);
     return saved;
@@ -122,15 +123,17 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem previous = taskRepository.findById(id).orElse(null);
-    task.setId(id);
-    TaskItem existing = taskRepository.findById(id).orElse(null);
-    if ((task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) && existing != null) {
-      task.setCreatedDateTime(existing.getCreatedDateTime());
+    String safeId = Objects.requireNonNull(id, "task id must not be null");
+    TaskItem safeTask = Objects.requireNonNull(task, "task must not be null");
+    TaskItem previous = taskRepository.findById(safeId).orElseGet(TaskItem::new);
+    safeTask.setId(safeId);
+    java.util.Optional<TaskItem> existing = taskRepository.findById(safeId);
+    if ((safeTask.getCreatedDateTime() == null || safeTask.getCreatedDateTime().isBlank()) && existing.isPresent()) {
+      safeTask.setCreatedDateTime(existing.get().getCreatedDateTime());
     }
-    hydrateTeamLeadFields(task);
-    syncProjectAssignment(task);
-    TaskItem saved = taskRepository.save(task);
+    hydrateTeamLeadFields(safeTask);
+    syncProjectAssignment(safeTask);
+    TaskItem saved = taskRepository.save(safeTask);
     notifyTaskUpdated(saved, previous, accessRole, userId);
     return saved;
   }
@@ -141,9 +144,12 @@ public class TaskController {
       @RequestBody TaskStatusRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem current = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
-    String nextStatus = firstNonBlank(request == null ? null : request.getStatus(), current.getStatus());
-    Query query = new Query(Criteria.where("id").is(id));
+    String safeId = Objects.requireNonNull(id, "task id must not be null");
+    TaskItem current = taskRepository.findById(safeId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    String requestedStatus = request == null ? "" : Objects.requireNonNullElse(request.getStatus(), "");
+    String currentStatus = Objects.requireNonNullElse(current.getStatus(), "");
+    String nextStatus = firstNonBlank(requestedStatus, currentStatus);
+    Query query = new Query(Criteria.where("id").is(safeId));
     Update update = new Update().set("status", nextStatus);
     mongoTemplate.updateFirst(query, update, TaskItem.class);
     TaskItem saved = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
@@ -156,34 +162,40 @@ public class TaskController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem current = taskRepository.findById(id).orElseGet(TaskItem::new);
-    taskRepository.deleteById(id);
+    String safeId = Objects.requireNonNull(id, "task id must not be null");
+    TaskItem current = taskRepository.findById(safeId).orElseGet(TaskItem::new);
+    taskRepository.deleteById(safeId);
     notifyTaskRemoved(current, accessRole, userId);
   }
 
   private void notifyTaskAssigned(TaskItem task, String accessRole) {
+    String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+    String safeTaskId = task == null ? "" : Objects.requireNonNullElse(task.getId(), "");
     notificationService.notifyUserIdentities(
         taskRecipientIdentities(task),
         "Task assigned",
         buildTaskMessage(task, "assigned"),
         "task",
-        task == null ? "" : task.getId(),
-        accessRole,
+        safeTaskId,
+        safeAccessRole,
         "System");
   }
 
   private void notifyTaskUpdated(TaskItem task, TaskItem previous, String accessRole, String actorUserId) {
     if (hasStatusChanged(task, previous)) {
       String message = buildTaskStatusMessage(task, previous);
+      String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+      String safeActorUserId = Objects.requireNonNullElse(actorUserId, "");
+      String safeTaskId = task == null ? "" : Objects.requireNonNullElse(task.getId(), "");
       notificationService.notifyRolesAndIdentitiesExcept(
           NotificationAudience.taskStatusRecipients(),
           taskManagerIdentities(task),
-          excludedIds(actorUserId),
+          excludedIds(safeActorUserId),
           "Task status updated",
           message,
           "task",
-          task == null ? "" : task.getId(),
-          accessRole,
+          safeTaskId,
+          safeAccessRole,
           "System");
       return;
     }
@@ -194,14 +206,33 @@ public class TaskController {
   }
 
   private void notifyTaskRemoved(TaskItem task, String accessRole, String actorUserId) {
+    String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+    String safeTaskId = task == null ? "" : Objects.requireNonNullElse(task.getId(), "");
     notificationService.notifyRolesExcept(
         NotificationAudience.taskStatusRecipients(),
-        excludedIds(actorUserId),
+        excludedIds(Objects.requireNonNullElse(actorUserId, "")),
         "Task removed",
         buildTaskMessage(task, "removed"),
         "task",
-        task == null ? "" : task.getId(),
-        accessRole,
+        safeTaskId,
+        safeAccessRole,
+        "System");
+  }
+
+  private void notifyTaskChangeSafely(TaskItem task, String title, String verb, String accessRole, String userId) {
+    if (task == null) {
+      return;
+    }
+    String safeTaskId = Objects.requireNonNullElse(task.getId(), "");
+
+    notificationService.notifyRolesExcept(
+        NotificationAudience.taskStatusRecipients(),
+        excludedIds(Objects.requireNonNullElse(userId, "")),
+        title,
+        buildTaskMessage(task, verb),
+        "task",
+        safeTaskId,
+        Objects.requireNonNullElse(accessRole, ""),
         "System");
   }
 

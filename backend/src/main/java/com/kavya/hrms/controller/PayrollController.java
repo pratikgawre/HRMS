@@ -1,16 +1,11 @@
 package com.kavya.hrms.controller;
 
-import com.kavya.hrms.model.PayrollRecord;
-import com.kavya.hrms.repository.PayrollRecordRepository;
-import com.kavya.hrms.service.PayrollGenerationService;
-import com.kavya.hrms.service.PayrollValidationService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +17,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.kavya.hrms.model.PayrollRecord;
+import com.kavya.hrms.repository.PayrollRecordRepository;
+import com.kavya.hrms.service.PayrollGenerationService;
+import com.kavya.hrms.service.PayrollValidationService;
 
 @RestController
 @RequestMapping("/api/payroll")
@@ -137,8 +137,8 @@ public class PayrollController {
   @PostMapping("/bulk")
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
-    List<PayrollRecord> safeRecords = records == null ? List.of() : records.stream().filter(Objects::nonNull).toList();
-    return payrollRecordRepository.saveAll(safeRecords);
+    List<PayrollRecord> safeRecords = safeList(records);
+    return payrollRecordRepository.saveAll(Objects.requireNonNull(safeRecords));
   }
 
   private ResponseEntity<Object> forbidden(String message) {

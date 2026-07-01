@@ -7,6 +7,7 @@ import com.kavya.hrms.model.AttendanceRecord;
 import com.kavya.hrms.model.LeaveRequest;
 import com.kavya.hrms.model.SystemSettings;
 import com.kavya.hrms.model.TaskItem;
+import com.kavya.hrms.model.SystemSettings;
 import com.kavya.hrms.repository.AnnouncementRepository;
 import com.kavya.hrms.repository.AttendanceRecordRepository;
 import com.kavya.hrms.repository.AssetRepository;
@@ -18,7 +19,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -175,25 +175,13 @@ public class DashboardController {
         .collect(Collectors.toList());
 
     int used = requests.stream()
-        .filter(request -> request != null)
         .filter(request -> "Approved".equalsIgnoreCase(request.getStatus()))
         .mapToInt(request -> safeDays(request.getDays()))
         .sum();
 
     int allocated = systemSettingsRepository.findAll().stream()
-        .filter(Objects::nonNull)
         .findFirst()
-        .map(settings -> {
-          List<SystemSettings.LeaveTypeSetting> types = settings.getLeaveTypes();
-          if (types == null) {
-            return 0;
-          }
-
-          return types.stream()
-              .filter(Objects::nonNull)
-              .mapToInt(type -> type.getDays() != null ? type.getDays() : 0)
-              .sum();
-        })
+        .map(this::resolveAllocatedLeaves)
         .orElse(0);
 
     int remaining = Math.max(allocated - used, 0);
@@ -206,6 +194,22 @@ public class DashboardController {
 
   private int safeDays(Integer days) {
     return days != null ? days : 0;
+  }
+
+  private int resolveAllocatedLeaves(SystemSettings settings) {
+    if (settings == null) {
+      return 0;
+    }
+
+    List<SystemSettings.LeaveTypeSetting> types = settings.getLeaveTypes();
+    if (types == null) {
+      return 0;
+    }
+
+    return types.stream()
+        .filter(Objects::nonNull)
+        .mapToInt(type -> type.getDays() != null ? type.getDays() : 0)
+        .sum();
   }
 
   private boolean isDueToday(String dueDate) {

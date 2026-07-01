@@ -3,7 +3,7 @@ package com.kavya.hrms.config;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-
+import java.util.Objects;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -225,7 +225,7 @@ public class DataSeeder {
     user.setPasswordResetToken(null);
     user.setPasswordResetTokenExpiresAt(null);
     user.setMustChangePassword(false);
-if (user.getUserId() == null || user.getUserId().isEmpty()) {
+    if (user.getUserId() == null || user.getUserId().isEmpty()) {
       user.setUserId("USR-" + employeeId);
     }
     appUserRepository.save(Objects.requireNonNull(user));
