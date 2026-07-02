@@ -64,7 +64,10 @@ function Header({ role, onMenuClick }) {
     const syncEmployeeIdentity = () => {
       const nextIdentity = getHeaderEmployeeIdentity(role);
       setEmployeeIdentity(nextIdentity);
-      setSessionValue('kavyaEmployeePhoto', nextIdentity?.profilePicture || '');
+      const nextPhoto = nextIdentity?.profilePicture || '';
+      if ((getSessionValue('kavyaEmployeePhoto') || '') !== nextPhoto) {
+        setSessionValue('kavyaEmployeePhoto', nextPhoto);
+      }
     };
 
     syncEmployeeIdentity();

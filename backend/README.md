@@ -10,6 +10,17 @@
 - Open MongoDB Compass and connect with: `mongodb://localhost:27017`
 - Database name: `hrmsdb`
 
+## SMTP Email Setup
+- Email delivery stays disabled until SMTP settings are provided.
+- Set these environment variables before starting the backend:
+- `SMTP_HOST=smtp.gmail.com`
+- `SMTP_PORT=587`
+- `SMTP_USERNAME=your-email@gmail.com`
+- `SMTP_PASSWORD=your-app-password`
+- `SMTP_FROM=your-email@gmail.com`
+- For Gmail, use an App Password instead of your normal account password.
+- After setting these values, restart the backend and the SMTP warning will disappear.
+
 ## APIs
 - `POST /api/auth/login`
 - `GET/POST/PUT/DELETE /api/employees`
