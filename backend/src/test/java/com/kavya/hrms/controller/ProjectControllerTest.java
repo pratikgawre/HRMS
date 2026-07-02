@@ -1,59 +1,45 @@
 package com.kavya.hrms.controller;
 
-import java.util.Optional;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.springframework.test.web.servlet.MockMvc;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.kavya.hrms.model.Project;
 import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.service.NotificationService;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @SuppressWarnings("all")
 class ProjectControllerTest {
+  private ProjectRepository projectRepository;
+  private NotificationService notificationService;
+  private MockMvc mockMvc;
 
-    private MockMvc mockMvc;
+  @BeforeEach
+  void setUp() {
+    projectRepository = mock(ProjectRepository.class);
+    notificationService = mock(NotificationService.class);
+    ProjectController projectController = new ProjectController(projectRepository, notificationService);
+    mockMvc = MockMvcBuilders.standaloneSetup(projectController).build();
+  }
 
-    @Mock
-    private ProjectRepository projectRepository;
+  @Test
+  void deleteProjectEndpointShouldResolvePathVariable() throws Exception {
+    Project project = new Project();
+    project.setId("proj-1");
+    project.setName("Alpha");
 
-    @InjectMocks
-    private ProjectController projectController;
+    when(projectRepository.findById("proj-1")).thenReturn(Optional.of(project));
 
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-        mockMvc = MockMvcBuilders.standaloneSetup(projectController).build();
-    }
+    mockMvc.perform(delete("/api/projects/proj-1"))
+        .andExpect(status().isOk());
 
-    @Test
-    void deleteProjectEndpointShouldResolvePathVariable() throws Exception {
-        Project project = new Project();
-        project.setId("proj-1");
-        project.setName("Alpha");
-
-        assertNotNull(notificationService);
-        when(projectRepository.findById("proj-1")).thenReturn(Optional.of(project));
-
-        mockMvc.perform(delete("/api/projects/proj-1"))
-                .andExpect(status().isOk());
-
-        verify(projectRepository).deleteById("proj-1");
-    }
+    verify(projectRepository).deleteById("proj-1");
+  }
 }

@@ -268,9 +268,7 @@ function UserManagement() {
     setMessage('');
   };
 
-  const openDeleteConfirm = (user) => {
-    setDeleteTarget(user);
-  };
+
 
   const closeDeleteConfirm = () => {
     setDeleteTarget(null);

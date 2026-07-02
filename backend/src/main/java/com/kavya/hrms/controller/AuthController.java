@@ -11,7 +11,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -384,29 +384,58 @@ public class AuthController {
     return response;
   }
 
-  private record LegacyAccount(String password, String role, String employeeId, String employeeName) {}
+  private static final class LegacyAccount {
+    private final String password;
+    private final String role;
+    private final String employeeId;
+    private final String employeeName;
+
+    private LegacyAccount(String password, String role, String employeeId, String employeeName) {
+      this.password = password;
+      this.role = role;
+      this.employeeId = employeeId;
+      this.employeeName = employeeName;
+    }
+
+    private boolean matchesPassword(String candidate) {
+      return password.equals(candidate);
+    }
+
+    private String getRole() {
+      return role;
+    }
+
+    private String getEmployeeId() {
+      return employeeId;
+    }
+
+    private String getEmployeeName() {
+      return employeeName;
+    }
+  }
 
   private Optional<AppUser> buildLegacyAccount(String email, String password) {
     LegacyAccount account = switch (email) {
       case "admin@gmail.com" -> new LegacyAccount("admin123", "admin", "ADMIN-001", "Admin Kavya");
       case "hr@gmail.com" -> new LegacyAccount("hr123", "hr", "HR-001", "Meera Nair");
       case "teamlead@gmail.com" -> new LegacyAccount("teamlead123", "teamLead", "KV003", "Kabir Khan");
-      case "manager@gmail.com", "projectmanager@gmail.com" -> new LegacyAccount("manager123", "projectManager", "KV004", "Isha Patel");
+      case "manager@gmail.com", "projectmanager@gmail.com" ->
+          new LegacyAccount("manager123", "projectManager", "KV004", "Isha Patel");
       case "employee@gmail.com" -> new LegacyAccount("employee123", "employee", "KV001", "Aarav Sharma");
       default -> null;
     };
 
-    if (account == null || !account.password().equals(password)) {
+    if (account == null || !account.matchesPassword(password)) {
       return Optional.empty();
     }
 
     AppUser user = new AppUser();
-    user.setUserId("USR-" + account.employeeId());
+    user.setUserId("USR-" + account.getEmployeeId());
     user.setEmail(email);
     user.setPassword(password);
-    user.setRole(account.role());
-    user.setEmployeeId(account.employeeId());
-    user.setEmployeeName(account.employeeName());
+    user.setRole(account.getRole());
+    user.setEmployeeId(account.getEmployeeId());
+    user.setEmployeeName(account.getEmployeeName());
     user.setStatus("Active");
     user.setMustChangePassword(false);
     user.setTwoFactorEnabled(false);
@@ -455,9 +484,6 @@ public class AuthController {
     return trimmed;
   }
 
-  private record LegacyAccount(String password, String role, String employeeId, String employeeName) {}
+
 }
-
-
-
 
