@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -16,8 +17,11 @@ import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.EmployeeWelcomeEmailService;
 import com.kavya.hrms.service.NotificationService;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 @SuppressWarnings("all")
@@ -89,16 +93,18 @@ class EmployeeControllerTest {
     when(employeeRepository.findAll()).thenReturn(List.of(existingTarget, existingOther));
     when(employeeRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
     when(appUserRepository.findAll()).thenReturn(List.of(targetUser));
-    when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0, AppUser.class));
     when(employeeWelcomeEmailService.buildLoginEmail(any(Employee.class))).thenReturn("riya.shah@kavyainfoweb.com");
     when(employeeWelcomeEmailService.buildTemporaryPassword(any(Employee.class))).thenReturn("Riya@123");
     when(employeeWelcomeEmailService.sendCredentialUpdateEmail(any(Employee.class)))
         .thenReturn(EmployeeWelcomeEmailService.DeliveryResult.sent("Credential update email sent."));
 
     employeeController.bulkSave(
-        java.util.Arrays.asList(updatedTarget, updatedOther),
+        List.of(updatedTarget, updatedOther),
         "HR Manager",
-        "HR-001");
+        "HR-001",
+        "true",
+        "KV009");
 
     verify(employeeWelcomeEmailService).sendCredentialUpdateEmail(updatedTarget);
     verify(employeeWelcomeEmailService, never()).sendCredentialUpdateEmail(updatedOther);

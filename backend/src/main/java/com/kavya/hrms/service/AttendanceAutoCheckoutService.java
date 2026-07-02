@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 

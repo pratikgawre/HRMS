@@ -5,7 +5,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 
 @Service

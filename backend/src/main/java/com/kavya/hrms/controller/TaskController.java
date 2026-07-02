@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.List;
 import org.springframework.http.HttpStatus;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -84,9 +84,9 @@ public class TaskController {
     if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
       task.setCreatedDateTime(OffsetDateTime.now().toString());
     }
-    TaskItem saved = taskRepository.save(safeTask);
+    TaskItem saved = taskRepository.save(task);
     syncProjectAssignment(saved);
-    notifyTaskAssigned(saved, accessRole);
+    notifyTaskChangeSafely(saved, "Task assigned", "assigned", accessRole, userId);
     return saved;
   }
 
@@ -160,7 +160,7 @@ public class TaskController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     TaskItem current = taskRepository.findById(id).orElseGet(TaskItem::new);
     taskRepository.deleteById(id);
-    notifyTaskChangeSafely(current, "Task removed", "removed", accessRole, userId);
+    notifyTaskRemoved(current, accessRole, userId);
   }
 
   private void notifyTaskRemoved(TaskItem task, String accessRole, String actorUserId) {
@@ -378,3 +378,4 @@ public class TaskController {
     }
   }
 }
+
