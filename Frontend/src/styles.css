@@ -5557,6 +5557,16 @@ button.attendance-summary-card.is-clickable:focus-visible {
   white-space: nowrap;
 }
 
+.leave-review-actions {
+  justify-content: flex-start;
+  gap: 0.55rem;
+}
+
+.leave-review-actions button {
+  min-width: 88px;
+  padding-inline: 0.8rem;
+}
+
 .project-tab-strip {
   display: flex;
   align-items: center;

@@ -119,8 +119,8 @@ public class ProjectController {
         title,
         buildProjectMessage(project, action),
         "project",
-        safeSourceId,
-        safeAccessRole,
+        sourceId,
+        accessRole,
         "System");
   }
 

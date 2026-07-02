@@ -153,6 +153,10 @@ public class LeaveController {
     return ids;
   }
 
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
+  }
+
   private Optional<String> resolveEmployeeUserId(String employeeId) {
     if (employeeId == null || employeeId.isBlank()) {
       return Optional.empty();
@@ -196,9 +200,5 @@ public class LeaveController {
       return "Rejected";
     }
     return status == null || status.isBlank() ? "Updated" : status.trim();
-  }
-
-  private <T> List<T> safeList(List<T> values) {
-    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 }

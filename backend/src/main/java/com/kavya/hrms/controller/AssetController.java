@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Locale;
 import java.util.logging.Logger;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

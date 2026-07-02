@@ -7,7 +7,7 @@ import java.util.Objects;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.lang.NonNull;
+import org.jspecify.annotations.NonNull;
 
 import com.kavya.hrms.model.Announcement;
 import com.kavya.hrms.model.AppUser;
@@ -25,6 +25,7 @@ import com.kavya.hrms.repository.TaskRepository;
 
 @Configuration
 public class DataSeeder {
+  @SuppressWarnings("unused")
   @Bean
   CommandLineRunner seedData(
       AppUserRepository appUserRepository,

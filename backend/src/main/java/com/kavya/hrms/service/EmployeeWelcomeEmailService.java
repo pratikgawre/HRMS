@@ -11,12 +11,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
-import org.springframework.lang.NonNull;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.HtmlUtils;
 
 @Service
+@SuppressWarnings("all")
 public class EmployeeWelcomeEmailService {
   private static final Logger log = LoggerFactory.getLogger(EmployeeWelcomeEmailService.class);
   private final ObjectProvider<JavaMailSender> mailSenderProvider;
@@ -27,12 +28,11 @@ public class EmployeeWelcomeEmailService {
   public EmployeeWelcomeEmailService(
       ObjectProvider<JavaMailSender> mailSenderProvider,
       @Value("${spring.mail.host:}") String host,
-      @Value("${spring.mail.from:}") String fromAddress,
       @Value("${spring.mail.username:}") String username) {
     this.mailSenderProvider = mailSenderProvider;
     this.host = host == null ? "" : host.trim();
-    this.fromAddress = fromAddress == null ? "" : fromAddress.trim();
     this.username = username == null ? "" : username.trim();
+    this.fromAddress = this.username;
   }
 
   public DeliveryResult sendWelcomeEmail(Employee employee) {

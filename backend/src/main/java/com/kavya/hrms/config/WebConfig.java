@@ -11,6 +11,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
+@SuppressWarnings("all")
 public class WebConfig implements WebMvcConfigurer {
   private final AuthSessionRepository authSessionRepository;
 
