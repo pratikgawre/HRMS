@@ -8,7 +8,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Locale;
 import java.util.logging.Logger;
-import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -217,7 +216,6 @@ public class AssetController {
     return value == null ? "" : value.trim();
   }
 
-  @Nullable
   private Asset normalizeAssetResponse(Asset asset) {
     if (asset == null) {
       return null;
@@ -413,7 +411,6 @@ public class AssetController {
     return asset;
   }
 
-  @Nullable
   private AssetAssignment resolveLatestAssignment(String assetId, String assetCode, List<AssetAssignment> assignments) {
     if (assignments == null || assignments.isEmpty()) {
       return null;
@@ -533,7 +530,6 @@ public class AssetController {
     return parsed.format(DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH));
   }
 
-  @Nullable
   private LocalDate parseDate(String value) {
     String normalized = normalize(value);
     if (normalized.isBlank()) {
