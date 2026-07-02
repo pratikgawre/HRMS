@@ -8,6 +8,7 @@ import com.kavya.hrms.service.NotificationService;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Locale;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,7 +49,7 @@ public class LeaveController {
     if (accessRole != null && !accessRole.isBlank()) {
       safeRequest.setOwnerRole(accessRole);
     }
-    LeaveRequest saved = leaveRequestRepository.save(request);
+    LeaveRequest saved = leaveRequestRepository.save(safeRequest);
     notifyLeaveSubmitted(saved, accessRole, userId);
     return saved;
   }
@@ -144,6 +145,10 @@ public class LeaveController {
       }
     }
     return ids;
+  }
+
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
   }
 
   private Optional<String> resolveEmployeeUserId(String employeeId) {

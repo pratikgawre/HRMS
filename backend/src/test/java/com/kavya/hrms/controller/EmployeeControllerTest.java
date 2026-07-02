@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
+@SuppressWarnings("all")
 class EmployeeControllerTest {
   @Mock
   private EmployeeRepository employeeRepository;
@@ -51,9 +53,9 @@ class EmployeeControllerTest {
     user.setPasswordResetTokenExpiresAt("2099-01-01T00:00:00Z");
     user.setMustChangePassword(false);
 
-    when(employeeRepository.save(any(Employee.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(employeeRepository.save(any(Employee.class))).thenAnswer(invocation -> invocation.getArgument(0, Employee.class));
     when(appUserRepository.findAll()).thenReturn(List.of(user));
-    when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0, AppUser.class));
     when(employeeWelcomeEmailService.buildLoginEmail(any(Employee.class))).thenReturn("riya.shah@kavyainfoweb.com");
     when(employeeWelcomeEmailService.buildTemporaryPassword(any(Employee.class))).thenReturn("Riya@123");
 
@@ -83,7 +85,7 @@ class EmployeeControllerTest {
     targetUser.setEmail("old.riya@kavyainfoweb.com");
 
     when(employeeRepository.findAll()).thenReturn(List.of(existingTarget, existingOther));
-    when(employeeRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(employeeRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
     when(appUserRepository.findAll()).thenReturn(List.of(targetUser));
     when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(employeeWelcomeEmailService.buildLoginEmail(any(Employee.class))).thenReturn("riya.shah@kavyainfoweb.com");
@@ -92,9 +94,7 @@ class EmployeeControllerTest {
     employeeController.bulkSave(
         List.of(updatedTarget, updatedOther),
         "HR Manager",
-        "HR-001",
-        "true",
-        "KV009");
+        "HR-001");
 
     verify(employeeWelcomeEmailService).sendCredentialUpdateEmail(updatedTarget);
     verify(employeeWelcomeEmailService, never()).sendCredentialUpdateEmail(updatedOther);

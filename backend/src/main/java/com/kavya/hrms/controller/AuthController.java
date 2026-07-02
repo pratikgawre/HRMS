@@ -308,6 +308,7 @@ public class AuthController {
   private String normalizeRole(String role) {
     if (role == null) {
       return "Employee";
+    }
     String normalized = role.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
     return switch (normalized) {
       case "superadmin", "admin" -> "Super Admin";
@@ -404,4 +405,6 @@ public class AuthController {
 
     return trimmed;
   }
+
+  private record LegacyAccount(String password, String role, String employeeId, String employeeName) {}
 }

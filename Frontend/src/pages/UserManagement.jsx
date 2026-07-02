@@ -260,26 +260,52 @@ function UserManagement() {
     }
   };
 
-  const deleteUser = async (user) => {
-    const shouldDelete = window.confirm('Do you really want to delete this user?');
+  const openDeleteConfirm = (user) => {
+    setDeleteTarget(user);
+  };
 
-  const deleteUser = () => {
+  const closeDeleteConfirm = () => {
+    setDeleteTarget(null);
+  };
+
+  const deleteUser = async () => {
     if (!deleteTarget) {
       return;
     }
 
+    const user = deleteTarget;
+    const shouldDelete = window.confirm('Do you really want to delete this user?');
+    if (!shouldDelete) {
+      return;
+    }
+
+    const previousUsers = users;
     const nextUsers = dedupeUsers(users.filter((item) => !isSameUser(item, user)));
     setUsers(nextUsers);
+    closeDeleteConfirm();
 
     try {
       await deleteUserRequest(user.userId || user.id || user.email);
       setUsersCache(nextUsers);
+      setUndoUser(user);
       setMessage(`${user.employeeName} access deleted successfully.`);
     } catch (error) {
-      setUsers(users);
-      setUsersCache(users);
+      setUsers(previousUsers);
+      setUsersCache(previousUsers);
       setMessage(error?.message || 'Unable to delete user access. Please try again.');
     }
+  };
+
+  const undoDeleteUser = () => {
+    if (!undoUser) {
+      return;
+    }
+
+    const restoredUsers = dedupeUsers([...users, undoUser]);
+    setUsers(restoredUsers);
+    setUsersCache(restoredUsers);
+    setUndoUser(null);
+    setMessage(`${undoUser.employeeName} access restored successfully.`);
   };
 
   return (

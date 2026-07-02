@@ -11,11 +11,6 @@ import com.kavya.hrms.service.NotificationService;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.time.OffsetDateTime;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.http.HttpStatus;
 import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -38,19 +33,16 @@ public class TaskController {
   private final ProjectRepository projectRepository;
   private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
-  private final MongoTemplate mongoTemplate;
 
   public TaskController(
       TaskRepository taskRepository,
       ProjectRepository projectRepository,
       EmployeeRepository employeeRepository,
-      NotificationService notificationService,
-      MongoTemplate mongoTemplate) {
+      NotificationService notificationService) {
     this.taskRepository = taskRepository;
     this.projectRepository = projectRepository;
     this.employeeRepository = employeeRepository;
     this.notificationService = notificationService;
-    this.mongoTemplate = mongoTemplate;
   }
 
   @GetMapping
@@ -80,9 +72,13 @@ public class TaskController {
 
   @PostMapping
   public TaskItem create(
-      @RequestBody TaskItem task,
+      @Nullable @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    if (task == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task payload is required");
+    }
+
     hydrateTeamLeadFields(task);
     syncProjectAssignment(task);
     if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
@@ -95,9 +91,13 @@ public class TaskController {
 
   @PostMapping("/bulk")
   public List<TaskItem> bulkSave(
-      @RequestBody List<TaskItem> tasks,
+      @Nullable @RequestBody List<TaskItem> tasks,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    if (tasks == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task list is required");
+    }
+
     List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
@@ -119,10 +119,13 @@ public class TaskController {
   @PutMapping("/{id}")
   public TaskItem update(
       @PathVariable("id") String id,
-      @RequestBody TaskItem task,
+      @Nullable @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem previous = taskRepository.findById(id).orElse(null);
+    if (task == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task payload is required");
+    }
+
     task.setId(id);
     TaskItem existing = taskRepository.findById(id).orElse(null);
     if ((task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) && existing != null) {
@@ -130,7 +133,7 @@ public class TaskController {
     }
     hydrateTeamLeadFields(task);
     syncProjectAssignment(task);
-    TaskItem saved = mongoTemplate.save(task, "tasks");
+    TaskItem saved = taskRepository.save(task);
     notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
     return saved;
   }
@@ -138,15 +141,13 @@ public class TaskController {
   @PatchMapping("/{id}/status")
   public TaskItem updateStatus(
       @PathVariable("id") String id,
-      @RequestBody TaskStatusRequest request,
+      @Nullable @RequestBody TaskStatusRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     TaskItem current = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
     String nextStatus = firstNonBlank(request == null ? null : request.getStatus(), current.getStatus());
-    Query query = new Query(Criteria.where("id").is(id));
-    Update update = new Update().set("status", nextStatus);
-    mongoTemplate.updateFirst(query, update, TaskItem.class);
-    TaskItem saved = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    current.setStatus(nextStatus);
+    TaskItem saved = taskRepository.save(current);
     notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
     return saved;
   }
@@ -157,7 +158,7 @@ public class TaskController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     TaskItem current = taskRepository.findById(id).orElseGet(TaskItem::new);
-    mongoTemplate.remove(new Query(Criteria.where("id").is(id)), TaskItem.class);
+    taskRepository.deleteById(id);
     notifyTaskChangeSafely(current, "Task removed", "removed", accessRole, userId);
   }
 
@@ -165,52 +166,6 @@ public class TaskController {
     String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
     String owner = task != null && task.getOwner() != null ? task.getOwner() : "team";
     return title + " was " + action + " for " + owner + ".";
-  }
-
-  private String buildTaskStatusMessage(TaskItem task, TaskItem previous) {
-    String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
-    String nextStatus = task != null && task.getStatus() != null ? task.getStatus() : "updated";
-    String previousStatus = previous != null && previous.getStatus() != null ? previous.getStatus() : "previous status";
-    return title + " status changed from " + previousStatus + " to " + nextStatus + ".";
-  }
-
-  private boolean hasStatusChanged(TaskItem task, TaskItem previous) {
-    if (task == null || previous == null) {
-      return false;
-    }
-    return !normalize(task.getStatus()).equals(normalize(previous.getStatus()));
-  }
-
-  private boolean hasAssigneeChanged(TaskItem task, TaskItem previous) {
-    if (task == null || previous == null) {
-      return false;
-    }
-    return !normalize(firstNonBlank(task.getAssignedToId(), task.getAssignedToName(), task.getAssignedTo(), task.getOwner()))
-        .equals(normalize(firstNonBlank(previous.getAssignedToId(), previous.getAssignedToName(), previous.getAssignedTo(), previous.getOwner())));
-  }
-
-  private List<String> taskRecipientIdentities(TaskItem task) {
-    List<String> identities = new ArrayList<>();
-    if (task == null) {
-      return identities;
-    }
-    addIdentity(identities, task.getAssignedToId());
-    addIdentity(identities, task.getAssignedToName());
-    addIdentity(identities, task.getAssignedTo());
-    addIdentity(identities, task.getOwner());
-    return identities;
-  }
-
-  private List<String> taskManagerIdentities(TaskItem task) {
-    List<String> identities = new ArrayList<>();
-    if (task == null) {
-      return identities;
-    }
-    addIdentity(identities, task.getAssignedById());
-    addIdentity(identities, task.getAssignedByName());
-    addIdentity(identities, task.getAssignedBy());
-    addIdentity(identities, task.getTeamLeadId());
-    return identities;
   }
 
   private List<String> excludedIds(String... values) {
@@ -404,18 +359,6 @@ public class TaskController {
           userId);
     } catch (RuntimeException ignored) {
       // Keep task persistence responsive even if notification fan-out fails.
-    }
-  }
-
-  public static class TaskStatusRequest {
-    private String status;
-
-    public String getStatus() {
-      return status;
-    }
-
-    public void setStatus(String status) {
-      this.status = status;
     }
   }
 }

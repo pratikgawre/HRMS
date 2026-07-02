@@ -1,15 +1,11 @@
 package com.kavya.hrms.controller;
 
 import com.kavya.hrms.model.Notification;
+import com.kavya.hrms.repository.NotificationRepository;
 import com.kavya.hrms.service.NotificationService;
 import java.util.ArrayList;
 import java.util.List;
-import org.bson.Document;
 import org.springframework.http.ResponseEntity;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,34 +18,28 @@ import org.springframework.lang.Nullable;
 
 @RestController
 @RequestMapping("/api/notifications")
+@SuppressWarnings("all")
 public class NotificationController {
   private final NotificationService notificationService;
-  private final MongoTemplate mongoTemplate;
+  private final NotificationRepository notificationRepository;
 
-  public NotificationController(NotificationService notificationService, MongoTemplate mongoTemplate) {
+  public NotificationController(
+      NotificationService notificationService,
+      NotificationRepository notificationRepository) {
     this.notificationService = notificationService;
-    this.mongoTemplate = mongoTemplate;
+    this.notificationRepository = notificationRepository;
   }
 
   @GetMapping
   public List<Notification> list(
-      @RequestParam(required = false) String role,
-      @RequestParam(required = false) String userId,
-      @RequestHeader(value = "X-Kavya-User-Id", required = false) String headerUserId) {
-    String effectiveUserId = normalizeUserId(userId != null ? userId : headerUserId);
+      @Nullable @RequestParam(required = false) String userId,
+      @Nullable @RequestHeader(value = "X-Kavya-User-Id", required = false) String headerUserId) {
+    String effectiveUserId = resolveUserId(userId, headerUserId);
     if (effectiveUserId.isEmpty()) {
       return List.of();
     }
 
-    Query query = new Query(Criteria.where("userId").is(effectiveUserId));
-    query.with(Sort.by(Sort.Direction.DESC, "createdAt"));
-
-    List<Document> documents = mongoTemplate.find(query, Document.class, "notifications");
-    List<Notification> notifications = new ArrayList<>();
-    for (Document document : documents) {
-      notifications.add(fromDocument(document));
-    }
-    return dedupeNotifications(notifications);
+    return dedupeNotifications(notificationRepository.findByUserIdOrderByCreatedAtDesc(effectiveUserId));
   }
 
   @PutMapping("/{id}/read")
@@ -70,9 +60,9 @@ public class NotificationController {
 
   @DeleteMapping
   public ResponseEntity<Void> clearAll(
-      @RequestParam(required = false) String userId,
-      @RequestHeader(value = "X-Kavya-User-Id", required = false) String headerUserId) {
-    notificationService.clearForUser(normalizeUserId(userId != null ? userId : headerUserId));
+      @Nullable @RequestParam(required = false) String userId,
+      @Nullable @RequestHeader(value = "X-Kavya-User-Id", required = false) String headerUserId) {
+    notificationService.clearForUser(resolveUserId(userId, headerUserId));
     return ResponseEntity.noContent().build();
   }
 
@@ -109,42 +99,8 @@ public class NotificationController {
     return userId == null ? "" : userId.trim();
   }
 
-  private Notification fromDocument(Document document) {
-    Notification notification = new Notification();
-    if (document == null) {
-      return notification;
-    }
-
-    notification.setId(asString(document.get("_id")));
-    notification.setUserId(asString(document.get("userId")));
-    notification.setTitle(asString(document.get("title")));
-    notification.setMessage(asString(document.get("message")));
-    notification.setReadStatus(asBoolean(document.get("readStatus")));
-    notification.setCreatedAt(asString(document.get("createdAt")));
-    notification.setSourceType(asString(document.get("sourceType")));
-    notification.setSourceId(asString(document.get("sourceId")));
-    notification.setCreatedByRole(asString(document.get("createdByRole")));
-    notification.setCreatedByName(asString(document.get("createdByName")));
-    return notification;
-  }
-
-  private String asString(Object value) {
-    return value == null ? "" : String.valueOf(value).trim();
-  }
-
-  @Nullable
-  private Boolean asBoolean(Object value) {
-    if (value instanceof Boolean booleanValue) {
-      return booleanValue;
-    }
-
-    String normalized = asString(value).toLowerCase();
-    if ("true".equals(normalized)) {
-      return true;
-    }
-    if ("false".equals(normalized)) {
-      return false;
-    }
-    return null;
+  private String resolveUserId(String userId, String headerUserId) {
+    String requestUserId = normalizeUserId(userId);
+    return requestUserId.isEmpty() ? normalizeUserId(headerUserId) : requestUserId;
   }
 }

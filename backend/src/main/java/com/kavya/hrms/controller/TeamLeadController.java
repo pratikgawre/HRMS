@@ -20,6 +20,7 @@ import com.kavya.hrms.repository.ProjectRepository;
 
 @RestController
 @RequestMapping("/api/team-lead")
+@SuppressWarnings("all")
 public class TeamLeadController {
   private final ProjectRepository projectRepository;
   private final EmployeeRepository employeeRepository;

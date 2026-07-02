@@ -113,7 +113,7 @@ public class ProjectController {
         title,
         buildProjectMessage(project, action),
         "project",
-        id,
+        sourceId,
         accessRole,
         "System");
   }

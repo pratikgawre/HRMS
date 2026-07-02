@@ -9,6 +9,7 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 @Service
+@SuppressWarnings("all")
 public class PayrollValidationService {
   private static final Map<String, Integer> MONTH_INDEX_BY_NAME = buildMonthIndexMap();
 

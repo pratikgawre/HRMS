@@ -17,6 +17,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
+@SuppressWarnings("all")
 public class AttendanceAutoCheckoutService {
   private static final ZoneId KOLKATA_ZONE = ZoneId.of("Asia/Kolkata");
   private static final LocalTime AUTO_CHECKOUT_TIME = LocalTime.of(21, 0);
