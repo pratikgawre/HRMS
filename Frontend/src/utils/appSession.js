@@ -64,11 +64,16 @@ function syncMemorySession() {
 syncMemorySession();
 
 export function setSessionValue(key, value) {
+  const nextValue = key === 'kavyaAuthToken' ? String(value || '').trim() : value;
+  if (session[key] === nextValue) {
+    return;
+  }
+
   if (key === 'kavyaAuthToken') {
-    session[key] = String(value || '').trim();
+    session[key] = nextValue;
     persistToken(session[key]);
   } else {
-    session[key] = value;
+    session[key] = nextValue;
   }
 
   persistSessionSnapshot();
