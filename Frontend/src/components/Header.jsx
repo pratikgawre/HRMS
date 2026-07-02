@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
+import { getCurrentEmployeeIdentity, getStoredEmployees } from '../utils/employeeStorage.js';
 import { clearSession } from '../utils/auth.js';
 import { apiRequest } from '../utils/api.js';
-import { getSessionValue } from '../utils/appSession.js';
+import { getSessionValue, setSessionValue } from '../utils/appSession.js';
+import { getUsers } from '../utils/user-management.js';
 
 function Header({ role, onMenuClick }) {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ function Header({ role, onMenuClick }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notificationItems, setNotificationItems] = useState([]);
+  const [employeeIdentity, setEmployeeIdentity] = useState(() => getHeaderEmployeeIdentity(role));
   const notificationWrapRef = useRef(null);
   const today = new Intl.DateTimeFormat('en-IN', {
     weekday: 'short',
@@ -25,7 +27,6 @@ function Header({ role, onMenuClick }) {
     employee: 'Employee',
   };
   const displayRole = roleLabels[role] || 'Employee';
-  const employeeIdentity = getCurrentEmployeeIdentity();
   const userInitials = employeeIdentity?.avatar || displayRole.slice(0, 2);
   const displayName = role === 'admin' ? 'Admin' : employeeIdentity?.employee || displayRole;
   const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId');
@@ -58,6 +59,25 @@ function Header({ role, onMenuClick }) {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showNotifications]);
+
+  useEffect(() => {
+    const syncEmployeeIdentity = () => {
+      const nextIdentity = getHeaderEmployeeIdentity(role);
+      setEmployeeIdentity(nextIdentity);
+      setSessionValue('kavyaEmployeePhoto', nextIdentity?.profilePicture || '');
+    };
+
+    syncEmployeeIdentity();
+    window.addEventListener('kavyaSessionChanged', syncEmployeeIdentity);
+    window.addEventListener('kavyaEmployeesChanged', syncEmployeeIdentity);
+    window.addEventListener('kavyaUsersChanged', syncEmployeeIdentity);
+
+    return () => {
+      window.removeEventListener('kavyaSessionChanged', syncEmployeeIdentity);
+      window.removeEventListener('kavyaEmployeesChanged', syncEmployeeIdentity);
+      window.removeEventListener('kavyaUsersChanged', syncEmployeeIdentity);
+    };
+  }, [role]);
 
   useEffect(() => {
     let active = true;
@@ -501,4 +521,37 @@ function getRolePath(role, rolePaths, fallbackPath) {
 }
 
 export default Header;
+
+function getHeaderEmployeeIdentity(role) {
+  const identity = getCurrentEmployeeIdentity();
+  if (role === 'admin' || identity.profilePicture) {
+    return identity;
+  }
+
+  const sessionEmployeeId = String(getSessionValue('kavyaEmployeeId') || '').trim().toLowerCase();
+  const sessionEmail = String(getSessionValue('kavyaUserEmail') || '').trim().toLowerCase();
+  const matchingUser = getUsers().find((user) => {
+    const employeeId = String(user.employeeId || '').trim().toLowerCase();
+    const email = String(user.email || '').trim().toLowerCase();
+    return (sessionEmployeeId && employeeId === sessionEmployeeId) || (sessionEmail && email === sessionEmail);
+  });
+  const matchingEmployee = getStoredEmployees([]).find((employee) => {
+    const employeeId = String(employee.employeeId || employee.employeeCode || employee.id || '').trim().toLowerCase();
+    const email = String(employee.email || '').trim().toLowerCase();
+    return (sessionEmployeeId && employeeId === sessionEmployeeId) || (sessionEmail && email === sessionEmail);
+  });
+
+  const resolvedProfilePicture = String(
+    matchingEmployee?.profilePicture || matchingUser?.profilePicture || '',
+  ).trim();
+  if (!resolvedProfilePicture) {
+    return identity;
+  }
+
+  return {
+    ...identity,
+    avatar: matchingEmployee?.avatar || matchingUser?.avatar || identity.avatar,
+    profilePicture: resolvedProfilePicture,
+  };
+}
 

@@ -399,7 +399,16 @@ function Tasks() {
     },
   ];
   const hrTaskListColumns = role === 'hr'
-    ? taskListColumns.filter((column) => column.key !== 'actions')
+    ? [
+      ...taskListColumns
+        .filter((column) => column.key !== 'status' && column.key !== 'actions'),
+      {
+        key: 'due',
+        label: 'Due Date',
+        render: (row) => row.dueDate || row.due || '-',
+      },
+      taskListColumns.find((column) => column.key === 'status'),
+    ].filter(Boolean)
     : taskListColumns;
   const createTask = async (event) => {
     event.preventDefault();
