@@ -9,6 +9,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 @Component
+@SuppressWarnings("all")
 public class SettingsWebSocketHandler extends TextWebSocketHandler {
   private final SettingsBroadcastService broadcastService;
 

@@ -454,6 +454,8 @@ public class AuthController {
 
     return trimmed;
   }
+
+  private record LegacyAccount(String password, String role, String employeeId, String employeeName) {}
 }
 
 

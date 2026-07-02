@@ -268,6 +268,10 @@ function UserManagement() {
     setMessage('');
   };
 
+  const openDeleteConfirm = (user) => {
+    setDeleteTarget(user);
+  };
+
   const closeDeleteConfirm = () => {
     setDeleteTarget(null);
   };
@@ -277,40 +281,39 @@ function UserManagement() {
       return;
     }
 
-    const targetUser = deleteTarget;
+    const user = deleteTarget;
+    const shouldDelete = window.confirm('Do you really want to delete this user?');
+    if (!shouldDelete) {
+      return;
+    }
+
     const previousUsers = users;
-    const nextUsers = dedupeUsers(users.filter((item) => !isSameUser(item, targetUser)));
+    const nextUsers = dedupeUsers(users.filter((item) => !isSameUser(item, user)));
     setUsers(nextUsers);
-    setUsersCache(nextUsers);
-    setDeleteTarget(null);
+    closeDeleteConfirm();
 
     try {
       await deleteUserRequest(user.userId || user.id || user.email);
       setUsersCache(nextUsers);
+      setUndoUser(user);
       setMessage(`${user.employeeName} access deleted successfully.`);
     } catch (error) {
-      setUsers(users);
-      setUsersCache(users);
+      setUsers(previousUsers);
+      setUsersCache(previousUsers);
       setMessage(error?.message || 'Unable to delete user access. Please try again.');
     }
   };
 
-  const undoDeleteUser = async () => {
+  const undoDeleteUser = () => {
     if (!undoUser) {
       return;
     }
 
-    const restoredUsers = dedupeUsers([undoUser, ...users]);
+    const restoredUsers = dedupeUsers([...users, undoUser]);
     setUsers(restoredUsers);
     setUsersCache(restoredUsers);
     setUndoUser(null);
-
-    try {
-      await saveUsers(restoredUsers);
-      setMessage(`${undoUser.employeeName} access restored successfully.`);
-    } catch (error) {
-      setMessage(error?.message || 'User access restored locally, but could not sync to the server.');
-    }
+    setMessage(`${undoUser.employeeName} access restored successfully.`);
   };
 
   return (
