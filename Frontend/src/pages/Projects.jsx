@@ -336,7 +336,14 @@ function Projects() {
             Edit
           </button>
           {canManage && (
-            <button type="button" className="danger" onClick={() => removeProject(row)}>
+            <button
+              type="button"
+              className="danger"
+              onClick={(event) => {
+                event.stopPropagation();
+                removeProject(row);
+              }}
+            >
               Delete
             </button>
           )}
@@ -646,6 +653,10 @@ function Projects() {
     setDeleteTargetProject(project);
   }
 
+  function removeProject(project) {
+    openDeleteProjectConfirm(project);
+  }
+
   function closeDeleteProjectConfirm() {
     setDeleteTargetProject(null);
   }
@@ -798,6 +809,7 @@ function Projects() {
         </div>
 
       {savePopup && <ProjectToast popup={savePopup} onClose={closeProjectToast} />}
+      {deleteUndoState && <ProjectUndoToast projectName={deleteUndoState.projectName} onUndo={undoDeleteProject} />}
 
         <div className="project-tab-strip" role="tablist" aria-label="Project modules">
           {PROJECT_TABS.map((tab) => {
@@ -827,6 +839,38 @@ function Projects() {
             );
           })}
         </div>
+
+        {deleteTargetProject && (
+          <div className="project-delete-backdrop" role="presentation" onClick={closeDeleteProjectConfirm}>
+            <section
+              className="project-delete-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Delete project confirmation"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="project-delete-icon" aria-hidden="true">
+                <i className="ri-delete-bin-line" />
+              </div>
+              <div className="project-delete-copy">
+                <h3>Delete project?</h3>
+                <p>
+                  {deleteTargetProject.name || deleteTargetProject.projectCode || 'This project'}
+                  {' '}
+                  will be removed from Project List.
+                </p>
+              </div>
+              <div className="project-delete-actions">
+                <button type="button" className="project-delete-cancel" onClick={closeDeleteProjectConfirm}>
+                  No, Keep It
+                </button>
+                <button type="button" className="project-delete-confirm" onClick={handleDeleteProjectConfirm}>
+                  Yes, Delete
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
 
         <div className="project-workspace-layout">
           <div className="project-workspace-main">
