@@ -2,9 +2,9 @@ package com.kavya.hrms.config;
 
 import com.kavya.hrms.repository.AuthSessionRepository;
 import java.nio.file.Paths;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
@@ -12,8 +12,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
-  @Autowired(required = false)
-  private AuthSessionRepository authSessionRepository;
+  private final AuthSessionRepository authSessionRepository;
+
+  public WebConfig(@Nullable AuthSessionRepository authSessionRepository) {
+    this.authSessionRepository = authSessionRepository;
+  }
 
   @Override
   public void addCorsMappings(@NonNull CorsRegistry registry) {

@@ -12,7 +12,6 @@ public class SmtpConfigurationLogger {
   private static final Logger log = LoggerFactory.getLogger(SmtpConfigurationLogger.class);
 
   @Bean
-  @SuppressWarnings("unused")
   ApplicationRunner smtpConfigurationWarningRunner(
       @Value("${spring.mail.host:}") String host,
       @Value("${spring.mail.username:}") String username,

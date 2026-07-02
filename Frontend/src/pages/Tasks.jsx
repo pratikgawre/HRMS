@@ -4,7 +4,6 @@ import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
-import { taskColumns } from './taskColumns.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
@@ -400,7 +399,16 @@ function Tasks() {
     },
   ];
   const hrTaskListColumns = role === 'hr'
-    ? taskListColumns.filter((column) => column.key !== 'actions')
+    ? [
+      ...taskListColumns
+        .filter((column) => column.key !== 'status' && column.key !== 'actions'),
+      {
+        key: 'due',
+        label: 'Due Date',
+        render: (row) => row.dueDate || row.due || '-',
+      },
+      taskListColumns.find((column) => column.key === 'status'),
+    ].filter(Boolean)
     : taskListColumns;
   const createTask = async (event) => {
     event.preventDefault();
