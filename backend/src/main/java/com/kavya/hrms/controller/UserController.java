@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/users")
+@SuppressWarnings("all")
 public class UserController {
   private final AppUserRepository appUserRepository;
 
