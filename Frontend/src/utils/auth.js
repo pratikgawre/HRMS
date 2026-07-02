@@ -87,13 +87,14 @@ export async function authenticateUser(email, password) {
         employeeName: result.employeeName,
         email: result.email || normalizedEmail,
         role: accessRole,
-        status: 'Active',
+        status: result.status || 'Active',
         permissions: getPermissions(accessRole),
         token: result.token || '',
         password,
         mustChangePassword: Boolean(result.mustChangePassword),
-        avatar: (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
-        profilePicture: '',
+        lastLogin: result.lastLogin || '',
+        avatar: result.avatar || (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
+        profilePicture: result.profilePicture || '',
       };
       return { ok: true, user };
     }
@@ -180,7 +181,7 @@ export function startSession(user) {
   setSessionValue('kavyaMustChangePassword', mustChangePassword);
   setSessionValue('kavyaLoginSuccess', 'true');
 
-  return getDashboardPath(user.role);
+  return mustChangePassword ? '/change-password' : getDashboardPath(user.role);
 }
 
 export function clearSession() {
@@ -294,11 +295,12 @@ export async function resetPassword(email, token, newPassword) {
   };
 }
 
-export async function changePassword(newPassword, confirmPassword) {
+export async function changePassword(currentPassword, newPassword, confirmPassword) {
   try {
     const result = await apiRequest('/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({
+        currentPassword,
         newPassword,
         confirmPassword,
       }),

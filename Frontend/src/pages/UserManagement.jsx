@@ -3,10 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { people } from '../data/dummyData.js';
-import { getStoredEmployees, saveStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
-import { deleteUser as deleteUserRequest, safeApiRequest } from '../utils/api.js';
-import { ACCESS_ROLE_OPTIONS, USER_STATUS_OPTIONS, getRoleBadgeClass } from '../utils/role-access.js';
+import { reconcileDeletedEmployees, saveStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
+import { apiRequest, deleteUser as deleteUserRequest } from '../utils/api.js';
+import { ACCESS_ROLE_OPTIONS, USER_STATUS_OPTIONS, getRoleBadgeClass, normalizeAccessRole } from '../utils/role-access.js';
 import {
   buildUserAccess,
   createUserAccess,
@@ -17,24 +16,15 @@ import {
   setUsersCache,
   updateUserAccess,
 } from '../utils/user-management.js';
-import { ensureSeedUsers } from '../utils/auth.js';
 
 const USER_DELETE_UNDO_MS = 6000;
 
-const fallbackEmployees = people.map((person) => ({
-  ...person,
-  employeeCode: person.id,
-  displayName: person.name,
-  email: `${person.name.split(' ')[0].toLowerCase()}@kavya.hr`,
-  jobTitle: person.role,
-}));
 
 function UserManagement() {
   const navigate = useNavigate();
   const location = useLocation();
-  const isAdminModule = location.pathname.startsWith('/admin/');
-  const [employees, setEmployees] = useState(() => getStoredEmployees(fallbackEmployees));
-  const [users, setUsers] = useState(() => dedupeUsers(ensureSeedUsers()));
+  const [employees, setEmployees] = useState([]);
+  const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
   const [statusFilter, setStatusFilter] = useState('All Status');
@@ -64,45 +54,46 @@ function UserManagement() {
   useEffect(() => {
     let active = true;
 
-    Promise.all([
-      safeApiRequest('/employees', []),
-      safeApiRequest('/users', []),
-    ]).then(([employeeRows, userRows]) => {
-      if (!active) {
-        return;
-      }
+    const loadAccessData = async () => {
+      try {
+        const [employeeRows, userRows] = await Promise.all([
+          apiRequest('/employees'),
+          apiRequest('/users'),
+        ]);
+        if (!active) {
+          return;
+        }
 
-      const normalizedEmployees = normalizeEmployees(
-        Array.isArray(employeeRows) && employeeRows.length > 0
-          ? employeeRows
-          : getStoredEmployees(fallbackEmployees)
-      );
-      const normalizedUsers = dedupeUsers(normalizeUsers(
-        Array.isArray(userRows) && userRows.length > 0 ? userRows : getUsers(),
-        normalizedEmployees
-      ));
+        const normalizedEmployees = normalizeEmployees(employeeRows).filter((employee) => !isAdminEmployee(employee));
+        const normalizedUsers = dedupeUsers(normalizeUsers(userRows, normalizedEmployees)).filter((user) => !isAdminLikeUser(user));
 
-      setEmployees(normalizedEmployees);
-      setEmployeesCache(normalizedEmployees);
-      if (normalizedUsers.length > 0) {
+        reconcileDeletedEmployees(normalizedEmployees);
+        setEmployees(normalizedEmployees);
         setUsers(normalizedUsers);
+        setEmployeesCache(normalizedEmployees);
         setUsersCache(normalizedUsers);
-      } else {
-        const seededUsers = normalizeUsers(ensureSeedUsers(), normalizedEmployees);
-        setUsers(seededUsers);
-      }
-    }).catch(() => {
-      if (!active) {
-        return;
-      }
+      } catch (error) {
+        if (!active) {
+          return;
+        }
 
-      const cachedEmployees = normalizeEmployees(getStoredEmployees(fallbackEmployees));
-      setEmployees(cachedEmployees);
-      setUsers(dedupeUsers(normalizeUsers(ensureSeedUsers(), cachedEmployees)));
-    });
+        setEmployees([]);
+        setUsers([]);
+        setEmployeesCache([]);
+        setUsersCache([]);
+        setMessage((current) => current || (error instanceof Error ? error.message : 'Unable to load user access right now.'));
+      }
+    };
+
+    loadAccessData();
+    const handleWindowFocus = () => {
+      loadAccessData();
+    };
+    window.addEventListener('focus', handleWindowFocus);
 
     return () => {
       active = false;
+      window.removeEventListener('focus', handleWindowFocus);
     };
   }, []);
 
@@ -120,10 +111,7 @@ function UserManagement() {
     };
   }, [undoUser]);
 
-  const displayedUsers = useMemo(() => {
-    const rows = dedupeUsers(normalizeUsers(users, employees));
-    return isAdminModule ? rows : rows.filter((user) => !isHrExcludedUser(user));
-  }, [employees, isAdminModule, users]);
+  const displayedUsers = useMemo(() => buildDisplayedUsers(users, employees), [employees, users]);
 
   const filteredUsers = useMemo(() => displayedUsers.filter((user) => {
     const matchesSearch = `${user.employeeName} ${user.email} ${user.role} ${user.department} ${user.employeeId}`.toLowerCase().includes(search.toLowerCase());
@@ -139,7 +127,7 @@ function UserManagement() {
     const suspended = displayedUsers.filter((user) => user.status === 'Suspended').length;
 
     return [
-      { label: 'Total Users', value: String(displayedUsers.length).padStart(2, '0'), delta: 'Access accounts', tone: 'blue', icon: 'ri-group-line', onClick: () => navigateUserGroup() },
+      { label: 'Total Employees', value: String(displayedUsers.length).padStart(2, '0'), delta: 'Database profiles', tone: 'blue', icon: 'ri-group-line', onClick: () => navigateUserGroup() },
       { label: 'Active Access', value: String(active).padStart(2, '0'), delta: 'Can sign in now', tone: 'green', icon: 'ri-shield-check-line', onClick: () => navigateUserGroup({ status: 'Active' }) },
       { label: 'Invites Pending', value: String(pending).padStart(2, '0'), delta: 'Awaiting activation', tone: 'pink', icon: 'ri-mail-send-line', onClick: () => navigateUserGroup({ status: 'Invite Pending' }) },
       { label: 'Suspended', value: String(suspended).padStart(2, '0'), delta: 'Access blocked', tone: 'orange', icon: 'ri-lock-line', onClick: () => navigateUserGroup({ status: 'Suspended' }) },
@@ -193,12 +181,14 @@ function UserManagement() {
         <div className="table-actions table-actions-inline">
           <button type="button" onClick={() => openEditUser(user)}>
             <i className="ri-edit-line" aria-hidden="true" />
-            Edit
+            {user.hasAccessAccount ? 'Edit' : 'Invite'}
           </button>
-          <button type="button" onClick={() => openDeleteConfirm(user)}>
-            <i className="ri-delete-bin-line" aria-hidden="true" />
-            Delete
-          </button>
+          {user.hasAccessAccount && (
+            <button type="button" onClick={() => openDeleteConfirm(user)}>
+              <i className="ri-delete-bin-line" aria-hidden="true" />
+              Delete
+            </button>
+          )}
         </div>
       ),
     },
@@ -226,38 +216,56 @@ function UserManagement() {
     setIsModalOpen(true);
   };
 
-  const saveUser = (event) => {
+  const saveUser = async (event) => {
     event.preventDefault();
 
-    if (editingUser) {
-      const nextUsers = updateUserAccess(editingUser.userId, {
-        role: form.role,
-        status: form.status,
-      });
-      setUsers(dedupeUsers(nextUsers));
-      syncEmployeeAccessRole(form.employeeId, form.role);
-      setMessage('System access updated successfully. Changes apply on next login or refresh.');
-      setIsModalOpen(false);
-      return;
-    }
-
-    const employee = employees.find((item) => (item.employeeCode || item.id) === form.employeeId);
+    const employee = findEmployeeRecord(employees, form);
     if (!employee) {
       setMessage('Please select an existing employee before saving access.');
       return;
     }
 
-    const accessUser = buildUserAccess({
-      employee,
-      accessRole: form.role,
-      status: form.status,
-    });
-    const result = createUserAccess(accessUser);
-    setUsers(dedupeUsers(getUsers()));
-    setMessage(result.message);
-    if (result.ok) {
+    try {
+      if (editingUser?.hasAccessAccount) {
+        const nextUsers = updateUserAccess(editingUser.userId, {
+          role: form.role,
+          status: form.status,
+        });
+        setUsers(dedupeUsers(nextUsers));
+        await syncEmployeeAccessRole(employees, setEmployees, form.employeeId, form.role);
+        setMessage('System access updated successfully. Changes apply on next login or refresh.');
+        setIsModalOpen(false);
+        return;
+      }
+
+      const accessUser = buildUserAccess({
+        employee,
+        accessRole: form.role,
+        status: form.status,
+      });
+      const result = createUserAccess(accessUser);
+      setUsers(dedupeUsers(getUsers()));
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
+
+      await syncEmployeeAccessRole(employees, setEmployees, form.employeeId, form.role);
+      setMessage(result.message);
       setIsModalOpen(false);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to save user access right now.');
     }
+  };
+
+  const openDeleteConfirm = (user) => {
+    if (!user?.hasAccessAccount) {
+      setMessage('This employee does not have a user access account yet.');
+      return;
+    }
+
+    setDeleteTarget(user);
+    setMessage('');
   };
 
   const openDeleteConfirm = (user) => {
@@ -390,7 +398,7 @@ function UserManagement() {
           employees={employees}
           users={users}
           isEditing={Boolean(editingUser)}
-          title={editingUser ? 'Edit User Access' : 'Invite Existing Employee'}
+          title={editingUser ? (editingUser.hasAccessAccount ? 'Edit User Access' : 'Invite User Access') : 'Invite Existing Employee'}
           onClose={() => setIsModalOpen(false)}
           onSubmit={saveUser}
         />
@@ -399,17 +407,33 @@ function UserManagement() {
   );
 }
 
-function syncEmployeeAccessRole(employeeId, accessRole) {
-  const employees = getStoredEmployees([]);
-  const nextEmployees = employees.map((employee) => {
-    const currentId = employee.employeeCode || employee.employeeId || employee.id;
+async function syncEmployeeAccessRole(employees, setEmployees, employeeId, accessRole) {
+  const normalizedEmployeeId = normalizeIdentity(employeeId);
+  if (!normalizedEmployeeId) {
+    return;
+  }
 
-    return currentId === employeeId
-      ? { ...employee, accessRole }
-      : employee;
+  let changed = false;
+  const nextEmployees = normalizeEmployees(employees).map((employee) => {
+    const currentId = normalizeIdentity(employee.employeeCode || employee.employeeId || employee.id);
+    if (currentId !== normalizedEmployeeId) {
+      return employee;
+    }
+
+    changed = true;
+    return {
+      ...employee,
+      accessRole: normalizeAccessRole(accessRole),
+    };
   });
 
-  saveStoredEmployees(nextEmployees);
+  if (!changed) {
+    return;
+  }
+
+  setEmployees(nextEmployees);
+  setEmployeesCache(nextEmployees);
+  await saveStoredEmployees(nextEmployees);
 }
 
 function UserModal({ form, setForm, employees, users, isEditing, title, onClose, onSubmit }) {
@@ -576,6 +600,84 @@ function normalizeUsers(rows, employees = []) {
   });
 }
 
+function findEmployeeRecord(employees, record) {
+  const recordEmployeeId = normalizeIdentity(record?.employeeId);
+  const recordEmail = normalizeIdentity(record?.email);
+  const recordName = normalizeIdentity(record?.employeeName || record?.displayName || record?.name);
+
+  return normalizeEmployees(employees).find((employee) => {
+    const employeeId = normalizeIdentity(employee.employeeCode || employee.employeeId || employee.id);
+    const employeeEmail = normalizeIdentity(employee.generatedUsername || employee.email);
+    const employeeName = normalizeIdentity(employee.displayName || employee.name || employee.employeeName);
+
+    return (recordEmployeeId && employeeId === recordEmployeeId)
+      || (recordEmail && employeeEmail === recordEmail)
+      || (recordName && employeeName === recordName);
+  }) || null;
+}
+
+function buildDisplayedUsers(users, employees) {
+  const normalizedEmployees = normalizeEmployees(employees).filter((employee) => !isAdminEmployee(employee));
+  const normalizedUsers = dedupeUsers(normalizeUsers(users, normalizedEmployees)).filter((user) => !isAdminLikeUser(user));
+  const matchedUserKeys = new Set();
+
+  const employeeRows = normalizedEmployees.map((employee, index) => {
+    const matchedUser = findMatchingEmployeeUser(employee, normalizedUsers);
+    const matchedUserKey = getAccessUserKey(matchedUser);
+    if (matchedUserKey) {
+      matchedUserKeys.add(matchedUserKey);
+    }
+
+    return {
+      id: matchedUser?.id || matchedUser?.userId || `EMP-${employee.employeeCode || employee.employeeId || employee.id || index + 1}`,
+      userId: matchedUser?.userId || '',
+      hasAccessAccount: Boolean(matchedUserKey),
+      employeeId: employee.employeeCode || employee.employeeId || employee.id || '',
+      employeeName: employee.displayName || employee.name || 'Employee',
+      email: matchedUser?.email || employee.generatedUsername || employee.email || '',
+      role: normalizeAccessRole(matchedUser?.role || employee.accessRole || 'Employee'),
+      department: employee.department || matchedUser?.department || 'General',
+      designation: employee.jobTitle || employee.role || matchedUser?.designation || '',
+      avatar: matchedUser?.avatar || employee.avatar || '',
+      profilePicture: matchedUser?.profilePicture || employee.profilePicture || '',
+      status: matchedUser?.status || 'Invite Pending',
+      lastLogin: matchedUser?.lastLogin || 'Invite pending',
+    };
+  });
+
+  const orphanUsers = normalizedUsers
+    .filter((user) => {
+      const userKey = getAccessUserKey(user);
+      return userKey && !matchedUserKeys.has(userKey);
+    })
+    .map((user) => ({
+      ...user,
+      hasAccessAccount: true,
+    }));
+
+  return [...employeeRows, ...orphanUsers];
+}
+
+function findMatchingEmployeeUser(employee, users) {
+  const employeeId = normalizeIdentity(employee?.employeeCode || employee?.employeeId || employee?.id);
+  const employeeEmails = [employee?.generatedUsername, employee?.email].map(normalizeIdentity).filter(Boolean);
+  const employeeName = normalizeIdentity(employee?.displayName || employee?.name || employee?.employeeName);
+
+  return users.find((user) => {
+    const userEmployeeId = normalizeIdentity(user?.employeeId);
+    const userEmail = normalizeIdentity(user?.email);
+    const userName = normalizeIdentity(user?.employeeName);
+
+    return (employeeId && userEmployeeId === employeeId)
+      || (userEmail && employeeEmails.includes(userEmail))
+      || (employeeName && userName === employeeName);
+  }) || null;
+}
+
+function getAccessUserKey(user) {
+  return normalizeIdentity(user?.userId || user?.id || user?.employeeId || user?.email);
+}
+
 function getEmptyUserForm() {
   return {
     employeeId: '',
@@ -607,10 +709,20 @@ function formatLastLogin(value) {
   });
 }
 
-function isHrExcludedUser(user) {
-  const employeeId = String(user?.employeeId || '').trim().toLowerCase();
-  const email = String(user?.email || '').trim().toLowerCase();
-  const employeeName = String(user?.employeeName || '').trim().toLowerCase();
+function isAdminEmployee(employee) {
+  const employeeId = normalizeIdentity(employee?.employeeCode || employee?.employeeId || employee?.id);
+  const email = normalizeIdentity(employee?.email);
+  const employeeName = normalizeIdentity(employee?.displayName || employee?.name || employee?.employeeName);
+
+  return employeeId === 'admin-001'
+    || email === 'admin@gmail.com'
+    || employeeName === 'admin kavya';
+}
+
+function isAdminLikeUser(user) {
+  const employeeId = normalizeIdentity(user?.employeeId);
+  const email = normalizeIdentity(user?.email);
+  const employeeName = normalizeIdentity(user?.employeeName);
 
   return employeeId === 'admin-001'
     || email === 'admin@gmail.com'
@@ -673,3 +785,7 @@ function renderPermissionText(role) {
 }
 
 export default UserManagement;
+
+
+
+

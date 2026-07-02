@@ -4,8 +4,10 @@ import { setSessionValue } from '../utils/appSession.js';
 
 function MandatoryPasswordChangeModal() {
   const session = syncSessionFromAccessUser();
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -16,6 +18,12 @@ function MandatoryPasswordChangeModal() {
     event.preventDefault();
 
     if (saving) {
+      return;
+    }
+
+    if (!currentPassword.trim()) {
+      setError('Current password is required.');
+      setInfo('');
       return;
     }
 
@@ -35,7 +43,7 @@ function MandatoryPasswordChangeModal() {
     setError('');
     setInfo('');
 
-    const result = await changePassword(newPassword, confirmPassword);
+    const result = await changePassword(currentPassword, newPassword, confirmPassword);
     setSaving(false);
 
     if (!result.ok) {
@@ -43,6 +51,7 @@ function MandatoryPasswordChangeModal() {
       return;
     }
 
+    setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
     setSessionValue('kavyaMustChangePassword', false);
@@ -69,6 +78,23 @@ function MandatoryPasswordChangeModal() {
         </div>
 
         <form className="login-form password-gate-form" onSubmit={handleSubmit}>
+          <label className="login-field">
+            <i className="ri-shield-keyhole-line" aria-hidden="true" />
+            <input
+              type={showCurrentPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              placeholder="Current password"
+              value={currentPassword}
+              onChange={(event) => {
+                setCurrentPassword(event.target.value);
+                setError('');
+              }}
+            />
+            <button type="button" onClick={() => setShowCurrentPassword((current) => !current)}>
+              {showCurrentPassword ? 'Hide' : 'Show'}
+            </button>
+          </label>
+
           <label className="login-field">
             <i className="ri-lock-password-line" aria-hidden="true" />
             <input

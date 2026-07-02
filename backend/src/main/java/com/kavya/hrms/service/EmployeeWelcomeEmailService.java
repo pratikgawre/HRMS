@@ -11,6 +11,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.HtmlUtils;
 
@@ -55,11 +57,11 @@ public class EmployeeWelcomeEmailService {
 
   private DeliveryResult sendCredentialEmail(
       Employee employee,
-      String subject,
-      String plainTextMessage,
-      String htmlMessage,
-      String emailType,
-      String successMessage) {
+      @NonNull String subject,
+      @NonNull String plainTextMessage,
+      @NonNull String htmlMessage,
+      @NonNull String emailType,
+      @NonNull String successMessage) {
     if (host.isBlank()) {
       log.warn("{} skipped because spring.mail.host is blank.", emailType);
       return DeliveryResult.notConfigured();
@@ -80,19 +82,24 @@ public class EmployeeWelcomeEmailService {
       MimeMessage mimeMessage = mailSender.createMimeMessage();
       MimeMessageHelper message = new MimeMessageHelper(mimeMessage, true, "UTF-8");
       message.setTo(to);
-      message.setFrom(resolveFromAddress());
+      String sender = resolveFromAddress();
+      if (!sender.isBlank()) {
+        message.setFrom(sender);
+      }
       message.setSubject(subject);
       message.setText(plainTextMessage, htmlMessage);
 
       mailSender.send(mimeMessage);
-      log.info("{} sent to {} from {}.", emailType, to, resolveFromAddress());
+      log.info("{} sent to {} from {}.", emailType, to, sender.isBlank() ? "<smtp-default>" : sender);
       return DeliveryResult.sent(successMessage);
     } catch (MailException | MessagingException ex) {
-      log.error("Unable to send {} to {} from {}.", emailType, to, resolveFromAddress(), ex);
+      String sender = resolveFromAddress();
+      log.error("Unable to send {} to {} from {}.", emailType, to, sender.isBlank() ? "<smtp-default>" : sender, ex);
       return DeliveryResult.failed("Unable to send employee credential email: " + ex.getMessage());
     }
   }
 
+  @NonNull
   private String resolveFromAddress() {
     if (!fromAddress.isBlank()) {
       return fromAddress;
@@ -100,19 +107,22 @@ public class EmployeeWelcomeEmailService {
     if (!username.isBlank()) {
       return username;
     }
-    return "no-reply@kavyainfoweb.com";
+    return "";
   }
 
+  @NonNull
   private String buildPlainTextMessage(Employee employee, boolean credentialsUpdated) {
-    String name = firstNonBlank(
-        employee == null ? null : employee.getDisplayName(),
-        employee == null ? null : employee.getName(),
-        employee == null ? null : employee.getFirstName(),
-        "there");
+    String displayName = employee == null ? "" : safe(employee.getDisplayName());
+    String alternateName = employee == null ? "" : safe(employee.getName());
+    String firstName = employee == null ? "" : safe(employee.getFirstName());
+    String departmentValue = employee == null ? "" : safe(employee.getDepartment());
+    String jobTitleValue = employee == null ? "" : safe(employee.getJobTitle());
+    String employeeCodeValue = employee == null ? "" : safe(employee.getEmployeeCode());
+    String name = firstNonBlank(displayName, alternateName, firstName, "there");
     String loginEmail = buildLoginEmail(employee);
-    String department = firstNonBlank(employee == null ? null : employee.getDepartment(), "your department");
-    String jobTitle = firstNonBlank(employee == null ? null : employee.getJobTitle(), "your role");
-    String employeeCode = firstNonBlank(employee == null ? null : employee.getEmployeeCode(), "not assigned yet");
+    String department = firstNonBlank(departmentValue, "your department");
+    String jobTitle = firstNonBlank(jobTitleValue, "your role");
+    String employeeCode = firstNonBlank(employeeCodeValue, "not assigned yet");
     String temporaryPassword = buildTemporaryPassword(employee);
     String intro = credentialsUpdated
         ? "Your employee profile has been updated in Kavya HRMS. Your login credentials have been refreshed."
@@ -131,16 +141,19 @@ public class EmployeeWelcomeEmailService {
         + "Kavya HRMS";
   }
 
+  @NonNull
   private String buildHtmlMessage(Employee employee, boolean credentialsUpdated) {
-    String name = escapeHtml(firstNonBlank(
-        employee == null ? null : employee.getDisplayName(),
-        employee == null ? null : employee.getName(),
-        employee == null ? null : employee.getFirstName(),
-        "there"));
+    String displayName = employee == null ? "" : safe(employee.getDisplayName());
+    String alternateName = employee == null ? "" : safe(employee.getName());
+    String firstName = employee == null ? "" : safe(employee.getFirstName());
+    String departmentValue = employee == null ? "" : safe(employee.getDepartment());
+    String jobTitleValue = employee == null ? "" : safe(employee.getJobTitle());
+    String employeeCodeValue = employee == null ? "" : safe(employee.getEmployeeCode());
+    String name = escapeHtml(firstNonBlank(displayName, alternateName, firstName, "there"));
     String loginEmail = escapeHtml(buildLoginEmail(employee));
-    String department = escapeHtml(firstNonBlank(employee == null ? null : employee.getDepartment(), "your department"));
-    String jobTitle = escapeHtml(firstNonBlank(employee == null ? null : employee.getJobTitle(), "your role"));
-    String employeeCode = escapeHtml(firstNonBlank(employee == null ? null : employee.getEmployeeCode(), "not assigned yet"));
+    String department = escapeHtml(firstNonBlank(departmentValue, "your department"));
+    String jobTitle = escapeHtml(firstNonBlank(jobTitleValue, "your role"));
+    String employeeCode = escapeHtml(firstNonBlank(employeeCodeValue, "not assigned yet"));
     String temporaryPassword = escapeHtml(buildTemporaryPassword(employee));
     String intro = credentialsUpdated
         ? "Your employee profile has been updated in Kavya HRMS. Your login credentials have been refreshed."
@@ -162,9 +175,10 @@ public class EmployeeWelcomeEmailService {
         + "</div>";
   }
 
+  @NonNull
   public String buildLoginEmail(Employee employee) {
-    String firstName = normalizeNamePart(employee == null ? null : employee.getFirstName());
-    String lastName = normalizeNamePart(employee == null ? null : employee.getLastName());
+    String firstName = normalizeNamePart(employee == null ? "" : safe(employee.getFirstName()));
+    String lastName = normalizeNamePart(employee == null ? "" : safe(employee.getLastName()));
 
     String localPart = "";
     if (!firstName.isBlank() && !lastName.isBlank()) {
@@ -172,7 +186,7 @@ public class EmployeeWelcomeEmailService {
     } else if (!firstName.isBlank()) {
       localPart = firstName;
     } else {
-      String fallbackEmail = firstNonBlank(employee == null ? null : employee.getEmail(), "");
+      String fallbackEmail = firstNonBlank(employee == null ? "" : safe(employee.getEmail()), "");
       int atIndex = fallbackEmail.indexOf('@');
       if (atIndex > 0) {
         localPart = fallbackEmail.substring(0, atIndex).trim().toLowerCase(Locale.ROOT);
@@ -180,17 +194,19 @@ public class EmployeeWelcomeEmailService {
     }
 
     if (localPart.isBlank()) {
-      return firstNonBlank(employee == null ? null : employee.getEmail(), "");
+      String fallbackEmail = employee == null ? "" : safe(employee.getEmail());
+      return fallbackEmail;
     }
 
     return localPart + "@kavyainfoweb.com";
   }
 
+  @NonNull
   public String buildTemporaryPassword(Employee employee) {
     String firstName = firstNonBlank(
-        employee == null ? null : employee.getFirstName(),
-        employee == null ? null : employee.getDisplayName(),
-        employee == null ? null : employee.getName(),
+        employee == null ? "" : safe(employee.getFirstName()),
+        employee == null ? "" : safe(employee.getDisplayName()),
+        employee == null ? "" : safe(employee.getName()),
         "Employee");
     String passwordBase = firstName.toLowerCase(Locale.ROOT);
     return passwordBase.substring(0, 1).toUpperCase(Locale.ROOT) + passwordBase.substring(1) + "@123";
@@ -208,7 +224,13 @@ public class EmployeeWelcomeEmailService {
     return value == null ? "" : HtmlUtils.htmlEscape(value);
   }
 
-  private String firstNonBlank(String... values) {
+  @NonNull
+  private String safe(String value) {
+    return value == null ? "" : value;
+  }
+
+  @NonNull
+  private String firstNonBlank(@Nullable String... values) {
     if (values == null) {
       return "";
     }
@@ -255,3 +277,4 @@ public class EmployeeWelcomeEmailService {
     public String getMessage() { return message; }
   }
 }
+

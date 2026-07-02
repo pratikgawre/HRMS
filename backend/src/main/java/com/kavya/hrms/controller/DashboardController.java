@@ -175,13 +175,11 @@ public class DashboardController {
         .collect(Collectors.toList());
 
     int used = requests.stream()
-        .filter(request -> request != null)
         .filter(request -> "Approved".equalsIgnoreCase(request.getStatus()))
         .mapToInt(request -> safeDays(request.getDays()))
         .sum();
 
     int allocated = systemSettingsRepository.findAll().stream()
-        .filter(Objects::nonNull)
         .findFirst()
         .map(this::resolveAllocatedLeaves)
         .orElse(0);
@@ -265,7 +263,22 @@ public class DashboardController {
         || assignedTo.equals(normalizedEmployeeName);
   }
 
-  private record LeaveTotals(int remaining, int used) {
+  private static final class LeaveTotals {
+    private final int remaining;
+    private final int used;
+
+    private LeaveTotals(int remaining, int used) {
+      this.remaining = remaining;
+      this.used = used;
+    }
+
+    private int remaining() {
+      return remaining;
+    }
+
+    private int used() {
+      return used;
+    }
   }
 
   @GetMapping("/interviews/today")

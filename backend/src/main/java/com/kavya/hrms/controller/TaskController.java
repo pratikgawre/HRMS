@@ -10,6 +10,7 @@ import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.lang.Nullable;
@@ -27,7 +28,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/tasks")
-@SuppressWarnings("all")
 public class TaskController {
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
@@ -51,22 +51,22 @@ public class TaskController {
   }
 
   @GetMapping("/assigned-to/{assignedToId}")
-  public List<TaskItem> listByAssignee(@PathVariable("assignedToId") String assignedToId) {
+  public List<TaskItem> listByAssignee(@PathVariable String assignedToId) {
     return taskRepository.findByAssignedToId(assignedToId);
   }
 
   @GetMapping("/assigned-by/{assignedById}")
-  public List<TaskItem> listByAssignedBy(@PathVariable("assignedById") String assignedById) {
+  public List<TaskItem> listByAssignedBy(@PathVariable String assignedById) {
     return taskRepository.findByAssignedById(assignedById);
   }
 
   @GetMapping("/owner/{owner}")
-  public List<TaskItem> listByOwner(@PathVariable("owner") String owner) {
+  public List<TaskItem> listByOwner(@PathVariable String owner) {
     return taskRepository.findByOwnerIgnoreCase(owner);
   }
 
   @GetMapping("/assignee-name/{assignedToName}")
-  public List<TaskItem> listByAssigneeName(@PathVariable("assignedToName") String assignedToName) {
+  public List<TaskItem> listByAssigneeName(@PathVariable String assignedToName) {
     return taskRepository.findByAssignedToNameIgnoreCase(assignedToName);
   }
 
@@ -84,8 +84,9 @@ public class TaskController {
     if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
       task.setCreatedDateTime(OffsetDateTime.now().toString());
     }
-    TaskItem saved = taskRepository.save(task);
-    notifyTaskChangeSafely(saved, "Task created", "created", accessRole, userId);
+    TaskItem saved = taskRepository.save(safeTask);
+    syncProjectAssignment(saved);
+    notifyTaskAssigned(saved, accessRole);
     return saved;
   }
 
@@ -101,7 +102,7 @@ public class TaskController {
     List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
-    List<TaskItem> saved = taskRepository.saveAll(safeTasks);
+    List<TaskItem> saved = taskRepository.saveAll(safeTasks.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
       notificationService.notifyRolesExcept(
           NotificationAudience.taskStatusRecipients(),
@@ -154,13 +155,28 @@ public class TaskController {
 
   @DeleteMapping("/{id}")
   public void delete(
-      @PathVariable("id") String id,
+      @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     TaskItem current = taskRepository.findById(id).orElseGet(TaskItem::new);
     taskRepository.deleteById(id);
     notifyTaskChangeSafely(current, "Task removed", "removed", accessRole, userId);
   }
+
+  private void notifyTaskRemoved(TaskItem task, String accessRole, String actorUserId) {
+    String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+    String safeTaskId = task == null ? "" : Objects.requireNonNullElse(task.getId(), "");
+    notificationService.notifyRolesExcept(
+        NotificationAudience.taskStatusRecipients(),
+        excludedIds(Objects.requireNonNullElse(actorUserId, "")),
+        "Task removed",
+        buildTaskMessage(task, "removed"),
+        "task",
+        safeTaskId,
+        safeAccessRole,
+        "System");
+  }
+
 
   private String buildTaskMessage(TaskItem task, String action) {
     String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";

@@ -16,30 +16,30 @@ import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
 import com.kavya.hrms.service.EmployeeWelcomeEmailService;
 import com.kavya.hrms.service.NotificationService;
-import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 @SuppressWarnings("all")
 class EmployeeControllerTest {
-  @Mock
   private EmployeeRepository employeeRepository;
-
-  @Mock
   private AppUserRepository appUserRepository;
-
-  @Mock
   private NotificationService notificationService;
-
-  @Mock
   private EmployeeWelcomeEmailService employeeWelcomeEmailService;
-
-  @InjectMocks
   private EmployeeController employeeController;
+
+  @BeforeEach
+  void setUp() {
+    employeeRepository = mock(EmployeeRepository.class);
+    appUserRepository = mock(AppUserRepository.class);
+    notificationService = mock(NotificationService.class);
+    employeeWelcomeEmailService = mock(EmployeeWelcomeEmailService.class);
+    employeeController = new EmployeeController(
+        employeeRepository,
+        appUserRepository,
+        notificationService,
+        employeeWelcomeEmailService);
+  }
 
   @Test
   void updateShouldResetLinkedUserCredentialsAndSendCredentialEmail() {
@@ -58,6 +58,8 @@ class EmployeeControllerTest {
     when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0, AppUser.class));
     when(employeeWelcomeEmailService.buildLoginEmail(any(Employee.class))).thenReturn("riya.shah@kavyainfoweb.com");
     when(employeeWelcomeEmailService.buildTemporaryPassword(any(Employee.class))).thenReturn("Riya@123");
+    when(employeeWelcomeEmailService.sendCredentialUpdateEmail(any(Employee.class)))
+        .thenReturn(EmployeeWelcomeEmailService.DeliveryResult.sent("Credential update email sent."));
 
     Employee saved = employeeController.update("KV009", employee, "HR Manager", "HR-001");
 
@@ -90,9 +92,11 @@ class EmployeeControllerTest {
     when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(employeeWelcomeEmailService.buildLoginEmail(any(Employee.class))).thenReturn("riya.shah@kavyainfoweb.com");
     when(employeeWelcomeEmailService.buildTemporaryPassword(any(Employee.class))).thenReturn("Riya@123");
+    when(employeeWelcomeEmailService.sendCredentialUpdateEmail(any(Employee.class)))
+        .thenReturn(EmployeeWelcomeEmailService.DeliveryResult.sent("Credential update email sent."));
 
     employeeController.bulkSave(
-        List.of(updatedTarget, updatedOther),
+        java.util.Arrays.asList(updatedTarget, updatedOther),
         "HR Manager",
         "HR-001");
 

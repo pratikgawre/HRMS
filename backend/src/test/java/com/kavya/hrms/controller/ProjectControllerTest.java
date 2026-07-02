@@ -14,6 +14,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.kavya.hrms.model.Project;
 import com.kavya.hrms.repository.ProjectRepository;
+import com.kavya.hrms.service.NotificationService;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,6 +48,7 @@ class ProjectControllerTest {
         project.setId("proj-1");
         project.setName("Alpha");
 
+        assertNotNull(notificationService);
         when(projectRepository.findById("proj-1")).thenReturn(Optional.of(project));
 
         mockMvc.perform(delete("/api/projects/proj-1"))

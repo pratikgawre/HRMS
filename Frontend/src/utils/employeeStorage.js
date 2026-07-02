@@ -4,6 +4,102 @@ import { getPermissions, normalizeAccessRole } from './role-access.js';
 import { getSessionValue, setSessionValue } from './appSession.js';
 
 let employeesCache = [];
+const deletedEmployeesStorageKey = 'kavyaDeletedEmployeeKeys';
+
+function getDeletedEmployeeStorage() {
+  return typeof window !== 'undefined' ? window.localStorage : null;
+}
+
+function normalizeDeletedEmployeeKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getEmployeeIdentityKeys(employeeOrId) {
+  if (employeeOrId && typeof employeeOrId === 'object') {
+    return [
+      employeeOrId.employeeCode,
+      employeeOrId.employeeId,
+      employeeOrId.id,
+      employeeOrId.email,
+    ].map(normalizeDeletedEmployeeKey).filter(Boolean);
+  }
+
+  return [normalizeDeletedEmployeeKey(employeeOrId)].filter(Boolean);
+}
+
+export function getDeletedEmployeeKeys() {
+  const storage = getDeletedEmployeeStorage();
+  if (!storage) {
+    return new Set();
+  }
+
+  try {
+    const rawValue = storage.getItem(deletedEmployeesStorageKey);
+    const values = rawValue ? JSON.parse(rawValue) : [];
+    return new Set((Array.isArray(values) ? values : []).map(normalizeDeletedEmployeeKey).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDeletedEmployeeKeys(keys) {
+  const storage = getDeletedEmployeeStorage();
+  if (!storage) {
+    return;
+  }
+
+  storage.setItem(deletedEmployeesStorageKey, JSON.stringify(Array.from(keys).filter(Boolean)));
+}
+
+export function isEmployeeDeleted(employee) {
+  const deletedKeys = getDeletedEmployeeKeys();
+  return getEmployeeIdentityKeys(employee).some((key) => deletedKeys.has(key));
+}
+
+export function filterDeletedEmployees(employees) {
+  return (Array.isArray(employees) ? employees : []).filter((employee) => !isEmployeeDeleted(employee));
+}
+
+export function reconcileDeletedEmployees(employees) {
+  const deletedKeys = getDeletedEmployeeKeys();
+  if (deletedKeys.size === 0) {
+    return false;
+  }
+
+  let changed = false;
+  (Array.isArray(employees) ? employees : []).forEach((employee) => {
+    getEmployeeIdentityKeys(employee).forEach((key) => {
+      if (deletedKeys.delete(key)) {
+        changed = true;
+      }
+    });
+  });
+
+  if (!changed) {
+    return false;
+  }
+
+  saveDeletedEmployeeKeys(deletedKeys);
+  return true;
+}
+
+export function markEmployeeDeleted(employee) {
+  const deletedKeys = getDeletedEmployeeKeys();
+  getEmployeeIdentityKeys(employee).forEach((key) => deletedKeys.add(key));
+  saveDeletedEmployeeKeys(deletedKeys);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('kavyaEmployeesChanged'));
+  }
+}
+
+export function unmarkEmployeeDeleted(employee) {
+  const deletedKeys = getDeletedEmployeeKeys();
+  getEmployeeIdentityKeys(employee).forEach((key) => deletedKeys.delete(key));
+  saveDeletedEmployeeKeys(deletedKeys);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('kavyaEmployeesChanged'));
+  }
+}
 
 function sanitizeProfilePicture(value) {
   const normalizedValue = String(value || '').trim();
@@ -57,23 +153,24 @@ function buildEmployeeLoginEmail(employee) {
 }
 export function getStoredEmployees(fallbackEmployees) {
   if (employeesCache.length > 0) {
-    return employeesCache;
+    return filterDeletedEmployees(employeesCache);
   }
 
-  return fallbackEmployees;
+  return filterDeletedEmployees(fallbackEmployees);
 }
 
 export function setEmployeesCache(employees) {
-  employeesCache = Array.isArray(employees) ? employees : [];
+  employeesCache = filterDeletedEmployees(employees);
 }
 
 export function refreshEmployeesCacheFromStorage() {
-  return employeesCache;
+  return filterDeletedEmployees(employeesCache);
 }
 
 export function saveStoredEmployees(employees, options = {}) {
-  employeesCache = employees;
-  const payload = employees.map((employee) => ({
+  const visibleEmployees = filterDeletedEmployees(employees);
+  employeesCache = visibleEmployees;
+  const payload = visibleEmployees.map((employee) => ({
     ...employee,
     employeeId: employee.employeeCode || employee.id || employee.employeeId,
     employeeCode: employee.employeeCode || employee.id || employee.employeeId,
@@ -173,3 +270,4 @@ export function getCurrentEmployeeIdentity() {
     email: getSessionValue('kavyaUserEmail') || fallbackEmployee.email,
   };
 }
+

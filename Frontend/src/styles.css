@@ -5523,6 +5523,19 @@ button.attendance-summary-card.is-clickable:focus-visible {
   background: #2ea75e;
 }
 
+.project-toast.is-notice {
+  border-color: rgba(15, 159, 154, 0.24);
+}
+
+.project-toast.is-notice .project-toast__icon {
+  color: var(--primary);
+  background: rgba(15, 159, 154, 0.12);
+}
+
+.project-toast.is-notice .project-toast__accent {
+  background: var(--primary);
+}
+
 .project-toast.is-error {
   border-color: rgba(214, 79, 96, 0.24);
 }
@@ -5695,6 +5708,7 @@ button.attendance-summary-card.is-clickable:focus-visible {
 .project-member-panel {
   display: grid;
   gap: 0.9rem;
+  margin-top: 0.35rem;
   margin-bottom: 1rem;
 }
 
@@ -5705,10 +5719,28 @@ button.attendance-summary-card.is-clickable:focus-visible {
   gap: 1rem;
 }
 
-.project-member-search {
-  display: inline-flex;
+.project-editor-form .project-member-search {
+  display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 0.55rem;
+  flex: 1;
+  min-width: 200px;
+  min-height: 42px;
+  padding: 0 0.85rem;
+  border: 1px solid rgba(201, 221, 221, 0.9);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-soft);
+}
+
+.project-member-search {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  flex: 1;
+  min-width: 200px;
   min-height: 42px;
   padding: 0 0.85rem;
   border: 1px solid rgba(201, 221, 221, 0.9);
@@ -5718,6 +5750,7 @@ button.attendance-summary-card.is-clickable:focus-visible {
 }
 
 .project-member-search input {
+  flex: 1;
   min-width: 0;
   border: 0;
   outline: 0;

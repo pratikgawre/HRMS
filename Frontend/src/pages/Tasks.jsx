@@ -4,6 +4,7 @@ import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
+import { taskColumns } from './taskColumns.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
@@ -398,6 +399,9 @@ function Tasks() {
       ),
     },
   ];
+  const hrTaskListColumns = role === 'hr'
+    ? taskListColumns.filter((column) => column.key !== 'actions')
+    : taskListColumns;
   const createTask = async (event) => {
     event.preventDefault();
     const isEditing = Boolean(editingTask);
@@ -598,7 +602,7 @@ function Tasks() {
                   Back to Dashboard
                 </button>
               </div>
-              <DataTable columns={taskListColumns} rows={filteredRows} emptyMessage="No tasks available." />
+              <DataTable columns={hrTaskListColumns} rows={filteredRows} emptyMessage="No tasks available." />
             </div>
           )}
 

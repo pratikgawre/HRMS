@@ -46,15 +46,13 @@ public class UserController {
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
     List<AppUser> safeUsers = safeList(users);
-    List<AppUser> deduplicatedUsers = new ArrayList<>(dedupeUsers(safeUsers));
+    Map<String, AppUser> existingUsersByIdentity = buildExistingUserMap(appUserRepository.findAll());
+    List<AppUser> deduplicatedUsers = new ArrayList<>(deduplicateUsers(safeUsers));
+    deduplicatedUsers.replaceAll(user -> applyStoredSecurityState(user, existingUsersByIdentity));
     return appUserRepository.saveAll(deduplicatedUsers);
   }
 
-  private List<AppUser> dedupeUsers(List<AppUser> users) {
-    if (users == null || users.isEmpty()) {
-      return List.of();
-    }
-
+  private List<AppUser> deduplicateUsers(List<AppUser> users) {
     Map<String, Integer> identityIndexes = new LinkedHashMap<>();
     List<AppUser> uniqueUsers = new ArrayList<>();
 
@@ -86,20 +84,22 @@ public class UserController {
     normalized.setId(trimToNull(user.getId()));
     normalized.setUserId(firstNonBlank(user.getUserId(), user.getId(), buildFallbackUserId(user)));
     normalized.setEmail(lower(trimToNull(user.getEmail())));
-    normalized.setPassword(user.getPassword());
-    normalized.setPasswordHash(user.getPasswordHash());
+    normalized.setPassword(trimToNull(user.getPassword()));
+    normalized.setPasswordHash(trimToNull(user.getPasswordHash()));
     normalized.setTwoFactorEnabled(user.getTwoFactorEnabled());
-    normalized.setTwoFactorSecret(user.getTwoFactorSecret());
-    normalized.setRole(user.getRole());
+    normalized.setTwoFactorSecret(trimToNull(user.getTwoFactorSecret()));
+    normalized.setRole(trimToNull(user.getRole()));
     normalized.setIsActive(user.getIsActive());
     normalized.setEmployeeId(trimToNull(user.getEmployeeId()));
     normalized.setEmployeeName(trimToNull(user.getEmployeeName()));
     normalized.setAvatar(trimToNull(user.getAvatar()));
     normalized.setProfilePicture(trimToNull(user.getProfilePicture()));
-    normalized.setStatus(user.getStatus());
-    normalized.setLastLogin(user.getLastLogin());
+    normalized.setStatus(trimToNull(user.getStatus()));
+    normalized.setLastLogin(trimToNull(user.getLastLogin()));
+    normalized.setPasswordResetToken(trimToNull(user.getPasswordResetToken()));
+    normalized.setPasswordResetTokenExpiresAt(trimToNull(user.getPasswordResetTokenExpiresAt()));
     normalized.setMustChangePassword(user.getMustChangePassword());
-return normalized;
+    return normalized;
   }
 
   private AppUser mergeUsers(AppUser current, AppUser next) {
@@ -120,8 +120,60 @@ return normalized;
     merged.setProfilePicture(firstNonBlank(current.getProfilePicture(), next.getProfilePicture()));
     merged.setStatus(firstNonBlank(current.getStatus(), next.getStatus()));
     merged.setLastLogin(firstNonBlank(current.getLastLogin(), next.getLastLogin()));
+    merged.setPasswordResetToken(firstNonBlank(current.getPasswordResetToken(), next.getPasswordResetToken()));
+    merged.setPasswordResetTokenExpiresAt(firstNonBlank(current.getPasswordResetTokenExpiresAt(), next.getPasswordResetTokenExpiresAt()));
     merged.setMustChangePassword(Boolean.TRUE.equals(current.getMustChangePassword()) || Boolean.TRUE.equals(next.getMustChangePassword()));
-return merged;
+    return merged;
+  }
+
+  private Map<String, AppUser> buildExistingUserMap(List<AppUser> users) {
+    Map<String, AppUser> existingUsersByIdentity = new LinkedHashMap<>();
+    for (AppUser user : safeList(users)) {
+      if (user == null) {
+        continue;
+      }
+
+      for (String key : getUserIdentityKeys(user)) {
+        existingUsersByIdentity.putIfAbsent(key, user);
+      }
+    }
+    return existingUsersByIdentity;
+  }
+
+  private AppUser applyStoredSecurityState(AppUser user, Map<String, AppUser> existingUsersByIdentity) {
+    AppUser existing = findExistingUser(user, existingUsersByIdentity);
+    if (existing == null) {
+      user.setMustChangePassword(true);
+      return user;
+    }
+
+    if (trimToNull(user.getPassword()) == null) {
+      user.setPassword(existing.getPassword());
+    }
+    if (trimToNull(user.getPasswordHash()) == null) {
+      user.setPasswordHash(existing.getPasswordHash());
+    }
+    if (trimToNull(user.getPasswordResetToken()) == null) {
+      user.setPasswordResetToken(existing.getPasswordResetToken());
+    }
+    if (trimToNull(user.getPasswordResetTokenExpiresAt()) == null) {
+      user.setPasswordResetTokenExpiresAt(existing.getPasswordResetTokenExpiresAt());
+    }
+
+    user.setMustChangePassword(Boolean.TRUE.equals(existing.getMustChangePassword()));
+    return user;
+  }
+
+  @Nullable
+  private AppUser findExistingUser(AppUser user, Map<String, AppUser> existingUsersByIdentity) {
+    for (String key : getUserIdentityKeys(user)) {
+      AppUser existing = existingUsersByIdentity.get(key);
+      if (existing != null) {
+        return existing;
+      }
+    }
+
+    return null;
   }
 
   @Nullable

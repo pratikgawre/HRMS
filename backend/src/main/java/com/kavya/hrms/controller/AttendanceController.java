@@ -1,10 +1,10 @@
 package com.kavya.hrms.controller;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.ArrayList;
 import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,7 +23,6 @@ import com.kavya.hrms.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/attendance")
-@SuppressWarnings("all")
 public class AttendanceController {
   private final AttendanceRecordRepository attendanceRecordRepository;
   private final AppUserRepository appUserRepository;
@@ -72,7 +71,8 @@ public class AttendanceController {
     List<AttendanceRecord> safeRecords = safeList(records);
     long existingCount = attendanceRecordRepository.count();
     attendanceRecordRepository.deleteAll();
-    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(safeRecords);
+    List<AttendanceRecord> saved = attendanceRecordRepository.saveAll(
+        safeRecords.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
       notifyAttendanceChange(saved, "Attendance updated", accessRole, userId, "updated");
     }
@@ -83,13 +83,12 @@ public class AttendanceController {
       String verb) {
     List<AttendanceRecord> safeRecords = records == null ? List.<AttendanceRecord>of() : records;
     Set<String> employeeIds = safeRecords.stream()
-        .filter(Objects::nonNull)
-        .map(AttendanceRecord::getEmployeeId)
+        .map(record -> record == null ? "" : record.getEmployeeId())
         .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.toCollection(LinkedHashSet::new));
 
     Set<String> employeeUserIds = appUserRepository.findByEmployeeIdIn(employeeIds).stream()
-        .map(user -> user == null ? null : user.getUserId())
+        .map(user -> user == null ? "" : user.getUserId())
         .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.toCollection(LinkedHashSet::new));
 
@@ -119,6 +118,9 @@ public class AttendanceController {
     }
 
     AttendanceRecord first = records.get(0);
+    if (first == null) {
+      return "Attendance records were " + verb + ".";
+    }
     String employee = first.getEmployeeName() != null ? first.getEmployeeName() : "employee";
     String date = first.getDateLabel() != null ? first.getDateLabel() : first.getDate();
     return employee + "'s attendance was " + verb + " for " + (date == null ? "selected records" : date) + ".";
