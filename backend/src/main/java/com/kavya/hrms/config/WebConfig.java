@@ -29,6 +29,7 @@ public class WebConfig implements WebMvcConfigurer {
 
   @Override
   public void addInterceptors(@NonNull InterceptorRegistry registry) {
+    AuthSessionRepository authSessionRepository = this.authSessionRepository;
     if (authSessionRepository == null) {
       return;
     }
