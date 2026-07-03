@@ -65,7 +65,9 @@ syncMemorySession();
 
 export function setSessionValue(key, value) {
   const nextValue = key === 'kavyaAuthToken' ? String(value || '').trim() : value;
-  if (session[key] === nextValue) {
+  const currentValue = session[key];
+
+  if (Object.is(currentValue, nextValue)) {
     return;
   }
 

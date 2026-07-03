@@ -9,6 +9,7 @@ import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitials } from '../utils/user-management.js';
 import { loadTasksWithSeed, serializeTaskForApi } from '../utils/taskStorage.js';
+import { taskColumns } from './taskColumns.js';
 import {
   getEmployeeId,
   getEmployeeName,
