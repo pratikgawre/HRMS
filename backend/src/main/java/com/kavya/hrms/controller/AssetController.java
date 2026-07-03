@@ -107,27 +107,29 @@ public class AssetController {
       @RequestBody Asset asset,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Asset safeAsset = Objects.requireNonNull(asset, "asset must not be null");
+    Asset safeAsset = asset == null ? new Asset() : asset;
+    String safeAccessRole = accessRole == null ? "" : accessRole;
+    String safeUserId = userId == null ? "" : userId;
     LOGGER.info(() -> "[AssetController] create payload id=" + safeAsset.getId()
       + ", currentDate=" + safeAsset.getCurrentDate()
       + ", dueDate=" + safeAsset.getDueDate()
       + ", assignedToEmployeeId=" + safeAsset.getAssignedToEmployeeId()
       + ", assignedTo=" + safeAsset.getAssignedTo());
-    Asset saved = assetRepository.save(Objects.requireNonNull(normalizeAssetResponse(safeAsset)));
+    Asset saved = assetRepository.save(normalizeAssetResponse(safeAsset));
     LOGGER.info(() -> "[AssetController] create saved id=" + saved.getId()
         + ", currentDate=" + saved.getCurrentDate()
         + ", dueDate=" + saved.getDueDate()
         + ", assignedToEmployeeId=" + saved.getAssignedToEmployeeId()
         + ", assignedTo=" + saved.getAssignedTo());
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.operationalRecipients(safeAccessRole),
         "Asset created",
         buildAssetMessage(saved, "created"),
         "asset",
         saved.getId(),
-        accessRole,
+        safeAccessRole,
         "System",
-        userId);
+        safeUserId);
     return normalizeAssetResponse(saved);
   }
 
@@ -137,23 +139,21 @@ public class AssetController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     List<Asset> safeAssets = assets == null ? List.of() : assets;
+    String safeAccessRole = accessRole == null ? "" : accessRole;
+    String safeUserId = userId == null ? "" : userId;
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
-    List<Asset> normalizedAssets = safeAssets.stream()
-        .map(this::normalizeAssetResponse)
-        .filter(Objects::nonNull)
-        .toList();
-    List<Asset> saved = assetRepository.saveAll(Objects.requireNonNull(normalizedAssets));
+    List<Asset> saved = assetRepository.saveAll(safeAssets.stream().map(this::normalizeAssetResponse).toList());
     if (existingCount > 0) {
       notificationService.notifyRoles(
-          NotificationAudience.operationalRecipients(accessRole),
+          NotificationAudience.operationalRecipients(safeAccessRole),
           "Assets refreshed",
           "Asset inventory was updated in bulk.",
           "asset",
           "bulk",
-          accessRole,
+          safeAccessRole,
           "System",
-          userId);
+          safeUserId);
     }
     return saved.stream().map(this::normalizeAssetResponse).toList();
   }
@@ -164,16 +164,17 @@ public class AssetController {
       @RequestBody Asset asset,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String safeId = Objects.requireNonNull(id, "asset id must not be null");
-    Asset safeAsset = Objects.requireNonNull(asset, "asset must not be null");
-    safeAsset.setId(safeId);
+    Asset safeAsset = asset == null ? new Asset() : asset;
+    String safeAccessRole = accessRole == null ? "" : accessRole;
+    String safeUserId = userId == null ? "" : userId;
+    safeAsset.setId(id);
     LOGGER.info(() -> "[AssetController] update payload id=" + id
       + ", currentDate=" + safeAsset.getCurrentDate()
       + ", dueDate=" + safeAsset.getDueDate()
       + ", assignedToEmployeeId=" + safeAsset.getAssignedToEmployeeId()
       + ", assignedTo=" + safeAsset.getAssignedTo()
       + ", status=" + safeAsset.getStatus());
-    Asset saved = assetRepository.save(Objects.requireNonNull(normalizeAssetResponse(safeAsset)));
+    Asset saved = assetRepository.save(normalizeAssetResponse(safeAsset));
     LOGGER.info(() -> "[AssetController] update saved id=" + saved.getId()
         + ", currentDate=" + saved.getCurrentDate()
         + ", dueDate=" + saved.getDueDate()
@@ -181,14 +182,14 @@ public class AssetController {
         + ", assignedTo=" + saved.getAssignedTo()
         + ", status=" + saved.getStatus());
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.operationalRecipients(safeAccessRole),
         "Asset updated",
         buildAssetMessage(saved, "updated"),
         "asset",
         saved.getId(),
-        accessRole,
+        safeAccessRole,
         "System",
-        userId);
+        safeUserId);
     return normalizeAssetResponse(saved);
   }
 
@@ -197,18 +198,20 @@ public class AssetController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String safeId = Objects.requireNonNull(id, "asset id must not be null");
+    String safeId = id == null ? "" : id;
+    String safeAccessRole = accessRole == null ? "" : accessRole;
+    String safeUserId = userId == null ? "" : userId;
     Asset current = assetRepository.findById(safeId).orElseGet(Asset::new);
     assetRepository.deleteById(safeId);
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.operationalRecipients(safeAccessRole),
         "Asset removed",
         buildAssetMessage(current, "removed"),
         "asset",
         safeId,
-        accessRole,
+        safeAccessRole,
         "System",
-        userId);
+        safeUserId);
   }
 
   private String buildAssetMessage(Asset asset, String action) {
@@ -323,7 +326,7 @@ public class AssetController {
 
   private Asset normalizeAssetResponse(Asset asset) {
     if (asset == null) {
-      return null;
+      return new Asset();
     }
 
     String currentDate = firstNonBlank(asset.getCurrentDate(), "");

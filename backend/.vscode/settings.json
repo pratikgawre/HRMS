@@ -1,8 +1,7 @@
 {
   "java.configuration.updateBuildConfiguration": "automatic",
   "java.import.maven.enabled": true,
-  "boot-java.validation.java.version-validation": "OFF",
-  "java.compile.nullAnalysis.mode": "automatic",
+  "java.compile.nullAnalysis.mode": "disabled",
   "java.jdt.ls.java.home": "C:\\Program Files\\Java\\jdk-17",
   "java.configuration.runtimes": [
     {

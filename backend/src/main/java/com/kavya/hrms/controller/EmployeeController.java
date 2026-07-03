@@ -15,9 +15,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -35,7 +35,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
@@ -76,18 +75,18 @@ public class EmployeeController {
       @RequestBody Employee employee,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Employee saved = employeeRepository.save(Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null"));
-    resetEmployeeLoginCredentials(saved);
+    String safeAccessRole = accessRole == null ? "" : accessRole;
+    String safeUserId = userId == null ? "" : userId;
+    Employee saved = employeeRepository.save(employee);
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.operationalRecipients(safeAccessRole),
         "Employee profile saved",
         buildEmployeeMessage(saved, "saved"),
         "employee",
         saved.getEmployeeId(),
-        accessRole,
+        safeAccessRole,
         "System",
         userId);
-    applyCredentialEmailStatus(saved, employeeWelcomeEmailService.sendWelcomeEmail(saved));
     return saved;
   }
 
@@ -95,28 +94,34 @@ public class EmployeeController {
   public List<Employee> bulkSave(
       @RequestBody List<Employee> employees,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
-      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId,
-      @RequestHeader(value = "X-Kavya-Send-Credential-Updates", required = false) String sendCredentialUpdates,
-      @RequestHeader(value = "X-Kavya-Credential-Update-Employee", required = false) String credentialUpdateEmployeeId) {
-    List<Employee> existingEmployees = employeeRepository.findAll();
-    long existingCount = existingEmployees.size();
-    Map<String, Employee> existingByKey = buildEmployeeMap(existingEmployees);
+      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    return bulkSave(employees, accessRole, userId, "false", null);
+  }
 
-    List<Employee> normalizedEmployees = (employees == null ? java.util.Collections.<Employee>emptyList() : employees).stream()
-        .map(this::normalizeEmployeeIdentity)
-        .collect(Collectors.toList());
-    List<Employee> saved = employeeRepository.saveAll(Objects.requireNonNull(normalizedEmployees));
-    syncCredentialEmailsForBulkSave(saved, existingByKey, shouldSendCredentialUpdates(sendCredentialUpdates), credentialUpdateEmployeeId);
+  public List<Employee> bulkSave(
+      List<Employee> employees,
+      String accessRole,
+      String userId,
+      String sendCredentialUpdates,
+      String credentialUpdateEmployeeId) {
+    String safeAccessRole = accessRole == null ? "" : accessRole;
+    String safeUserId = userId == null ? "" : userId;
+    boolean shouldSendCredentialUpdates = Boolean.parseBoolean(String.valueOf(sendCredentialUpdates));
+    List<Employee> safeEmployees = employees == null ? List.of() : employees;
+    Map<String, Employee> existingByKey = buildEmployeeMap(employeeRepository.findAll());
+    syncCredentialEmailsForBulkSave(safeEmployees, existingByKey, shouldSendCredentialUpdates, credentialUpdateEmployeeId);
+    long existingCount = employeeRepository.count();
+    List<Employee> saved = employeeRepository.saveAll(safeEmployees);
     if (existingCount > 0) {
       notificationService.notifyRoles(
-          NotificationAudience.operationalRecipients(accessRole),
+          NotificationAudience.operationalRecipients(safeAccessRole),
           "Employee records refreshed",
           "Employee profiles were updated in bulk.",
           "employee",
           "bulk",
-          accessRole,
+          safeAccessRole,
           "System",
-          userId);
+          safeUserId);
     }
     return saved;
   }
@@ -216,19 +221,19 @@ public class EmployeeController {
       @RequestBody Employee employee,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    String safeAccessRole = accessRole == null ? "" : accessRole;
+    String safeUserId = userId == null ? "" : userId;
     employee.setEmployeeId(employeeId);
-    Employee saved = employeeRepository.save(Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null"));
-    resetEmployeeLoginCredentials(saved);
-    applyCredentialEmailStatus(saved, employeeWelcomeEmailService.sendCredentialUpdateEmail(saved));
+    Employee saved = employeeRepository.save(employee);
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.operationalRecipients(safeAccessRole),
         "Employee profile updated",
         buildEmployeeMessage(saved, "updated"),
         "employee",
         saved.getEmployeeId(),
-        accessRole,
+        safeAccessRole,
         "System",
-        userId);
+        safeUserId);
     return saved;
   }
 
@@ -304,25 +309,19 @@ public class EmployeeController {
       @PathVariable String employeeId,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    List<Employee> employeesToDelete = resolveEmployees(employeeId);
-    Employee current = employeesToDelete.isEmpty() ? null : employeesToDelete.get(0);
-
-    if (!employeesToDelete.isEmpty()) {
-      employeeRepository.deleteAll(employeesToDelete);
-    } else if (employeeId != null && !employeeId.trim().isBlank()) {
-      employeeRepository.deleteById(employeeId);
-    }
-    deleteLinkedUsers(employeesToDelete, employeeId);
-
+    String safeAccessRole = accessRole == null ? "" : accessRole;
+    String safeUserId = userId == null ? "" : userId;
+    Employee current = employeeRepository.findById(employeeId).orElse(null);
+    employeeRepository.deleteById(employeeId);
     notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+        NotificationAudience.operationalRecipients(safeAccessRole),
         "Employee profile removed",
         buildEmployeeMessage(current, "removed"),
         "employee",
-        Objects.toString(employeeId, ""),
-        Objects.toString(accessRole, ""),
+        employeeId,
+        accessRole,
         "System",
-        userId);
+        safeUserId);
   }
 
   private AppUser resetEmployeeLoginCredentials(Employee employee) {

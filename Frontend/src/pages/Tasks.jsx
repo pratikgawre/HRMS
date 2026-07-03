@@ -737,6 +737,7 @@ function EmployeeTasksView() {
   const [form, setForm] = useState(getEmptyTaskForm());
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
+  const isTeamLead = false;
   const [searchQuery, setSearchQuery] = useState('');
   const employeeTasks = useMemo(
     () => taskRows.filter((task) => isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee)),

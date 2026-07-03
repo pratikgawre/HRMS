@@ -47,11 +47,13 @@ public class LeaveController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     LeaveRequest safeRequest = request == null ? new LeaveRequest() : request;
-    if (accessRole != null && !accessRole.isBlank()) {
-      safeRequest.setOwnerRole(accessRole);
+    String safeAccessRole = accessRole == null ? "" : accessRole;
+    String safeUserId = userId == null ? "" : userId;
+    if (!safeAccessRole.isBlank()) {
+      safeRequest.setOwnerRole(safeAccessRole);
     }
     LeaveRequest saved = leaveRequestRepository.save(safeRequest);
-    notifyLeaveSubmitted(saved, accessRole, userId);
+    notifyLeaveSubmitted(saved, safeAccessRole, safeUserId);
     return saved;
   }
 
@@ -81,80 +83,52 @@ public class LeaveController {
       @RequestBody LeaveRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    String safeId = Objects.requireNonNull(id, "leave id must not be null");
     LeaveRequest safeRequest = request == null ? new LeaveRequest() : request;
-    LeaveRequest previous = leaveRequestRepository.findById(safeId).orElseGet(LeaveRequest::new);
-    safeRequest.setId(safeId);
+    String safeAccessRole = accessRole == null ? "" : accessRole;
+    String safeUserId = userId == null ? "" : userId;
+    safeRequest.setId(id);
     LeaveRequest saved = leaveRequestRepository.save(safeRequest);
-    notifyLeaveUpdated(saved, previous, accessRole, userId);
+    notifyLeaveChange(saved, "Leave request updated", safeAccessRole, safeUserId, "updated");
     return saved;
   }
 
-  private void notifyLeaveSubmitted(LeaveRequest request, String accessRole, String actorUserId) {
-    String employeeId = request == null ? "" : Objects.requireNonNullElse(request.getEmployeeId(), "");
-    String employeeUserId = resolveEmployeeUserId(employeeId).orElse("");
-    notificationService.notifyRolesExcept(
+  private void notifyLeaveSubmitted(LeaveRequest request, String accessRole, String userId) {
+    notificationService.notifyRoles(
         NotificationAudience.leaveApproverRecipients(),
-        excludedIds(employeeUserId, actorUserId),
         "Leave request submitted",
         buildLeaveMessage(request, "submitted"),
         "leave",
-        Objects.requireNonNullElse(request == null ? null : request.getId(), ""),
+        request == null ? "" : request.getId(),
         accessRole,
-        "System");
+        "System",
+        userId);
   }
 
-  private void notifyLeaveUpdated(LeaveRequest request, LeaveRequest previous, String accessRole, String actorUserId) {
-    String employeeId = request == null ? "" : Objects.requireNonNullElse(request.getEmployeeId(), "");
-    String employeeUserId = resolveEmployeeUserId(employeeId).orElse("");
-    String status = request == null ? "" : Objects.requireNonNullElse(request.getStatus(), "");
-    if (isFinalStatusChange(request, previous)) {
+  private void notifyLeaveChange(LeaveRequest request, String title, String accessRole, String userId, String verb) {
+    String employeeUserId = resolveEmployeeUserId(request.getEmployeeId()).orElse("");
+    notificationService.notifyRoles(
+        NotificationAudience.leaveRecipients(accessRole),
+        title,
+        buildLeaveMessage(request, verb),
+        "leave",
+        request.getId(),
+        accessRole,
+        "System",
+        userId);
+    if (!employeeUserId.isBlank()) {
       notificationService.notifyUsers(
           List.of(employeeUserId),
-        "Leave " + normalizeStatusLabel(status),
-        buildLeaveMessage(request, normalizeStatusLabel(status).toLowerCase(Locale.ROOT)),
-        "leave",
-        Objects.requireNonNullElse(request == null ? null : request.getId(), ""),
-        accessRole,
-        "System");
-      return;
+          title,
+          buildLeaveMessage(request, verb),
+          "leave",
+          request.getId(),
+          accessRole,
+          "System");
     }
-
-    notificationService.notifyRolesExcept(
-        NotificationAudience.leaveApproverRecipients(),
-        excludedIds(employeeUserId, actorUserId),
-        "Leave request updated",
-        buildLeaveMessage(request, "updated"),
-        "leave",
-        Objects.requireNonNullElse(request == null ? null : request.getId(), ""),
-        accessRole,
-        "System");
   }
 
-  private boolean isFinalStatusChange(LeaveRequest request, LeaveRequest previous) {
-    String currentStatus = normalizeStatus(request == null ? null : request.getStatus());
-    String previousStatus = normalizeStatus(previous == null ? null : previous.getStatus());
-    return !currentStatus.isBlank()
-        && !currentStatus.equals(previousStatus)
-        && ("approved".equals(currentStatus) || "rejected".equals(currentStatus));
-  }
-
-  private List<String> excludedIds(String... values) {
-    List<String> ids = new ArrayList<>();
-    if (values == null) {
-      return ids;
-    }
-
-    for (String value : values) {
-      if (value != null && !value.isBlank()) {
-        ids.add(value.trim());
-      }
-    }
-    return ids;
-  }
-
-  private <T> List<T> safeList(List<T> values) {
-    return values == null ? new ArrayList<>() : new ArrayList<>(values);
+  private List<LeaveRequest> safeList(List<LeaveRequest> requests) {
+    return requests == null ? new ArrayList<>() : new ArrayList<>(requests);
   }
 
   private Optional<String> resolveEmployeeUserId(String employeeId) {

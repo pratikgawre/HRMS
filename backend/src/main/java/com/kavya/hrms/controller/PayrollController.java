@@ -5,7 +5,7 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -137,8 +137,9 @@ public class PayrollController {
   @PostMapping("/bulk")
   public List<PayrollRecord> bulkSave(
       @RequestBody List<PayrollRecord> records) {
-    List<PayrollRecord> safeRecords = safeList(records);
-    return payrollRecordRepository.saveAll(Objects.requireNonNull(safeRecords));
+    List<PayrollRecord> safeRecords = records == null ? List.of() : records;
+    List<PayrollRecord> saved = payrollRecordRepository.saveAll(safeRecords);
+    return saved;
   }
 
   private ResponseEntity<Object> forbidden(String message) {
@@ -194,10 +195,6 @@ public class PayrollController {
 
   private boolean isBlank(String value) {
     return value == null || value.trim().isEmpty();
-  }
-
-  private <T> List<T> safeList(List<T> values) {
-    return values == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(values);
   }
 
 }

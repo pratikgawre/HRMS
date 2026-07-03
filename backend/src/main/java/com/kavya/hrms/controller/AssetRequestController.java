@@ -34,30 +34,33 @@ public class AssetRequestController {
 
   @PostMapping
   public AssetRequest create(@RequestBody AssetRequest request) {
+    AssetRequest safeRequest = request == null ? new AssetRequest() : request;
     String now = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM uuuu"));
-    String currentDate = firstNonBlank(request.getCurrentDate(), request.getCreatedDate(), now);
-    request.setCurrentDate(currentDate);
-    request.setCreatedDate(firstNonBlank(request.getCreatedDate(), currentDate));
-    request.setDueDate(firstNonBlank(request.getDueDate(), ""));
-    request.setEmployeeId(firstNonBlank(request.getEmployeeId(), ""));
-    request.setEmployeeName(firstNonBlank(request.getEmployeeName(), ""));
-    request.setAssetId(firstNonBlank(request.getAssetId(), ""));
-    request.setAssetCode(firstNonBlank(request.getAssetCode(), ""));
-    request.setAssetName(firstNonBlank(request.getAssetName(), ""));
-    request.setRequestType(firstNonBlank(request.getRequestType(), "replacement"));
-    if (request.getStatus() == null || request.getStatus().isBlank()) {
-      request.setStatus("Pending");
+    String currentDate = firstNonBlank(safeRequest.getCurrentDate(), safeRequest.getCreatedDate(), now);
+    safeRequest.setCurrentDate(currentDate);
+    safeRequest.setCreatedDate(firstNonBlank(safeRequest.getCreatedDate(), currentDate));
+    safeRequest.setDueDate(firstNonBlank(safeRequest.getDueDate(), ""));
+    safeRequest.setEmployeeId(firstNonBlank(safeRequest.getEmployeeId(), ""));
+    safeRequest.setEmployeeName(firstNonBlank(safeRequest.getEmployeeName(), ""));
+    safeRequest.setAssetId(firstNonBlank(safeRequest.getAssetId(), ""));
+    safeRequest.setAssetCode(firstNonBlank(safeRequest.getAssetCode(), ""));
+    safeRequest.setAssetName(firstNonBlank(safeRequest.getAssetName(), ""));
+    safeRequest.setRequestType(firstNonBlank(safeRequest.getRequestType(), "replacement"));
+    if (safeRequest.getStatus() == null || safeRequest.getStatus().isBlank()) {
+      safeRequest.setStatus("Pending");
     }
-    return repository.save(request);
+    return repository.save(safeRequest);
   }
 
   @PatchMapping("/{id}/status")
   public ResponseEntity<AssetRequest> updateStatus(@PathVariable String id, @RequestBody RequestStatusUpdate payload) {
-    return repository.findById(id)
+    RequestStatusUpdate safePayload = payload == null ? new RequestStatusUpdate() : payload;
+    String safeId = id == null ? "" : id;
+    return repository.findById(safeId)
         .map((request) -> {
-          request.setStatus(payload.getStatus());
-          request.setResolution(payload.getResolution());
-          request.setHandledBy(payload.getHandledBy());
+          request.setStatus(safePayload.getStatus());
+          request.setResolution(safePayload.getResolution());
+          request.setHandledBy(safePayload.getHandledBy());
           return ResponseEntity.ok(repository.save(request));
         })
         .orElse(ResponseEntity.notFound().build());
