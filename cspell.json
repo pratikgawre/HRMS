@@ -22,9 +22,11 @@
     "springframework",
     "Authy",
     "INFOWEB",
+    "kavyainfoweb",
     "Aarav",
     "Sharma",
-    "KAVYA"
+    "KAVYA",
+    "Xshare"
   ],
   "ignorePaths": [
     "**/node_modules/**",

@@ -171,6 +171,17 @@ function Tasks() {
       ? teamLeadAssigneeOptions
       : employees.filter((employee) => !isAdminEmployee(employee))
   ), [employees, isTeamLead, teamLeadAssigneeOptions]);
+  const employeeIdByName = useMemo(() => {
+    const map = new Map();
+    employees.forEach((employee) => {
+      const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim();
+      const employeeName = String(employee.displayName || employee.name || employee.employeeName || '').trim().toLowerCase();
+      if (employeeId && employeeName) {
+        map.set(employeeName, employeeId);
+      }
+    });
+    return map;
+  }, [employees]);
 
   const filteredRows = useMemo(() => {
     let rows = [...taskRows];
@@ -389,6 +400,39 @@ function Tasks() {
       ),
     },
   ];
+  const hrTaskListColumns = role === 'hr'
+    ? [
+      ...taskListColumns
+        .filter((column) => column.key !== 'status' && column.key !== 'actions'),
+      {
+        key: 'due',
+        label: 'Due Date',
+        render: (row) => row.dueDate || row.due || '-',
+      },
+      taskListColumns.find((column) => column.key === 'status'),
+    ].filter(Boolean)
+    : taskListColumns;
+  const taskAssignmentColumns = taskListColumns;
+  const hrStatusUpdateColumns = role === 'hr'
+    ? [
+      taskListColumns.find((column) => column.key === 'owner'),
+      {
+        key: 'assignedToId',
+        label: 'Assign ID',
+        render: (row) => {
+          const ownerName = String(row.owner || row.assignedToName || row.assignedTo || '').trim().toLowerCase();
+          return row.assignedToId || employeeIdByName.get(ownerName) || '-';
+        },
+      },
+      taskListColumns.find((column) => column.key === 'title'),
+      {
+        key: 'due',
+        label: 'Due Date',
+        render: (row) => row.dueDate || row.due || '-',
+      },
+      taskListColumns.find((column) => column.key === 'status'),
+    ].filter(Boolean)
+    : taskListColumns;
   const createTask = async (event) => {
     event.preventDefault();
     const isEditing = Boolean(editingTask);
@@ -594,7 +638,7 @@ function Tasks() {
                   Back to Dashboard
                 </button>
               </div>
-              <DataTable columns={taskListColumns} rows={filteredRows} emptyMessage="No tasks available." />
+              <DataTable columns={hrTaskListColumns} rows={filteredRows} emptyMessage="No tasks available." />
             </div>
           )}
 
@@ -631,7 +675,7 @@ function Tasks() {
                 </button>
               </div>
               <DataTable
-                columns={taskColumns}
+                columns={hrStatusUpdateColumns}
                 rows={statusUpdateTasks}
                 emptyMessage="No tasks available."
                 onRowClick={(task) => openTaskStatusModal(task)}
@@ -1462,3 +1506,4 @@ function isAdminEmployee(employee) {
 }
 
 export default Tasks;
+

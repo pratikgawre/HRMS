@@ -10,7 +10,7 @@ class PayrollValidationServiceTest {
   private final PayrollValidationService service = new PayrollValidationService();
 
   @Test
-  void locksCurrentMonthAfterTheCutoff() {
+  void locksCurrentMonthAfterCutoff() {
     assertFalse(service.isMarkPaidDisabled("June", "2026", "Unpaid", LocalDate.of(2026, 6, 1)));
     assertFalse(service.isMarkPaidDisabled("6", "2026", "Unpaid", LocalDate.of(2026, 6, 15)));
     assertTrue(service.isMarkPaidDisabled("June", "2026", "Unpaid", LocalDate.of(2026, 6, 16)));

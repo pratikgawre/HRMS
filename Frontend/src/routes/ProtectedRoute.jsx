@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import MandatoryPasswordChangeModal from '../components/MandatoryPasswordChangeModal.jsx';
 import { syncSessionFromAccessUser } from '../utils/auth.js';
 import { getSessionValue } from '../utils/appSession.js';
 
@@ -24,7 +23,7 @@ function ProtectedRoute({ allowedRoles }) {
   }
 
   if (mustChangePassword) {
-    return <MandatoryPasswordChangeModal />;
+    return <Navigate to="/change-password" replace state={{ from: location.pathname }} />;
   }
 
   if (!allowedRoles.includes(role)) {

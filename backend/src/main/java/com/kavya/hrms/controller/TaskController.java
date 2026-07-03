@@ -8,15 +8,11 @@ import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.repository.TaskRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
-import java.util.List;
 import java.time.OffsetDateTime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.ArrayList;
+import java.util.Objects;
+import java.util.List;
 import org.springframework.http.HttpStatus;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,24 +28,20 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
-  private static final Logger log = LoggerFactory.getLogger(TaskController.class);
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
   private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
-  private final MongoTemplate mongoTemplate;
 
   public TaskController(
       TaskRepository taskRepository,
       ProjectRepository projectRepository,
       EmployeeRepository employeeRepository,
-      NotificationService notificationService,
-      MongoTemplate mongoTemplate) {
+      NotificationService notificationService) {
     this.taskRepository = taskRepository;
     this.projectRepository = projectRepository;
     this.employeeRepository = employeeRepository;
     this.notificationService = notificationService;
-    this.mongoTemplate = mongoTemplate;
   }
 
   @GetMapping
@@ -82,21 +74,18 @@ public class TaskController {
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    if (task == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task payload is required");
+    }
+
     hydrateTeamLeadFields(task);
+    syncProjectAssignment(task);
     if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
       task.setCreatedDateTime(OffsetDateTime.now().toString());
     }
     TaskItem saved = taskRepository.save(task);
     syncProjectAssignment(saved);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task created",
-        buildTaskMessage(saved, "created"),
-        "task",
-        saved.getId(),
-        accessRole,
-        "System",
-        userId);
+    notifyTaskChangeSafely(saved, "Task assigned", "assigned", accessRole, userId);
     return saved;
   }
 
@@ -105,67 +94,62 @@ public class TaskController {
       @RequestBody List<TaskItem> tasks,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    if (tasks == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task list is required");
+    }
+
+    List<TaskItem> safeTasks = safeList(tasks);
     long existingCount = taskRepository.count();
     taskRepository.deleteAll();
-    List<TaskItem> saved = taskRepository.saveAll(tasks);
+    List<TaskItem> saved = taskRepository.saveAll(safeTasks.stream().filter(Objects::nonNull).toList());
     if (existingCount > 0) {
-      notificationService.notifyRoles(
-          NotificationAudience.operationalRecipients(accessRole),
+      notificationService.notifyRolesExcept(
+          NotificationAudience.taskStatusRecipients(),
+          excludedIds(userId),
           "Tasks refreshed",
           "Task board was updated in bulk.",
           "task",
           "bulk",
           accessRole,
-          "System",
-          userId);
+          "System");
     }
     return saved;
   }
 
   @PutMapping("/{id}")
   public TaskItem update(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    if (task == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task payload is required");
+    }
+
     task.setId(id);
+    TaskItem existing = taskRepository.findById(id).orElse(null);
+    if ((task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) && existing != null) {
+      task.setCreatedDateTime(existing.getCreatedDateTime());
+    }
     hydrateTeamLeadFields(task);
-    Query query = new Query(Criteria.where("id").is(id));
-    Update update = new Update();
-    applyTaskFields(update, task);
-    mongoTemplate.updateFirst(query, update, TaskItem.class);
-    TaskItem saved = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
-        "Task updated",
-        buildTaskMessage(saved, "updated"),
-        "task",
-        saved.getId(),
-        accessRole,
-        "System",
-        userId);
+    syncProjectAssignment(task);
+    TaskItem saved = taskRepository.save(task);
+    notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
     return saved;
   }
 
   @PatchMapping("/{id}/status")
   public TaskItem updateStatus(
-      @PathVariable String id,
+      @PathVariable("id") String id,
       @RequestBody TaskStatusRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem current = taskRepository.findById(id)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    TaskItem current = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
     String nextStatus = firstNonBlank(request == null ? null : request.getStatus(), current.getStatus());
-
-    try {
-      current.setStatus(nextStatus);
-      TaskItem saved = taskRepository.save(current);
-      notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
-      return saved;
-    } catch (Exception ex) {
-      log.error("Failed to update task status for id={} status={}", id, nextStatus, ex);
-      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Task status could not be updated");
-    }
+    current.setStatus(nextStatus);
+    TaskItem saved = taskRepository.save(current);
+    notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
+    return saved;
   }
 
   @DeleteMapping("/{id}")
@@ -173,23 +157,46 @@ public class TaskController {
       @PathVariable String id,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    TaskItem current = taskRepository.findById(id).orElse(null);
+    TaskItem current = taskRepository.findById(id).orElseGet(TaskItem::new);
     taskRepository.deleteById(id);
-    notificationService.notifyRoles(
-        NotificationAudience.operationalRecipients(accessRole),
+    notifyTaskRemoved(current, accessRole, userId);
+  }
+
+  private void notifyTaskRemoved(TaskItem task, String accessRole, String actorUserId) {
+    String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
+    String safeTaskId = task == null ? "" : Objects.requireNonNullElse(task.getId(), "");
+    notificationService.notifyRolesExcept(
+        NotificationAudience.taskStatusRecipients(),
+        excludedIds(Objects.requireNonNullElse(actorUserId, "")),
         "Task removed",
-        buildTaskMessage(current, "removed"),
+        buildTaskMessage(task, "removed"),
         "task",
-        id,
-        accessRole,
-        "System",
-        userId);
+        safeTaskId,
+        safeAccessRole,
+        "System");
   }
 
   private String buildTaskMessage(TaskItem task, String action) {
     String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
     String owner = task != null && task.getOwner() != null ? task.getOwner() : "team";
     return title + " was " + action + " for " + owner + ".";
+  }
+
+  private List<String> excludedIds(String... values) {
+    List<String> ids = new ArrayList<>();
+    if (values == null) {
+      return ids;
+    }
+    for (String value : values) {
+      addIdentity(ids, value);
+    }
+    return ids;
+  }
+
+  private void addIdentity(List<String> identities, String value) {
+    if (value != null && !value.isBlank()) {
+      identities.add(value.trim());
+    }
   }
 
   private void hydrateTeamLeadFields(TaskItem task) {
@@ -222,13 +229,14 @@ public class TaskController {
       return;
     }
 
-    Project project = projectRepository.findById(projectId).orElse(null);
-    if (project == null) {
+    java.util.Optional<Project> project = projectRepository.findById(projectId);
+    if (project.isEmpty()) {
       return;
     }
+    Project currentProject = project.get();
 
     if (task.getProjectName() == null || task.getProjectName().isBlank()) {
-      task.setProjectName(firstNonBlank(project.getName(), projectId));
+      task.setProjectName(firstNonBlank(currentProject.getName(), projectId));
     }
 
     if (task.getProjectCode() == null || task.getProjectCode().isBlank()) {
@@ -236,7 +244,7 @@ public class TaskController {
     }
 
     if (task.getTeamLeadId() == null || task.getTeamLeadId().isBlank()) {
-      task.setTeamLeadId(firstNonBlank(project.getTeamLeadId()));
+      task.setTeamLeadId(firstNonBlank(currentProject.getTeamLeadId()));
     }
   }
 
@@ -338,56 +346,33 @@ public class TaskController {
     return value == null ? "" : value.trim().toLowerCase();
   }
 
-  private void notifyTaskChangeSafely(TaskItem task, String title, String action, String accessRole, String userId) {
+  private <T> List<T> safeList(List<T> values) {
+    return values == null ? new ArrayList<>() : new ArrayList<>(values);
+  }
+
+  private void notifyTaskChangeSafely(
+      TaskItem task,
+      String title,
+      String verb,
+      String accessRole,
+      String userId) {
+    if (task == null) {
+      return;
+    }
+
     try {
       notificationService.notifyRoles(
           NotificationAudience.operationalRecipients(accessRole),
           title,
-          buildTaskMessage(task, action),
+          buildTaskMessage(task, verb),
           "task",
-          task != null ? task.getId() : "",
+          task.getId(),
           accessRole,
           "System",
           userId);
-    } catch (Exception ex) {
-      log.warn("Task notification failed for id={}", task != null ? task.getId() : "-", ex);
-    }
-  }
-
-  private void applyTaskFields(Update update, TaskItem task) {
-    if (update == null || task == null) {
-      return;
-    }
-
-    update.set("title", task.getTitle());
-    update.set("description", task.getDescription());
-    update.set("owner", task.getOwner());
-    update.set("assignedToId", task.getAssignedToId());
-    update.set("assignedToName", task.getAssignedToName());
-    update.set("assignedTo", task.getAssignedTo());
-    update.set("assignedById", task.getAssignedById());
-    update.set("assignedByName", task.getAssignedByName());
-    update.set("assignedBy", task.getAssignedBy());
-    update.set("assignedByRole", task.getAssignedByRole());
-    update.set("priority", task.getPriority());
-    update.set("dueDate", task.getDueDate());
-    update.set("status", task.getStatus());
-    update.set("teamLeadId", task.getTeamLeadId());
-    update.set("projectId", task.getProjectId());
-    update.set("projectName", task.getProjectName());
-    update.set("projectCode", task.getProjectCode());
-    update.set("createdDateTime", task.getCreatedDateTime());
-  }
-
-  public static class TaskStatusRequest {
-    private String status;
-
-    public String getStatus() {
-      return status;
-    }
-
-    public void setStatus(String status) {
-      this.status = status;
+    } catch (RuntimeException ignored) {
+      // Keep task persistence responsive even if notification fan-out fails.
     }
   }
 }
+

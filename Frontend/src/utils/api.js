@@ -8,32 +8,24 @@ export async function apiRequest(path, options = {}) {
   const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId');
   const employeeId = getSessionValue('kavyaEmployeeId');
   const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const { headers: optionHeaders, ...requestOptions } = options;
   const headers = {
     ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(accessRole ? { 'X-Kavya-Access-Role': accessRole } : {}),
     ...(userId ? { 'X-Kavya-User-Id': userId } : {}),
     ...(employeeId ? { 'X-Kavya-Employee-Id': employeeId } : {}),
-    ...(options.headers || {}),
+    ...(optionHeaders || {}),
   };
 
   const response = await fetch(`${API_BASE}${path}`, {
+    ...requestOptions,
     headers,
-    ...options,
   });
 
   if (!response.ok) {
     const text = await response.text();
-    let message = text || `Request failed: ${response.status}`;
-
-    try {
-      const payload = text ? JSON.parse(text) : null;
-      if (payload && typeof payload.message === 'string') {
-        message = payload.message;
-      }
-    } catch {
-      // Fall back to the raw response text below.
-    }
+    const message = formatApiError(text, response.status);
 
     throw new Error(message);
   }
@@ -76,7 +68,7 @@ export async function safeApiRequest(path, fallback, options = {}) {
 }
 
 export async function deleteEmployee(employeeId) {
-  return apiRequest(`/employees/${employeeId}`, { method: 'DELETE' });
+  return apiRequest(`/employees/${encodeURIComponent(employeeId)}`, { method: 'DELETE' });
 }
 
 export async function uploadEmployeeProfilePhoto(employeeId, file) {
@@ -93,5 +85,10 @@ export async function removeEmployeeProfilePhoto(employeeId) {
 }
 
 export async function deleteUser(userId) {
-  return apiRequest(`/users/${userId}`, { method: 'DELETE' });
+  return apiRequest(`/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
 }
+
+
+
+
+

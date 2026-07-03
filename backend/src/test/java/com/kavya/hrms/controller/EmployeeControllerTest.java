@@ -1,79 +1,115 @@
 package com.kavya.hrms.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.doReturn;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.Employee;
+import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
+import com.kavya.hrms.service.EmployeeWelcomeEmailService;
 import com.kavya.hrms.service.NotificationService;
-import java.util.Arrays;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
+@SuppressWarnings("all")
 class EmployeeControllerTest {
-  @Mock
   private EmployeeRepository employeeRepository;
-
-  @Mock
+  private AppUserRepository appUserRepository;
   private NotificationService notificationService;
-
-  @InjectMocks
+  private EmployeeWelcomeEmailService employeeWelcomeEmailService;
   private EmployeeController employeeController;
 
+  @BeforeEach
+  void setUp() {
+    employeeRepository = mock(EmployeeRepository.class);
+    appUserRepository = mock(AppUserRepository.class);
+    notificationService = mock(NotificationService.class);
+    employeeWelcomeEmailService = mock(EmployeeWelcomeEmailService.class);
+    employeeController = new EmployeeController(
+        employeeRepository,
+        appUserRepository,
+        notificationService,
+        employeeWelcomeEmailService);
+  }
+
   @Test
-  void updateShouldSetEmployeeIdAndNotify() {
+  void updateShouldResetLinkedUserCredentialsAndSendCredentialEmail() {
     Employee employee = buildEmployee("KV009", "Riya", "Shah", "Engineering");
-    doReturn(employee).when(employeeRepository).save(employee);
+    AppUser user = new AppUser();
+    user.setUserId("USR-KV009");
+    user.setEmployeeId("KV009");
+    user.setEmail("old.login@kavyainfoweb.com");
+    user.setPassword("oldPassword123");
+    user.setPasswordResetToken("123456");
+    user.setPasswordResetTokenExpiresAt("2099-01-01T00:00:00Z");
+    user.setMustChangePassword(false);
+
+    when(employeeRepository.save(any(Employee.class))).thenAnswer(invocation -> invocation.getArgument(0, Employee.class));
+    when(appUserRepository.findAll()).thenReturn(List.of(user));
+    when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0, AppUser.class));
+    when(employeeWelcomeEmailService.buildLoginEmail(any(Employee.class))).thenReturn("riya.shah@kavyainfoweb.com");
+    when(employeeWelcomeEmailService.buildTemporaryPassword(any(Employee.class))).thenReturn("Riya@123");
+    when(employeeWelcomeEmailService.sendCredentialUpdateEmail(any(Employee.class)))
+        .thenReturn(EmployeeWelcomeEmailService.DeliveryResult.sent("Credential update email sent."));
 
     Employee saved = employeeController.update("KV009", employee, "HR Manager", "HR-001");
 
     assertEquals("KV009", saved.getEmployeeId());
-    verify(employeeRepository).save(employee);
-    verify(notificationService).notifyRoles(
-        List.of("admin", "hr"),
-        "Employee profile updated",
-        "Riya Shah was updated in Engineering.",
-        "employee",
-        "KV009",
-        "HR Manager",
-        "System",
-        "HR-001");
+    assertEquals("riya.shah@kavyainfoweb.com", user.getEmail());
+    assertEquals("Riya@123", user.getPassword());
+    assertNotNull(user.getPasswordHash());
+    assertTrue(!user.getPasswordHash().isBlank());
+    assertTrue(Boolean.TRUE.equals(user.getMustChangePassword()));
+    assertNull(user.getPasswordResetToken());
+    assertNull(user.getPasswordResetTokenExpiresAt());
+    verify(appUserRepository).save(user);
+    verify(employeeWelcomeEmailService).sendCredentialUpdateEmail(saved);
   }
 
   @Test
-  void bulkSaveShouldSaveAllAndNotifyWhenRecordsAlreadyExist() {
+  void bulkSaveShouldSendCredentialUpdateOnlyForRequestedEmployee() {
     Employee existingTarget = buildEmployee("KV009", "Riya", "Shah", "Engineering");
     Employee existingOther = buildEmployee("KV010", "Arjun", "Mehta", "Engineering");
     Employee updatedTarget = buildEmployee("KV009", "Riya", "Shah", "Quality");
     Employee updatedOther = buildEmployee("KV010", "Arjun", "Mehta", "Finance");
+    AppUser targetUser = new AppUser();
+    targetUser.setUserId("USR-KV009");
+    targetUser.setEmployeeId("KV009");
+    targetUser.setEmail("old.riya@kavyainfoweb.com");
 
-    List<Employee> input = Arrays.asList(updatedTarget, updatedOther);
-    when(employeeRepository.count()).thenReturn(2L);
-    when(employeeRepository.findAll()).thenReturn(Arrays.asList(existingTarget, existingOther));
-    doReturn(Arrays.asList(updatedTarget, updatedOther)).when(employeeRepository).saveAll(input);
+    when(employeeRepository.findAll()).thenReturn(List.of(existingTarget, existingOther));
+    when(employeeRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(appUserRepository.findAll()).thenReturn(List.of(targetUser));
+    when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> invocation.getArgument(0, AppUser.class));
+    when(employeeWelcomeEmailService.buildLoginEmail(any(Employee.class))).thenReturn("riya.shah@kavyainfoweb.com");
+    when(employeeWelcomeEmailService.buildTemporaryPassword(any(Employee.class))).thenReturn("Riya@123");
+    when(employeeWelcomeEmailService.sendCredentialUpdateEmail(any(Employee.class)))
+        .thenReturn(EmployeeWelcomeEmailService.DeliveryResult.sent("Credential update email sent."));
 
-    List<Employee> saved = employeeController.bulkSave(input, "HR Manager", "HR-001");
-
-    assertEquals(2, saved.size());
-    assertEquals("KV009", saved.get(0).getEmployeeId());
-    assertEquals("KV010", saved.get(1).getEmployeeId());
-    verify(employeeRepository).saveAll(input);
-    verify(notificationService).notifyRoles(
-        List.of("admin", "hr"),
-        "Employee records refreshed",
-        "Employee profiles were updated in bulk.",
-        "employee",
-        "bulk",
+    employeeController.bulkSave(
+        List.of(updatedTarget, updatedOther),
         "HR Manager",
-        "System",
-        "HR-001");
+        "HR-001",
+        "true",
+        "KV009");
+
+    verify(employeeWelcomeEmailService).sendCredentialUpdateEmail(updatedTarget);
+    verify(employeeWelcomeEmailService, never()).sendCredentialUpdateEmail(updatedOther);
+    assertEquals("Riya@123", targetUser.getPassword());
+    assertTrue(Boolean.TRUE.equals(targetUser.getMustChangePassword()));
   }
 
   private Employee buildEmployee(String employeeCode, String firstName, String lastName, String department) {

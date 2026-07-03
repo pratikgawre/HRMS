@@ -10,6 +10,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+
 import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.Notification;
 import com.kavya.hrms.repository.AppUserRepository;

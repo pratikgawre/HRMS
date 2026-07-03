@@ -11,7 +11,6 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -141,6 +140,7 @@ public class AuthController {
           user.setPasswordHash(passwordEncoder.encode(trimmedPassword));
           user.setPasswordResetToken(null);
           user.setPasswordResetTokenExpiresAt(null);
+          user.setMustChangePassword(false);
           appUserRepository.save(user);
           return ResponseEntity.ok(resetResponse(true, true, email, "", "", "Password updated successfully"));
         })
@@ -157,10 +157,11 @@ public class AuthController {
       return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found"));
     }
 
+    String currentPassword = request == null || request.getCurrentPassword() == null ? "" : request.getCurrentPassword().trim();
     String newPassword = request == null || request.getNewPassword() == null ? "" : request.getNewPassword().trim();
     String confirmPassword = request == null || request.getConfirmPassword() == null ? "" : request.getConfirmPassword().trim();
-    if (newPassword.isBlank() || confirmPassword.isBlank()) {
-      return ResponseEntity.badRequest().body(failed("Password and confirm password are required"));
+    if (currentPassword.isBlank() || newPassword.isBlank() || confirmPassword.isBlank()) {
+      return ResponseEntity.badRequest().body(failed("Current password, new password and confirm password are required"));
     }
 
     if (!newPassword.equals(confirmPassword)) {
@@ -175,6 +176,10 @@ public class AuthController {
         .map(session -> appUserRepository.findAllByEmailIgnoreCase(normalizeEmail(session.getEmail())).stream()
             .findFirst()
             .map(user -> {
+              if (!passwordMatches(currentPassword, user)) {
+                return ResponseEntity.badRequest().body(failed("Current password is incorrect"));
+              }
+
               user.setPassword(newPassword);
               user.setPasswordHash(passwordEncoder.encode(newPassword));
               user.setMustChangePassword(false);
@@ -241,6 +246,7 @@ public class AuthController {
     LoginResponse response = new LoginResponse();
     response.setOk(true);
     response.setUserId(user.getUserId());
+    response.setStatus(user.getStatus());
     response.setLastLogin(lastLogin);
     response.setRole(normalizeRole(user.getRole()));
     response.setEmail(user.getEmail());
@@ -255,12 +261,11 @@ public class AuthController {
   }
 
   private LoginResponse okResponse(AuthSession session) {
-    AppUser user = appUserRepository.findByUserId(session.getUserId())
-        .or(() -> appUserRepository.findByEmailIgnoreCase(session.getEmail()))
-        .orElseGet(AppUser::new);
+    AppUser user = resolveSessionUser(session);
     LoginResponse response = new LoginResponse();
     response.setOk(true);
     response.setUserId(session.getUserId());
+    response.setStatus(session.getStatus());
     response.setLastLogin(session.getLastLogin());
     response.setRole(normalizeRole(session.getRole()));
     response.setEmail(session.getEmail());
@@ -272,6 +277,38 @@ public class AuthController {
     response.setMustChangePassword(Boolean.TRUE.equals(session.getMustChangePassword()));
     response.setMessage(Boolean.TRUE.equals(session.getMustChangePassword()) ? "Password change required" : "Session active");
     return response;
+  }
+
+  private AppUser resolveSessionUser(AuthSession session) {
+    if (session == null) {
+      return null;
+    }
+
+    String email = normalizeEmail(session.getEmail());
+    if (!email.isBlank()) {
+      Optional<AppUser> emailMatch = appUserRepository.findAllByEmailIgnoreCase(email).stream().findFirst();
+      if (emailMatch.isPresent()) {
+        return emailMatch.get();
+      }
+    }
+
+    String userId = normalizeValue(session.getUserId());
+    if (!userId.isBlank()) {
+      Optional<AppUser> userIdMatch = appUserRepository.findAllByUserId(userId).stream()
+          .filter(user -> email.isBlank() || email.equals(normalizeEmail(user.getEmail())))
+          .findFirst()
+          .or(() -> appUserRepository.findAllByUserId(userId).stream().findFirst());
+      if (userIdMatch.isPresent()) {
+        return userIdMatch.get();
+      }
+    }
+
+    String employeeId = normalizeValue(session.getEmployeeId());
+    if (!employeeId.isBlank()) {
+      return appUserRepository.findAllByEmployeeId(employeeId).stream().findFirst().orElse(null);
+    }
+
+    return null;
   }
 
   private PasswordResetResponse resetResponse(boolean ok, boolean emailSent, String email, String resetToken, String expiresAt, String message) {
@@ -308,7 +345,6 @@ public class AuthController {
     if (role == null) {
       return "Employee";
     }
-
     String normalized = role.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
     return switch (normalized) {
       case "superadmin", "admin" -> "Super Admin";
@@ -320,7 +356,7 @@ public class AuthController {
     };
   }
 
-  private boolean passwordMatches(@Nullable String rawPassword, @Nullable AppUser user) {
+  private boolean passwordMatches(String rawPassword, AppUser user) {
     if (user == null) {
       return false;
     }
@@ -347,35 +383,65 @@ public class AuthController {
     return response;
   }
 
+  private static final class LegacyAccount {
+    private final String password;
+    private final String role;
+    private final String employeeId;
+    private final String employeeName;
+
+    private LegacyAccount(String password, String role, String employeeId, String employeeName) {
+      this.password = password;
+      this.role = role;
+      this.employeeId = employeeId;
+      this.employeeName = employeeName;
+    }
+
+    private boolean matchesPassword(String candidate) {
+      return password.equals(candidate);
+    }
+
+    private String getRole() {
+      return role;
+    }
+
+    private String getEmployeeId() {
+      return employeeId;
+    }
+
+    private String getEmployeeName() {
+      return employeeName;
+    }
+  }
+
   private Optional<AppUser> buildLegacyAccount(String email, String password) {
     LegacyAccount account = switch (email) {
       case "admin@gmail.com" -> new LegacyAccount("admin123", "admin", "ADMIN-001", "Admin Kavya");
       case "hr@gmail.com" -> new LegacyAccount("hr123", "hr", "HR-001", "Meera Nair");
       case "teamlead@gmail.com" -> new LegacyAccount("teamlead123", "teamLead", "KV003", "Kabir Khan");
-      case "manager@gmail.com", "projectmanager@gmail.com" -> new LegacyAccount("manager123", "projectManager", "KV004", "Isha Patel");
+      case "manager@gmail.com", "projectmanager@gmail.com" ->
+          new LegacyAccount("manager123", "projectManager", "KV004", "Isha Patel");
       case "employee@gmail.com" -> new LegacyAccount("employee123", "employee", "KV001", "Aarav Sharma");
       default -> null;
     };
 
-    if (account == null || !account.password().equals(password)) {
+    if (account == null || !account.matchesPassword(password)) {
       return Optional.empty();
     }
 
     AppUser user = new AppUser();
-    user.setUserId("USR-" + account.employeeId());
+    user.setUserId("USR-" + account.getEmployeeId());
     user.setEmail(email);
     user.setPassword(password);
-    user.setRole(account.role());
-    user.setEmployeeId(account.employeeId());
-    user.setEmployeeName(account.employeeName());
+    user.setRole(account.getRole());
+    user.setEmployeeId(account.getEmployeeId());
+    user.setEmployeeName(account.getEmployeeName());
     user.setStatus("Active");
+    user.setMustChangePassword(false);
     user.setTwoFactorEnabled(false);
     user.setTwoFactorSecret("");
     return Optional.of(user);
   }
 
-  private record LegacyAccount(String password, String role, String employeeId, String employeeName) {
-  }
 
   private AuthSession buildSession(AppUser user, String token, String now) {
     AuthSession session = new AuthSession();
@@ -393,14 +459,18 @@ public class AuthController {
     return session;
   }
 
-  private String normalizeEmail(@Nullable String email) {
+  private String normalizeEmail(String email) {
     if (email == null) {
       return "";
     }
     return email.trim().toLowerCase(Locale.ROOT);
   }
 
-  private String extractToken(@Nullable String authorization) {
+  private String normalizeValue(String value) {
+    return value == null ? "" : value.trim();
+  }
+
+  private String extractToken(String authorization) {
     if (authorization == null) {
       return "";
     }
@@ -412,4 +482,7 @@ public class AuthController {
 
     return trimmed;
   }
+
+
 }
+
