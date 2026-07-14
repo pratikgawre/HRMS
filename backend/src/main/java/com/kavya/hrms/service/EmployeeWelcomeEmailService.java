@@ -27,13 +27,8 @@ public class EmployeeWelcomeEmailService {
   public EmployeeWelcomeEmailService(
       ObjectProvider<JavaMailSender> mailSenderProvider,
       Environment environment) {
-      @Value("${spring.mail.host:}") String host,
-      @Value("${spring.mail.from:}") String fromAddress,
-      @Value("${spring.mail.username:}") String username) {
     this.mailSenderProvider = mailSenderProvider;
-    this.host = host == null ? "" : host.trim();
-    this.fromAddress = fromAddress == null ? "" : fromAddress.trim();
-    this.username = username == null ? "" : username.trim();
+    this.smtpSettings = SmtpSettings.resolve(environment);
   }
 
   public DeliveryResult sendWelcomeEmail(Employee employee) {
