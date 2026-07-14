@@ -70,6 +70,10 @@ function LeaveRequests() {
   const filteredLeaveRequests = useMemo(() => {
     const baseRows = queueFilter === 'approved'
       ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved')
+      : queueFilter === 'recommended'
+        ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'recommended')
+        : queueFilter === 'rejected'
+          ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'rejected')
       : queueFilter === 'pending'
         ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending')
         : queueFilter === 'used'
@@ -96,6 +100,8 @@ function LeaveRequests() {
   const visibleLeaveSummary = useMemo(() => {
     const showingRows = visibleRequests;
     const approvedRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved');
+    const recommendedRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'recommended');
+    const rejectedRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'rejected');
     const pendingRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending');
     const usedRows = approvedRows.filter((request) => normalizeLeaveDays(request.days) > 0);
     const usedDays = usedRows.reduce((total, request) => total + normalizeLeaveDays(request.days), 0);
@@ -103,6 +109,8 @@ function LeaveRequests() {
     return {
       totalCount: showingRows.length,
       usedCount: usedRows.length,
+      recommendedCount: recommendedRows.length,
+      rejectedCount: rejectedRows.length,
       approvedCount: approvedRows.length,
       pendingCount: pendingRows.length,
       usedDays,
@@ -187,19 +195,22 @@ function LeaveRequests() {
         const isRejectComplete = String(row.status || '').trim().toLowerCase() === 'rejected';
         const disableApprove = isReviewing || isActionComplete;
         const disableReject = isReviewing || isRejectComplete;
+        const showApproveAction = !isRejectComplete;
         const showRejectAction = isAdminOrHr && !isActionComplete;
 
         return (
           <div className="table-actions table-actions-inline leave-review-actions">
-            <button
-              type="button"
-              className="leave-approve-action"
-              disabled={disableApprove}
-              onClick={() => updateLeaveStatus(row.id, targetStatus)}
-            >
-              <img src={approveActionIcon} alt="" aria-hidden="true" />
-              {isAdminOrHr ? 'Approve' : 'Recommend'}
-            </button>
+            {showApproveAction && (
+              <button
+                type="button"
+                className="leave-approve-action"
+                disabled={disableApprove}
+                onClick={() => updateLeaveStatus(row.id, targetStatus)}
+              >
+                <img src={approveActionIcon} alt="" aria-hidden="true" />
+                {isAdminOrHr ? 'Approve' : 'Recommend'}
+              </button>
+            )}
             {showRejectAction && (
               <button
                 type="button"
@@ -451,7 +462,7 @@ function LeaveRequests() {
 
         <Section title="Leave Request Queue">
           <section className="leave-queue-summary-grid" aria-label="Visible leave request count">
-            {[
+            {[ 
               {
                 label: 'Showing',
                 value: String(visibleLeaveSummary.totalCount).padStart(2, '0'),
@@ -461,20 +472,20 @@ function LeaveRequests() {
                 filter: 'all',
               },
               {
-                label: 'Used Days',
-                value: String(visibleLeaveSummary.usedCount).padStart(2, '0'),
-                delta: 'Approved leave deducted',
-                tone: 'blue',
-                icon: 'ri-calendar-check-line',
-                filter: 'used',
-              },
-              {
                 label: 'Approved',
                 value: String(visibleLeaveSummary.approvedCount).padStart(2, '0'),
-                delta: 'Already deducted',
+                delta: 'Approved leave requests',
+                tone: 'blue',
+                icon: 'ri-calendar-check-line',
+                filter: 'approved',
+              },
+              {
+                label: 'Rejected',
+                value: String(visibleLeaveSummary.rejectedCount).padStart(2, '0'),
+                delta: 'Not approved requests',
                 tone: 'orange',
                 icon: 'ri-checkbox-circle-line',
-                filter: 'approved',
+                filter: 'rejected',
               },
               {
                 label: 'Pending',
@@ -994,6 +1005,4 @@ function getLeaveBalanceTone(name) {
 }
 
 export default LeaveRequests;
-
-
 

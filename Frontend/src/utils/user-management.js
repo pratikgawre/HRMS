@@ -17,17 +17,34 @@ function sanitizeProfilePicture(value) {
   return normalizedValue;
 }
 
+function normalizeIdentity(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+export function buildSystemUserIdentityKey(user) {
+  return [
+    normalizeIdentity(user?.employeeId),
+    normalizeIdentity(user?.email),
+    normalizeIdentity(user?.employeePhone),
+    normalizeIdentity(user?.employeeName),
+  ].join('|');
+}
+
+export function isDuplicateSystemUser(left, right) {
+  return buildSystemUserIdentityKey(left) === buildSystemUserIdentityKey(right);
+}
+
 export function getUsers() {
   return usersCache;
 }
 
 export function setUsersCache(users) {
-  usersCache = dedupeUsers((Array.isArray(users) ? users : []).map(normalizeUser));
+  usersCache = dedupeSystemUsers((Array.isArray(users) ? users : []).map(normalizeUser));
   window.dispatchEvent(new Event('kavyaUsersChanged'));
 }
 
 export function saveUsers(users) {
-  const uniqueUsers = dedupeUsers(users.map(normalizeUser));
+  const uniqueUsers = dedupeSystemUsers(users.map(normalizeUser));
   usersCache = uniqueUsers;
   const payload = uniqueUsers.map((user) => ({
     id: user.id,
@@ -37,6 +54,8 @@ export function saveUsers(users) {
     role: String(user.role || '').toLowerCase().replaceAll(' ', ''),
     employeeId: user.employeeId,
     employeeName: user.employeeName,
+    employeePhone: user.employeePhone,
+    systemUserIdentityKey: user.systemUserIdentityKey || buildSystemUserIdentityKey(user),
     avatar: user.avatar || '',
     profilePicture: sanitizeProfilePicture(user.profilePicture),
     status: user.status,
@@ -69,7 +88,7 @@ function buildEmployeeLoginEmail(employee) {
   const lastName = String(employee?.lastName || '').trim().toLowerCase().replace(/\s+/g, '');
 
   if (firstName && lastName) {
-    return `${firstName}.${lastName}@kavyainfoweb.com`;
+    return `${firstName}${lastName}@kavyainfoweb.com`;
   }
 
   if (firstName) {
@@ -82,6 +101,7 @@ function buildEmployeeLoginEmail(employee) {
 export function buildUserAccess({ employee, accessRole, status = 'Active', existingUser }) {
   const employeeId = employee.employeeCode || employee.id || existingUser?.employeeId;
   const email = buildEmployeeLoginEmail(employee) || String(existingUser?.email || '').trim().toLowerCase();
+  const employeePhone = String(employee?.mobileNo || employee?.phone || employee?.employeePhone || existingUser?.employeePhone || '').trim();
   const generatedPassword = buildEmployeePassword(employee);
   const existingEmail = String(existingUser?.email || '').trim().toLowerCase();
   const sameLoginEmail = Boolean(existingUser && existingEmail === email);
@@ -93,6 +113,7 @@ export function buildUserAccess({ employee, accessRole, status = 'Active', exist
     employeeId,
     employeeName: employee.displayName || employee.name || existingUser?.employeeName,
     email,
+    employeePhone,
     role: accessRole,
     status,
     permissions: getPermissions(accessRole),
@@ -106,30 +127,36 @@ export function buildUserAccess({ employee, accessRole, status = 'Active', exist
     lastLogin: existingUser?.lastLogin || 'Invite pending',
     twoFactorEnabled: existingUser?.twoFactorEnabled || false,
     twoFactorSecret: existingUser?.twoFactorSecret || '',
+    systemUserIdentityKey: buildSystemUserIdentityKey({
+      employeeId,
+      email,
+      employeePhone,
+      employeeName: employee.displayName || employee.name || existingUser?.employeeName,
+    }),
   };
 }
 
-export function createUserAccess(payload) {
+export async function createUserAccess(payload) {
   const users = getUsers();
-  const duplicate = users.find((user) => user.employeeId === payload.employeeId || user.email === payload.email);
+  const duplicate = users.find((user) => isDuplicateSystemUser(user, payload));
 
   if (duplicate) {
-    return { ok: false, message: 'This employee already has a user access account.' };
+    return { ok: false, message: 'This system user already exists with the same Employee ID, Email and Phone Number.' };
   }
 
   const nextUsers = [payload, ...users];
-  saveUsers(nextUsers);
+  await saveUsers(nextUsers);
   return { ok: true, users: nextUsers, message: 'User access created successfully.' };
 }
 
-export function deleteUserAccess(userId) {
+export async function deleteUserAccess(userId) {
   const users = getUsers();
   const nextUsers = users.filter((user) => user.userId !== userId);
-  saveUsers(nextUsers);
+  await saveUsers(nextUsers);
   return nextUsers;
 }
 
-export function updateUserAccess(userId, patch) {
+export async function updateUserAccess(userId, patch) {
   const users = getUsers();
   const nextUsers = users.map((user) => (
     user.userId === userId || user.id === userId
@@ -142,13 +169,15 @@ export function updateUserAccess(userId, patch) {
       : user
   ));
 
-  saveUsers(nextUsers);
+  await saveUsers(nextUsers);
   return nextUsers;
 }
 
 function normalizeUser(user) {
   const employeeId = String(user.employeeId || '').trim();
   const email = String(user.email || '').trim().toLowerCase();
+  const employeePhone = String(user.employeePhone || '').trim();
+  const employeeName = String(user.employeeName || '').trim();
   const userId = String(user.userId || user.id || `USR-${employeeId || email}`).trim();
   const role = normalizeAccessRole(user.role || 'Employee');
 
@@ -158,6 +187,8 @@ function normalizeUser(user) {
     userId,
     employeeId,
     email,
+    employeePhone,
+    employeeName,
     role,
     status: user.status || 'Active',
     permissions: user.permissions || getPermissions(role),
@@ -165,6 +196,12 @@ function normalizeUser(user) {
     profilePicture: sanitizeProfilePicture(user.profilePicture),
     twoFactorEnabled: Boolean(user.twoFactorEnabled),
     twoFactorSecret: user.twoFactorSecret || '',
+    systemUserIdentityKey: user.systemUserIdentityKey || buildSystemUserIdentityKey({
+      employeeId,
+      email,
+      employeePhone,
+      employeeName,
+    }),
   };
 }
 
@@ -205,6 +242,33 @@ export function dedupeUsers(users) {
   return uniqueUsers;
 }
 
+export function dedupeSystemUsers(users) {
+  const uniqueUsers = [];
+  const identityIndexes = new Map();
+
+  users.forEach((user) => {
+    const normalizedUser = normalizeUser(user);
+    const identityKey = buildSystemUserIdentityKey(normalizedUser);
+    const duplicateIndex = identityIndexes.get(identityKey);
+
+    if (duplicateIndex === undefined) {
+      uniqueUsers.push(normalizedUser);
+      identityIndexes.set(identityKey, uniqueUsers.length - 1);
+      return;
+    }
+
+    const existingUser = uniqueUsers[duplicateIndex];
+    const preferredUser = getPreferredDuplicateUser(existingUser, normalizedUser);
+    if (preferredUser !== existingUser) {
+      uniqueUsers[duplicateIndex] = preferredUser;
+    }
+
+    identityIndexes.set(identityKey, duplicateIndex);
+  });
+
+  return uniqueUsers;
+}
+
 function rememberUserIndexes(index, user, identityIndexes) {
   getUserIdentityKeys(user).forEach((key) => {
     identityIndexes.set(key, index);
@@ -220,6 +284,7 @@ function getPreferredDuplicateUser(currentUser, nextUser) {
     employeeId: currentUser.employeeId || nextUser.employeeId || '',
     email: currentUser.email || nextUser.email || '',
     employeeName: currentUser.employeeName || nextUser.employeeName || '',
+    employeePhone: currentUser.employeePhone || nextUser.employeePhone || '',
     role: currentUser.role || nextUser.role || 'Employee',
     status: currentUser.status || nextUser.status || 'Active',
     permissions: currentUser.permissions || nextUser.permissions || getPermissions(currentUser.role || nextUser.role || 'Employee'),
@@ -261,6 +326,7 @@ function getUserCompletenessScore(user) {
     user.employeeId,
     user.email,
     user.employeeName,
+    user.employeePhone,
     user.department,
     user.designation,
     user.avatar,

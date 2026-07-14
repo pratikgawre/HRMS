@@ -53,6 +53,10 @@ function Tasks() {
   const isTeamLead = role === 'teamLead';
   const canAssignTasks = taskAssignableRoles.includes(role);
   const showTaskActionColumns = canAssignTasks;
+  const visibleTaskTabs = TASK_TABS.filter((tab) => (
+    (!tab.roles || tab.roles.includes(role))
+    && !(role === 'hr' && tab.id === 'status')
+  ));
   const [taskRows, setTaskRows] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -83,10 +87,10 @@ function Tasks() {
       setStatus(nextStatus);
     }
     const nextTab = params.get('tab');
-    if (nextTab && TASK_TABS.some((tab) => tab.id === nextTab && (!tab.roles || tab.roles.includes(role)))) {
+    if (nextTab && visibleTaskTabs.some((tab) => tab.id === nextTab)) {
       setActiveTab(nextTab);
     }
-  }, [location.search]);
+  }, [location.search, role, visibleTaskTabs]);
 
   useEffect(() => {
     let active = true;
@@ -410,6 +414,17 @@ function Tasks() {
       taskListColumns.find((column) => column.key === 'status'),
     ].filter(Boolean)
     : taskListColumns;
+  const taskAssignmentColumns = [
+    taskListColumns.find((column) => column.key === 'owner'),
+    taskListColumns.find((column) => column.key === 'title'),
+    {
+      key: 'due',
+      label: 'Due Date',
+      render: (row) => row.dueDate || row.due || '-',
+    },
+    taskListColumns.find((column) => column.key === 'status'),
+    showTaskActionColumns ? taskListColumns.find((column) => column.key === 'actions') : null,
+  ].filter(Boolean);
   const createTask = async (event) => {
     event.preventDefault();
     const isEditing = Boolean(editingTask);
@@ -525,6 +540,11 @@ function Tasks() {
       return;
     }
 
+    if (role === 'hr') {
+      setMessage('HR can only review task status.');
+      return;
+    }
+
     if (role === 'employee' && !isTaskVisibleToEmployee(selectedTask, currentEmployeeId, employeeIdentity.employee)) {
       setMessage('You can only update your assigned tasks.');
       return;
@@ -568,7 +588,7 @@ function Tasks() {
       )}
       <Section title="Task Workspace">
         <div className="project-tab-strip" role="tablist" aria-label="Task modules">
-          {TASK_TABS.filter((tab) => !tab.roles || tab.roles.includes(role)).map((tab) => (
+          {visibleTaskTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -641,10 +661,6 @@ function Tasks() {
                   <p className="eyebrow">Status Update</p>
                   <h3>Update task progress</h3>
                 </div>
-                <button type="button" className="payroll-primary" onClick={() => setIsStatusModalOpen(true)}>
-                  <i className="ri-loop-left-line" aria-hidden="true" />
-                  Update Status
-                </button>
               </div>
               <DataTable
                 columns={taskColumns}
@@ -676,6 +692,7 @@ function Tasks() {
           task={selectedTask}
           form={form}
           setForm={setForm}
+          canEditStatus={role !== 'hr'}
           onClose={() => {
             setIsStatusModalOpen(false);
             setSelectedTask(null);
@@ -1217,18 +1234,19 @@ function TaskDetailsModal({ task, onClose }) {
   );
 }
 
-function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
+function TaskStatusModal({ task, form, setForm, canEditStatus, onClose, onSubmit }) {
   const statusOptions = taskStatusOptions.filter((item) => item !== 'Approved');
   const handleSubmit = (event) => {
     event?.preventDefault?.();
     onSubmit(event);
   };
+  const title = canEditStatus ? 'Update Task Status' : 'Review Task Status';
 
   return (
     <div className="payroll-modal-backdrop" role="presentation">
-      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Update task status">
+      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label={title}>
         <div className="payroll-modal-head">
-          <h3>Update Task Status</h3>
+          <h3>{title}</h3>
           <button type="button" onClick={onClose} aria-label="Close status modal"><i className="ri-close-line" aria-hidden="true" /></button>
         </div>
 
@@ -1241,12 +1259,16 @@ function TaskStatusModal({ task, form, setForm, onClose, onSubmit }) {
           </div>
           <label className="field">
             <span>Status</span>
-            <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+            <select
+              value={form.status}
+              disabled={!canEditStatus}
+              onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
+            >
               {statusOptions.map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
           <div className="salary-form-actions">
-            <button className="payroll-primary" type="submit">Save Status</button>
+            {canEditStatus && <button className="payroll-primary" type="submit">Save Status</button>}
             <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
           </div>
         </form>

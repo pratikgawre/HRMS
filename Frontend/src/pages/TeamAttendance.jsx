@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
@@ -23,6 +24,44 @@ import { safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { people as fallbackPeople, projects as fallbackProjects } from '../data/dummyData.js';
 
+function TeamAttendanceToast({ toast, onClose }) {
+  if (!toast) {
+    return null;
+  }
+
+  const tone = toast.tone || 'success';
+  const label = toast.label || (tone === 'error' ? 'Warning' : tone === 'notice' ? 'Notice' : 'Success');
+  const iconClassName = tone === 'error'
+    ? 'ri-error-warning-line'
+    : tone === 'notice'
+      ? 'ri-download-2-line'
+      : 'ri-checkbox-circle-fill';
+  const toastMarkup = (
+    <div className={`project-toast is-${tone}`} role="status" aria-live="polite">
+      <span className="project-toast__icon" aria-hidden="true">
+        <i className={iconClassName} />
+      </span>
+      <div className="project-toast__copy">
+        <span>{label}</span>
+        <strong>{toast.text}</strong>
+      </div>
+      <button type="button" className="project-toast__close" onClick={onClose} aria-label="Dismiss notification">
+        <i className="ri-close-line" aria-hidden="true" />
+      </button>
+      <span className="project-toast__accent" aria-hidden="true" />
+    </div>
+  );
+
+  let portalRoot = document.querySelector('.project-toast-portal');
+  if (!portalRoot) {
+    portalRoot = document.createElement('div');
+    portalRoot.className = 'project-toast-portal';
+    document.body.appendChild(portalRoot);
+  }
+
+  return createPortal(toastMarkup, portalRoot);
+}
+
 function TeamAttendance() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const roleLabel = getRoleLabel(role);
@@ -39,7 +78,9 @@ function TeamAttendance() {
   const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(new Date()));
   const [selectedMonth, setSelectedMonth] = useState(() => getMonthInputValue(new Date()));
   const [message, setMessage] = useState('');
+  const [toast, setToast] = useState(null);
   const [editingRow, setEditingRow] = useState(null);
+  const [summaryFocus, setSummaryFocus] = useState('default');
   const [correctForm, setCorrectForm] = useState({
     checkIn: '',
     checkOut: '',
@@ -114,6 +155,42 @@ function TeamAttendance() {
     attendance.filter((row) => teamIds.has(String(row.employeeId || '').trim()))
   ), [attendance, teamIds]);
 
+  const selectedDateLabel = useMemo(() => (
+    new Intl.DateTimeFormat('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(selectedDate))
+  ), [selectedDate]);
+
+  const selectedDateTeamRows = useMemo(() => {
+    const attendanceByEmployeeId = new Map();
+
+    teamRows.forEach((row) => {
+      if (String(row.date || '').trim() === selectedDateLabel) {
+        attendanceByEmployeeId.set(String(row.employeeId || '').trim(), row);
+      }
+    });
+
+    return normalizeEmployees(employees)
+      .filter((employee) => teamIds.has(String(employee.employeeId || '').trim()))
+      .map((employee) => {
+        const employeeId = String(employee.employeeId || '').trim();
+        const matchedRow = attendanceByEmployeeId.get(employeeId);
+
+        return matchedRow || {
+          employee: employee.displayName || employee.name || 'Employee',
+          employeeId,
+          avatar: employee.avatar || getInitials(employee.displayName || employee.name || ''),
+          date: selectedDateLabel,
+          checkIn: '-',
+          checkOut: '-',
+          hours: '-',
+          status: 'Absent',
+        };
+      });
+  }, [employees, selectedDateLabel, teamIds, teamRows]);
+
   const rows = useMemo(() => (
     teamRows
       .filter((row) => {
@@ -133,6 +210,39 @@ function TeamAttendance() {
         employeeId: row.employeeId || row.employeeCode || '-',
       }))
   ), [dateRange, searchText, selectedDate, selectedMonth, status, teamRows]);
+
+  const displayedRows = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    const isPageLevelQuery = query === 'team attendance' || query === 'team-attendance';
+
+    if (summaryFocus === 'team') {
+      return selectedDateTeamRows.filter((row) => (
+        !query
+        || String(row.employee || '').toLowerCase().includes(query)
+        || String(row.employeeId || '').toLowerCase().includes(query)
+        || isPageLevelQuery
+      ));
+    }
+
+    if (summaryFocus === 'status') {
+      return teamRows
+        .filter((row) => String(row.date || '').trim() === selectedDateLabel)
+        .filter((row) => status === 'All' || row.status === status)
+        .filter((row) => (
+          !query
+          || String(row.employee || '').toLowerCase().includes(query)
+          || String(row.employeeId || '').toLowerCase().includes(query)
+          || isPageLevelQuery
+        ))
+        .map((row) => ({
+          ...row,
+          employee: row.employee || row.employeeName || row.name || 'Employee',
+          employeeId: row.employeeId || row.employeeCode || '-',
+        }));
+    }
+
+    return rows;
+  }, [rows, searchText, selectedDateLabel, selectedDateTeamRows, status, summaryFocus, teamRows]);
   const summaryText = role === 'employee'
     ? 'This page is for managers and team leads. Use My Attendance for your own record.'
     : 'Review your team attendance records without mixing them with your personal check-in or check-out.';
@@ -141,9 +251,24 @@ function TeamAttendance() {
   const teamAttendancePath = getTeamAttendancePath(role);
   const myAttendancePath = getMyAttendancePath(role);
   const teamPagePath = getTeamPagePath(role);
-  const cardCount = teamIds.size;
-  const presentCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'present').length;
-  const lateCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'late').length;
+  const cardCount = selectedDateTeamRows.length;
+  const presentCount = teamRows.filter((row) => String(row.date || '').trim() === selectedDateLabel && String(row.status || '').toLowerCase() === 'present').length;
+  const lateCount = teamRows.filter((row) => String(row.date || '').trim() === selectedDateLabel && String(row.status || '').toLowerCase() === 'late').length;
+  const halfDayCount = teamRows.filter((row) => String(row.date || '').trim() === selectedDateLabel && String(row.status || '').toLowerCase() === 'half day').length;
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setToast(null);
+    }, 3500);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [toast]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -152,6 +277,7 @@ function TeamAttendance() {
 
     if (nextStatus && ['All', 'Present', 'Half Day', 'Absent', 'Late', 'Leave'].includes(nextStatus)) {
       setStatus(nextStatus);
+      setSummaryFocus('status');
     }
 
     if (nextRange && ['day', 'last7', 'last15', 'month', 'custom', 'all'].includes(nextRange)) {
@@ -167,7 +293,10 @@ function TeamAttendance() {
       delta: 'Visible in this scope',
       tone: 'teal',
       icon: 'ri-team-line',
-      onClick: () => navigate(teamPagePath),
+      onClick: () => {
+        setStatus('All');
+        setSummaryFocus('team');
+      },
     },
     {
       key: 'present',
@@ -188,6 +317,15 @@ function TeamAttendance() {
       onClick: () => navigate(`${teamAttendancePath}?status=Late`),
     },
     {
+      key: 'half-day',
+      label: 'Half Day',
+      value: String(halfDayCount).padStart(2, '0'),
+      delta: 'Selected date attendance',
+      tone: 'green',
+      icon: 'ri-sun-line',
+      onClick: () => navigate(`${teamAttendancePath}?status=Half%20Day`),
+    },
+    {
       key: 'range',
       label: 'Range',
       value: currentRangeValue,
@@ -200,24 +338,33 @@ function TeamAttendance() {
 
   function downloadCsv() {
     const reportHtml = buildAttendanceWorkbook({
-      title: 'Attendance',
-      subtitle: 'Team attendance export',
+      title: 'List of Logs',
+      subtitle: `${roleLabel} team attendance register`,
       rangeLabel,
       currentRangeValue,
-      rows,
+      dateRange,
+      selectedDate,
+      selectedMonth,
+      rows: displayedRows,
     });
     const blob = new Blob([reportHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
+    const exportStamp = dateRange === 'month' || dateRange === 'custom'
+      ? selectedMonth
+      : (selectedDate || getDateInputValue(new Date()));
     link.href = url;
-    link.download = `attendance-report-${selectedDate || getDateInputValue(new Date())}.xls`;
+    link.download = `attendance-log-${exportStamp}.xls`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    setMessage('Excel sheet download started.');
+    setToast({
+      tone: 'success',
+      label: 'Download started',
+      text: 'Excel sheet download started.',
+    });
   }
-
   function openRecommendDialog(row) {
     setEditingRow(row);
     setCorrectForm({
@@ -241,19 +388,35 @@ function TeamAttendance() {
     const targetDate = String(editingRow.date || '').trim();
     const formattedCheckIn = formatTimeLabel(correctForm.checkIn);
     const formattedCheckOut = formatTimeLabel(correctForm.checkOut);
-    const nextRows = attendance.map((row) => (
-      String(row.employeeId || '').trim() === targetEmployeeId && String(row.date || '').trim() === targetDate
-        ? {
-          ...row,
-          checkIn: formattedCheckIn,
-          checkOut: formattedCheckOut,
-          checkInAt: correctForm.checkIn ? buildTimeStamp(row.date, correctForm.checkIn, row.checkInAt) : row.checkInAt,
-          checkOutAt: correctForm.checkOut ? buildTimeStamp(row.date, correctForm.checkOut, row.checkOutAt) : row.checkOutAt,
-          hours: correctForm.hours || '-',
-          status: correctForm.status || row.status,
-        }
-        : row
-    ));
+    let updated = false;
+    const nextRows = attendance.map((row) => {
+      if (String(row.employeeId || '').trim() !== targetEmployeeId || String(row.date || '').trim() !== targetDate) {
+        return row;
+      }
+
+      updated = true;
+      return {
+        ...row,
+        checkIn: formattedCheckIn,
+        checkOut: formattedCheckOut,
+        checkInAt: correctForm.checkIn ? buildTimeStamp(row.date, correctForm.checkIn, row.checkInAt) : row.checkInAt,
+        checkOutAt: correctForm.checkOut ? buildTimeStamp(row.date, correctForm.checkOut, row.checkOutAt) : row.checkOutAt,
+        hours: correctForm.hours || '-',
+        status: correctForm.status || row.status,
+      };
+    });
+
+    if (!updated) {
+      nextRows.unshift({
+        ...editingRow,
+        checkIn: formattedCheckIn,
+        checkOut: formattedCheckOut,
+        checkInAt: correctForm.checkIn ? buildTimeStamp(targetDate, correctForm.checkIn) : '',
+        checkOutAt: correctForm.checkOut ? buildTimeStamp(targetDate, correctForm.checkOut) : '',
+        hours: correctForm.hours || '-',
+        status: correctForm.status || 'Present',
+      });
+    }
 
     setAttendance(nextRows);
     saveAttendanceRows(nextRows);
@@ -263,6 +426,8 @@ function TeamAttendance() {
 
   return (
     <>
+      <TeamAttendanceToast toast={toast} onClose={() => setToast(null)} />
+
       <div className="attendance-page-stack project-manager-attendance">
         <Hero
           title="Attendance"
@@ -361,7 +526,10 @@ function TeamAttendance() {
               />
             </label>
 
-            <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter attendance status">
+            <select value={status} onChange={(event) => {
+              setStatus(event.target.value);
+              setSummaryFocus('status');
+            }} aria-label="Filter attendance status">
               <option>All</option>
               <option>Present</option>
               <option>Half Day</option>
@@ -398,13 +566,15 @@ function TeamAttendance() {
                       onClick={() => openRecommendDialog(row)}
                     >
                       <i className="ri-edit-line" aria-hidden="true" />
-                      Recommend
+                      Correct Login
                     </button>
                   ),
                 },
-              ]}
-              rows={rows}
-              emptyMessage={`No attendance records found for ${rangeLabel}.`}
+              ]} 
+              rows={displayedRows}
+              emptyMessage={summaryFocus === 'team'
+                ? 'No team members found for the selected lead.'
+                : `No attendance records found for ${rangeLabel}.`}
             />
           </div>
         </Section>
@@ -622,86 +792,389 @@ function buildTimeStamp(dateLabel, timeValue, fallbackIso = '') {
   ).toISOString();
 }
 
-function buildAttendanceWorkbook({ title, subtitle, rangeLabel, currentRangeValue, rows }) {
+function buildAttendanceWorkbook({ title, subtitle, rangeLabel, currentRangeValue, dateRange, selectedDate, selectedMonth, rows }) {
   const escapeHtml = (value) => String(value ?? '-')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
 
-  const summaryTiles = [
-    ['Scope', rangeLabel],
-    ['Range', currentRangeValue],
-    ['Records', String(rows.length).padStart(2, '0')],
-  ].map(([label, value], index) => `
-    <td class="summary-tile tone-${index + 1}">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value)}</strong>
-    </td>
-  `).join('');
+  const dateEntries = getWorkbookDateEntries({ dateRange, selectedDate, selectedMonth, rows });
+  const groupedRows = groupRowsByEmployee(rows);
+  const totalColumns = 2 + dateEntries.length;
+  const printedLabel = new Intl.DateTimeFormat('en-GB').format(new Date());
+  const durationLabel = getWorkbookDurationLabel(dateEntries, rangeLabel);
+  const durationColSpan = Math.max(totalColumns - 1, 1);
+  const dateHeaderCells = dateEntries.map((entry) => `
+            <th class="date-head ${entry.isWeekend ? 'is-weekend' : ''}">${escapeHtml(entry.dayLabel)}</th>
+          `).join('');
+  const weekHeaderCells = dateEntries.map((entry) => `
+            <th class="weekday-head ${entry.isWeekend ? 'is-weekend' : ''}">${escapeHtml(entry.weekdayLabel)}</th>
+          `).join('');
 
-  const tableRows = rows.length > 0
-    ? rows.map((row) => `
-      <tr>
-        <td>${escapeHtml(row.employee)}</td>
-        <td>${escapeHtml(row.employeeId)}</td>
-        <td>${escapeHtml(row.date)}</td>
-        <td>${escapeHtml(row.checkIn)}</td>
-        <td>${escapeHtml(row.checkOut)}</td>
-        <td>${escapeHtml(row.hours)}</td>
-        <td><span class="status-pill">${escapeHtml(row.status)}</span></td>
-      </tr>
-    `).join('')
-    : `<tr><td colspan="7" class="empty-row">No attendance data available.</td></tr>`;
+  const bodyRows = groupedRows.length > 0
+    ? groupedRows.map((employeeRow, index) => {
+      const dateCells = dateEntries.map((entry) => buildWorkbookLogCell({
+        record: employeeRow.recordsByDate.get(entry.key),
+        isWeekend: entry.isWeekend,
+        escapeHtml,
+      })).join('');
+
+      return `
+        <tr>
+          <td class="serial-cell">${index + 1}</td>
+          <td class="name-cell">
+            <strong>${escapeHtml(employeeRow.employee)}</strong>
+            <small>${escapeHtml(employeeRow.employeeId)}</small>
+          </td>
+          ${dateCells}
+        </tr>
+      `;
+    }).join('')
+    : `<tr><td colspan="${totalColumns}" class="empty-row">No attendance data available for ${escapeHtml(rangeLabel)}.</td></tr>`;
 
   return `
     <html>
       <head>
         <meta charset="UTF-8" />
         <style>
-          body { margin: 0; font-family: Aptos, Calibri, Arial, sans-serif; color: #173042; background: #eef7f6; }
+          body { margin: 0; font-family: Aptos, Calibri, Arial, sans-serif; color: #173042; background: #ffffff; }
           table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-          td, th { border: 1px solid #cfe2e0; padding: 10px 12px; font-size: 12px; vertical-align: middle; }
-          .brand { background: linear-gradient(135deg, #0f9f9a, #2d74c4); color: #fff; font-size: 12px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
-          .title { background: linear-gradient(180deg, #ffffff, #f3fbfa); color: #17212f; font-size: 24px; font-weight: 900; }
-          .subtitle { background: #ffffff; color: #5c6c7d; font-size: 13px; line-height: 1.5; }
-          .meta { background: #f8fcfb; color: #54717a; font-weight: 800; }
-          .summary-tile { background: #fff; }
-          .summary-tile span { display: block; color: #6c8293; font-size: 11px; font-weight: 800; text-transform: uppercase; }
-          .summary-tile strong { display: block; margin-top: 4px; font-size: 18px; font-weight: 900; color: #173042; }
-          .tone-1 { border-top: 4px solid #0f9f9a; }
-          .tone-2 { border-top: 4px solid #4e7ae6; }
-          .tone-3 { border-top: 4px solid #f58f28; }
-          .section-title { background: #173042; color: #fff; font-weight: 900; text-transform: uppercase; }
-          .header-row th { background: linear-gradient(180deg, #e2f4f2, #d8eef0); color: #173042; font-weight: 900; text-transform: uppercase; }
-          tr:nth-child(even) td { background: #fbfefe; }
-          .status-pill { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #e8f8f7; color: #0f9f9a; font-weight: 900; }
-          .empty-row { text-align: center; color: #6c8293; font-style: italic; background: #fff; }
-          .footer { background: #eff7f6; color: #6c8293; font-size: 11px; font-weight: 800; }
+          .attendance-log-table { border: 1px solid #5fb35f; }
+          .attendance-log-table col.col-no { width: 52px; }
+          .attendance-log-table col.col-name { width: 180px; }
+          .attendance-log-table col.col-day { width: 86px; }
+          td, th { border: 1px solid #5fb35f; padding: 6px 5px; font-size: 11px; vertical-align: top; }
+          .sheet-brand { background: #eef9ef; color: #0d7a28; font-size: 12px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; text-align: center; }
+          .sheet-title { background: #ffffff; color: #048c1b; font-size: 22px; font-weight: 900; text-align: center; }
+          .sheet-subtitle { background: #f8fff8; color: #4e6b58; font-size: 12px; font-weight: 700; text-align: center; }
+          .sheet-meta-bar { background: #fcfffc; color: #1d7434; font-size: 12px; font-weight: 800; }
+          .sheet-meta-left { text-align: left; }
+          .sheet-meta-right { text-align: right; }
+          .fixed-head { background: #f7fbf8; color: #173042; font-weight: 900; text-align: center; vertical-align: middle; }
+          .date-head { background: #fdfefe; color: #264a35; font-size: 12px; font-weight: 900; text-align: center; vertical-align: middle; }
+          .weekday-head { background: #6c7280; color: #ffffff; font-size: 11px; font-weight: 800; text-align: center; vertical-align: middle; }
+          .date-head.is-weekend, .weekday-head.is-weekend { background: #e8ecef; color: #3f4c57; }
+          .serial-cell { text-align: center; font-weight: 800; vertical-align: middle; }
+          .name-cell { background: #ffffff; }
+          .name-cell strong { display: block; color: #10233a; font-size: 12px; }
+          .name-cell small { display: block; margin-top: 3px; color: #60717f; font-size: 10px; }
+          .log-cell { min-height: 64px; background: #ffffff; vertical-align: top; }
+          .log-cell.weekend { background: #f3f5f6; }
+          .log-cell.status-present { background: #f4fcf6; }
+          .log-cell.status-late { background: #fff7ea; }
+          .log-cell.status-absent { background: #fff1f1; }
+          .log-cell.status-half-day { background: #fff8e6; }
+          .log-cell.status-leave { background: #f4f1ff; }
+          .log-in, .log-out, .log-status, .log-hours, .log-placeholder { display: block; line-height: 1.35; }
+          .log-in { color: #0c7a43; font-weight: 800; }
+          .log-out { color: #1f5bb5; font-weight: 800; margin-top: 2px; }
+          .log-status { margin-top: 4px; color: #5e6676; font-size: 10px; font-weight: 900; text-transform: uppercase; }
+          .log-hours { margin-top: 2px; color: #80531d; font-size: 10px; font-weight: 800; }
+          .log-placeholder { color: #93a0aa; text-align: center; margin-top: 18px; font-weight: 700; }
+          .footer { background: #f7fbf8; color: #5d6d79; font-size: 10px; font-weight: 700; text-align: left; }
+          .empty-row { background: #ffffff; color: #71808d; font-style: italic; text-align: center; }
         </style>
       </head>
       <body>
-        <table>
-          <tr><td colspan="7" class="brand">Kavya HRMS Report</td></tr>
-          <tr><td colspan="7" class="title">${escapeHtml(title)}</td></tr>
-          <tr><td colspan="7" class="subtitle">${escapeHtml(subtitle)}</td></tr>
-          <tr><td colspan="2" class="meta">Exported At</td><td colspan="5" class="meta">${escapeHtml(new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date()))}</td></tr>
-          <tr><td colspan="7">${`<table><tr>${summaryTiles}</tr></table>`}</td></tr>
-          <tr><td colspan="7" class="section-title">Attendance Register</td></tr>
-          <tr class="header-row">
-            <th>Employee</th>
-            <th>ID</th>
-            <th>Date</th>
-            <th>Check In</th>
-            <th>Check Out</th>
-            <th>Hours</th>
-            <th>Status</th>
+        <table class="attendance-log-table">
+          <colgroup>
+            <col class="col-no" />
+            <col class="col-name" />
+            ${dateEntries.map(() => '<col class="col-day" />').join('')}
+          </colgroup>
+          <tr><td colspan="${totalColumns}" class="sheet-brand">Kavya HRMS Attendance Export</td></tr>
+          <tr><td colspan="${totalColumns}" class="sheet-title">${escapeHtml(title)}</td></tr>
+          <tr><td colspan="${totalColumns}" class="sheet-subtitle">${escapeHtml(`${subtitle} | ${currentRangeValue}`)}</td></tr>
+                    <tr>
+            <td colspan="${durationColSpan}" class="sheet-meta-bar sheet-meta-left">Duration: ${escapeHtml(durationLabel)}</td>
+            <td class="sheet-meta-bar sheet-meta-right">Printed: ${escapeHtml(printedLabel)}</td>
           </tr>
-          ${tableRows}
-          <tr><td colspan="7" class="footer">Generated from Kavya HRMS attendance module.</td></tr>
+          <tr>
+            <th rowspan="2" class="fixed-head">No.</th>
+            <th rowspan="2" class="fixed-head">Name</th>
+            ${dateHeaderCells}
+          </tr>
+          <tr>
+            ${weekHeaderCells}
+          </tr>
+          ${bodyRows}
+          <tr><td colspan="${totalColumns}" class="footer">Generated from Kavya HRMS team attendance module with date-wise check-in and check-out logs.</td></tr>
         </table>
       </body>
     </html>
   `;
+}
+
+function getWorkbookDateEntries({ dateRange, selectedDate, selectedMonth, rows }) {
+  if (dateRange === 'day') {
+    const selected = getWorkbookDateFromInput(selectedDate);
+    return buildWorkbookDateRangeEntries(selected, selected);
+  }
+
+  if (dateRange === 'last7' || dateRange === 'last15') {
+    const selected = getWorkbookDateFromInput(selectedDate);
+    const startDate = new Date(selected);
+    startDate.setDate(startDate.getDate() - (dateRange === 'last7' ? 6 : 14));
+    return buildWorkbookDateRangeEntries(startDate, selected);
+  }
+
+  if (dateRange === 'month' || dateRange === 'custom') {
+    const monthDate = getWorkbookMonthFromInput(selectedMonth);
+    const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+    const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+    return buildWorkbookDateRangeEntries(monthStart, monthEnd);
+  }
+
+  const uniqueDates = new Map();
+  rows.forEach((row) => {
+    const date = parseWorkbookAttendanceDate(row.date || row.dateLabel);
+    if (!date) {
+      return;
+    }
+    uniqueDates.set(getWorkbookDateKey(date), date);
+  });
+
+  const sortedDates = [...uniqueDates.values()].sort((first, second) => first.getTime() - second.getTime());
+  if (sortedDates.length === 0) {
+    const fallbackDate = getWorkbookDateFromInput(selectedDate);
+    return buildWorkbookDateRangeEntries(fallbackDate, fallbackDate);
+  }
+
+  return sortedDates.map((date) => createWorkbookDateEntry(date));
+}
+
+function buildWorkbookDateRangeEntries(startDate, endDate) {
+  const entries = [];
+  const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const lastDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+  while (cursor <= lastDate) {
+    entries.push(createWorkbookDateEntry(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return entries;
+}
+
+function createWorkbookDateEntry(date) {
+  const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return {
+    key: getWorkbookDateKey(normalized),
+    dayLabel: String(normalized.getDate()),
+    weekdayLabel: new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(normalized),
+    fullLabel: new Intl.DateTimeFormat('en-GB').format(normalized),
+    isWeekend: normalized.getDay() === 0 || normalized.getDay() === 6,
+  };
+}
+
+function groupRowsByEmployee(rows = []) {
+  const groups = new Map();
+
+  rows.forEach((row) => {
+    const employeeId = String(row.employeeId || row.employeeCode || '-').trim() || '-';
+    const employeeName = String(row.employee || row.employeeName || row.name || 'Employee').trim() || 'Employee';
+    const groupKey = `${employeeId}__${employeeName}`;
+    const rowDate = parseWorkbookAttendanceDate(row.date || row.dateLabel);
+    const dateKey = rowDate ? getWorkbookDateKey(rowDate) : '';
+
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        employee: employeeName,
+        employeeId,
+        recordsByDate: new Map(),
+      });
+    }
+
+    if (!dateKey) {
+      return;
+    }
+
+    const group = groups.get(groupKey);
+    const existing = group.recordsByDate.get(dateKey);
+    group.recordsByDate.set(dateKey, mergeWorkbookRows(existing, row));
+  });
+
+  return [...groups.values()];
+}
+
+function mergeWorkbookRows(existing, incoming) {
+  if (!existing) {
+    return incoming;
+  }
+
+  return {
+    ...existing,
+    ...incoming,
+    checkIn: hasWorkbookValue(incoming.checkIn) ? incoming.checkIn : existing.checkIn,
+    checkOut: hasWorkbookValue(incoming.checkOut) ? incoming.checkOut : existing.checkOut,
+    hours: hasWorkbookValue(incoming.hours) ? incoming.hours : existing.hours,
+    status: hasWorkbookValue(incoming.status) ? incoming.status : existing.status,
+    checkInAt: hasWorkbookValue(incoming.checkInAt) ? incoming.checkInAt : existing.checkInAt,
+    checkOutAt: hasWorkbookValue(incoming.checkOutAt) ? incoming.checkOutAt : existing.checkOutAt,
+  };
+}
+
+function buildWorkbookLogCell({ record, isWeekend, escapeHtml }) {
+  if (!record) {
+    return `<td class="log-cell empty-log ${isWeekend ? 'weekend' : ''}"><span class="log-placeholder">-</span></td>`;
+  }
+
+  const checkIn = normalizeWorkbookTime(record.checkIn);
+  const checkOut = normalizeWorkbookTime(record.checkOut);
+  const status = hasWorkbookValue(record.status) ? String(record.status).trim() : '';
+  const hours = hasWorkbookValue(record.hours) ? String(record.hours).trim() : '';
+  const statusClassName = getWorkbookStatusClass(status);
+
+  const lines = [
+    `<span class="log-in">${escapeHtml(`IN ${checkIn || '--'}`)}</span>`,
+    `<span class="log-out">${escapeHtml(`OUT ${checkOut || '--'}`)}</span>`,
+  ];
+
+  if (status) {
+    lines.push(`<span class="log-status">${escapeHtml(status)}</span>`);
+  }
+
+  if (hours) {
+    lines.push(`<span class="log-hours">${escapeHtml(hours)}</span>`);
+  }
+
+  return `<td class="log-cell ${statusClassName} ${isWeekend ? 'weekend' : ''}">${lines.join('')}</td>`;
+}
+
+function getWorkbookDurationLabel(dateEntries, fallbackLabel) {
+  if (!Array.isArray(dateEntries) || dateEntries.length === 0) {
+    return fallbackLabel;
+  }
+
+  if (dateEntries.length === 1) {
+    return dateEntries[0].fullLabel;
+  }
+
+  return `${dateEntries[0].fullLabel} - ${dateEntries[dateEntries.length - 1].fullLabel}`;
+}
+
+function normalizeWorkbookTime(value) {
+  const text = String(value || '').trim();
+  if (!hasWorkbookValue(text)) {
+    return '';
+  }
+
+  const meridiemMatch = text.match(/^(\d{1,2}:\d{2})\s*([AaPp][Mm])$/);
+  if (meridiemMatch) {
+    return `${meridiemMatch[1]} ${meridiemMatch[2].toUpperCase()}`;
+  }
+
+  const timeMatch = text.match(/^(\d{1,2}:\d{2})$/);
+  if (timeMatch) {
+    return timeMatch[1];
+  }
+
+  return text
+    .replace(/\bam\b/i, 'AM')
+    .replace(/\bpm\b/i, 'PM');
+}
+
+function hasWorkbookValue(value) {
+  const text = String(value || '').trim();
+  return Boolean(text && text !== '-' && text !== '--' && text.toLowerCase() !== 'null' && text.toLowerCase() !== 'undefined');
+}
+
+function getWorkbookStatusClass(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+
+  if (normalized === 'present') {
+    return 'status-present';
+  }
+
+  if (normalized === 'late') {
+    return 'status-late';
+  }
+
+  if (normalized === 'absent') {
+    return 'status-absent';
+  }
+
+  if (normalized === 'leave') {
+    return 'status-leave';
+  }
+
+  if (normalized === 'half day') {
+    return 'status-half-day';
+  }
+
+  return '';
+}
+
+function getWorkbookDateFromInput(value) {
+  const [yearText, monthText, dayText] = String(value || '').split('-');
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+  const day = Number.parseInt(dayText, 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+function getWorkbookMonthFromInput(value) {
+  const [yearText, monthText] = String(value || '').split('-');
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+
+  return new Date(year, month - 1, 1);
+}
+
+function parseWorkbookAttendanceDate(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return null;
+  }
+
+  const match = text.match(/^(\d{1,2})\s([A-Za-z]{3})\s(\d{4})$/);
+  if (match) {
+    const monthIndex = getWorkbookMonthIndex(match[2]);
+    if (monthIndex >= 0) {
+      return new Date(Number.parseInt(match[3], 10), monthIndex, Number.parseInt(match[1], 10));
+    }
+  }
+
+  const fallback = new Date(text);
+  if (Number.isNaN(fallback.getTime())) {
+    return null;
+  }
+
+  return new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
+}
+
+function getWorkbookMonthIndex(shortMonth) {
+  const monthMap = {
+    jan: 0,
+    feb: 1,
+    mar: 2,
+    apr: 3,
+    may: 4,
+    jun: 5,
+    jul: 6,
+    aug: 7,
+    sep: 8,
+    oct: 9,
+    nov: 10,
+    dec: 11,
+  };
+
+  return monthMap[String(shortMonth || '').slice(0, 3).toLowerCase()] ?? -1;
+}
+
+function getWorkbookDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 export default TeamAttendance;

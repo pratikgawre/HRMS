@@ -515,13 +515,33 @@ a:focus-visible {
   align-items: center;
   justify-content: center;
   min-height: 100%;
-  padding: 0 0.1rem;
+  padding: 0;
+  border-radius: 999px;
   color: #9a9ab0;
   background: transparent;
-  font-size: 0.66rem;
+  font-size: 1rem;
   font-weight: 900;
-  text-transform: uppercase;
   white-space: nowrap;
+}
+
+.password-visibility-toggle {
+  width: 2.2rem;
+  height: 2.2rem;
+  min-height: 2.2rem;
+  color: #8b85b5;
+  background: rgba(109, 91, 208, 0.08);
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.password-visibility-toggle:hover:not(:disabled) {
+  color: #6548ef;
+  background: rgba(109, 91, 208, 0.16);
+  transform: translateY(-1px);
+}
+
+.password-visibility-toggle i {
+  color: inherit;
+  font-size: 1rem;
 }
 
 .login-error {
@@ -10461,6 +10481,50 @@ img.profile-avatar.large {
 .login-panel--reset {
   width: min(100%, 430px);
   gap: 1rem;
+}
+
+.reset-page .login-card {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  -ms-overflow-style: auto;
+  scrollbar-gutter: stable;
+}
+
+.reset-page .login-panel--reset {
+  max-height: calc(100dvh - 4rem);
+  min-height: 0;
+  overflow-y: scroll;
+  padding-right: 0.35rem;
+  scrollbar-width: thin;
+  -ms-overflow-style: auto;
+  scrollbar-gutter: stable both-edges;
+}
+
+.reset-page .login-hint {
+  display: block;
+  margin: -0.2rem 0 0.15rem;
+  color: #71728a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.reset-page .login-card::-webkit-scrollbar,
+.reset-page .login-panel--reset::-webkit-scrollbar {
+  display: block;
+  width: 8px;
+}
+
+.reset-page .login-card::-webkit-scrollbar-thumb,
+.reset-page .login-panel--reset::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(101, 72, 239, 0.38);
+}
+
+.reset-page .login-card::-webkit-scrollbar-track,
+.reset-page .login-panel--reset::-webkit-scrollbar-track {
+  background: rgba(216, 213, 232, 0.45);
 }
 
 .reset-token-card {

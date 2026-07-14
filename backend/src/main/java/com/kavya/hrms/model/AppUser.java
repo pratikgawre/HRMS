@@ -1,6 +1,7 @@
 package com.kavya.hrms.model;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "app_users")
@@ -24,7 +25,12 @@ public class AppUser {
   private String passwordResetToken;
   private String passwordResetTokenExpiresAt;
   private Boolean mustChangePassword;
-public String getId() { return id; }
+
+  @Indexed(unique = true, sparse = true)
+  private String systemUserIdentityKey;
+  private String employeePhone;
+
+  public String getId() { return id; }
   public void setId(String id) { this.id = id; }
   public String getUserId() { return userId; }
   public void setUserId(String userId) { this.userId = userId; }
@@ -60,4 +66,8 @@ public String getId() { return id; }
   public void setPasswordResetTokenExpiresAt(String passwordResetTokenExpiresAt) { this.passwordResetTokenExpiresAt = passwordResetTokenExpiresAt; }
   public Boolean getMustChangePassword() { return mustChangePassword; }
   public void setMustChangePassword(Boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
+  public String getSystemUserIdentityKey() { return systemUserIdentityKey; }
+  public void setSystemUserIdentityKey(String systemUserIdentityKey) { this.systemUserIdentityKey = systemUserIdentityKey; }
+  public String getEmployeePhone() { return employeePhone; }
+  public void setEmployeePhone(String employeePhone) { this.employeePhone = employeePhone; }
 }

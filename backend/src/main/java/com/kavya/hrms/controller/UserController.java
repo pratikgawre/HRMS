@@ -7,7 +7,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,11 +17,14 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/users")
 @SuppressWarnings("all")
 public class UserController {
+  private static final String DUPLICATE_MESSAGE = "This system user already exists with the same Employee ID, Email and Phone Number.";
+
   private final AppUserRepository appUserRepository;
 
   public UserController(AppUserRepository appUserRepository) {
@@ -28,7 +33,7 @@ public class UserController {
 
   @GetMapping
   public List<AppUser> list() {
-    return new ArrayList<>(appUserRepository.findAll());
+    return deduplicateUsers(appUserRepository.findAll());
   }
 
   @DeleteMapping("/{userId}")
@@ -45,11 +50,28 @@ public class UserController {
 
   @PostMapping("/bulk")
   public List<AppUser> bulkSave(@RequestBody List<AppUser> users) {
-    List<AppUser> safeUsers = safeList(users);
-    Map<String, AppUser> existingUsersByIdentity = buildExistingUserMap(appUserRepository.findAll());
-    List<AppUser> deduplicatedUsers = new ArrayList<>(deduplicateUsers(safeUsers));
-    deduplicatedUsers.replaceAll(user -> applyStoredSecurityState(user, existingUsersByIdentity));
-    return appUserRepository.saveAll(deduplicatedUsers);
+    List<AppUser> normalizedUsers = deduplicateUsers(safeList(users));
+    List<AppUser> existingUsers = deduplicateUsers(appUserRepository.findAll());
+    Map<String, AppUser> existingUsersByIdentity = buildExistingUserMap(existingUsers);
+    List<AppUser> resolvedUsers = new ArrayList<>();
+
+    for (AppUser user : normalizedUsers) {
+      AppUser normalizedUser = normalizeUser(user);
+      AppUser existing = findExistingUser(normalizedUser, existingUsersByIdentity);
+      if (existing != null && !sharesPersistenceIdentity(existing, normalizedUser)) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT, DUPLICATE_MESSAGE);
+      }
+
+      AppUser resolved = applyStoredSecurityState(normalizedUser, existingUsersByIdentity);
+      if (existing != null) {
+        resolved.setId(firstNonBlank(existing.getId(), resolved.getId()));
+        resolved.setUserId(firstNonBlank(existing.getUserId(), resolved.getUserId()));
+      }
+      resolved.setSystemUserIdentityKey(systemUserIdentityKey(resolved));
+      resolvedUsers.add(resolved);
+    }
+
+    return appUserRepository.saveAll(resolvedUsers);
   }
 
   private List<AppUser> deduplicateUsers(List<AppUser> users) {
@@ -62,18 +84,19 @@ public class UserController {
       }
 
       AppUser normalized = normalizeUser(user);
-      Integer duplicateIndex = findDuplicateIndex(normalized, identityIndexes);
+      String identityKey = systemUserIdentityKey(normalized);
+      Integer duplicateIndex = identityIndexes.get(identityKey);
 
       if (duplicateIndex == null) {
         uniqueUsers.add(normalized);
-        rememberUserIndexes(uniqueUsers.size() - 1, normalized, identityIndexes);
+        rememberUserIndex(uniqueUsers.size() - 1, normalized, identityIndexes);
         continue;
       }
 
       AppUser existing = uniqueUsers.get(duplicateIndex);
       AppUser preferred = mergeUsers(existing, normalized);
       uniqueUsers.set(duplicateIndex, preferred);
-      rememberUserIndexes(duplicateIndex, preferred, identityIndexes);
+      rememberUserIndex(duplicateIndex, preferred, identityIndexes);
     }
 
     return uniqueUsers;
@@ -92,6 +115,7 @@ public class UserController {
     normalized.setIsActive(user.getIsActive());
     normalized.setEmployeeId(trimToNull(user.getEmployeeId()));
     normalized.setEmployeeName(trimToNull(user.getEmployeeName()));
+    normalized.setEmployeePhone(trimToNull(user.getEmployeePhone()));
     normalized.setAvatar(trimToNull(user.getAvatar()));
     normalized.setProfilePicture(trimToNull(user.getProfilePicture()));
     normalized.setStatus(trimToNull(user.getStatus()));
@@ -99,6 +123,7 @@ public class UserController {
     normalized.setPasswordResetToken(trimToNull(user.getPasswordResetToken()));
     normalized.setPasswordResetTokenExpiresAt(trimToNull(user.getPasswordResetTokenExpiresAt()));
     normalized.setMustChangePassword(user.getMustChangePassword());
+    normalized.setSystemUserIdentityKey(systemUserIdentityKey(normalized));
     return normalized;
   }
 
@@ -116,6 +141,7 @@ public class UserController {
     merged.setIsActive(Boolean.TRUE.equals(current.getIsActive()) || Boolean.TRUE.equals(next.getIsActive()));
     merged.setEmployeeId(firstNonBlank(current.getEmployeeId(), next.getEmployeeId()));
     merged.setEmployeeName(firstNonBlank(current.getEmployeeName(), next.getEmployeeName()));
+    merged.setEmployeePhone(firstNonBlank(current.getEmployeePhone(), next.getEmployeePhone()));
     merged.setAvatar(firstNonBlank(current.getAvatar(), next.getAvatar()));
     merged.setProfilePicture(firstNonBlank(current.getProfilePicture(), next.getProfilePicture()));
     merged.setStatus(firstNonBlank(current.getStatus(), next.getStatus()));
@@ -123,6 +149,7 @@ public class UserController {
     merged.setPasswordResetToken(firstNonBlank(current.getPasswordResetToken(), next.getPasswordResetToken()));
     merged.setPasswordResetTokenExpiresAt(firstNonBlank(current.getPasswordResetTokenExpiresAt(), next.getPasswordResetTokenExpiresAt()));
     merged.setMustChangePassword(Boolean.TRUE.equals(current.getMustChangePassword()) || Boolean.TRUE.equals(next.getMustChangePassword()));
+    merged.setSystemUserIdentityKey(systemUserIdentityKey(merged));
     return merged;
   }
 
@@ -133,9 +160,7 @@ public class UserController {
         continue;
       }
 
-      for (String key : getUserIdentityKeys(user)) {
-        existingUsersByIdentity.putIfAbsent(key, user);
-      }
+      existingUsersByIdentity.putIfAbsent(systemUserIdentityKey(user), user);
     }
     return existingUsersByIdentity;
   }
@@ -161,58 +186,50 @@ public class UserController {
     }
 
     user.setMustChangePassword(Boolean.TRUE.equals(existing.getMustChangePassword()));
+    user.setEmployeePhone(firstNonBlank(user.getEmployeePhone(), existing.getEmployeePhone()));
+    user.setSystemUserIdentityKey(systemUserIdentityKey(user));
     return user;
   }
 
   @Nullable
   private AppUser findExistingUser(AppUser user, Map<String, AppUser> existingUsersByIdentity) {
-    for (String key : getUserIdentityKeys(user)) {
-      AppUser existing = existingUsersByIdentity.get(key);
-      if (existing != null) {
-        return existing;
-      }
-    }
-
-    return null;
+    return existingUsersByIdentity.get(systemUserIdentityKey(user));
   }
 
-  @Nullable
-  private Integer findDuplicateIndex(AppUser user, Map<String, Integer> identityIndexes) {
-    for (String key : getUserIdentityKeys(user)) {
-      Integer duplicateIndex = identityIndexes.get(key);
-      if (duplicateIndex != null) {
-        return duplicateIndex;
-      }
-    }
-
-    return null;
+  private void rememberUserIndex(int index, AppUser user, Map<String, Integer> identityIndexes) {
+    identityIndexes.put(systemUserIdentityKey(user), index);
   }
 
-  private void rememberUserIndexes(int index, AppUser user, Map<String, Integer> identityIndexes) {
-    for (String key : getUserIdentityKeys(user)) {
-      identityIndexes.put(key, index);
-    }
+  private String systemUserIdentityKey(AppUser user) {
+    return String.join("|",
+        normalizeIdentity(user == null ? null : user.getEmployeeId()),
+        normalizeIdentity(user == null ? null : user.getEmail()),
+        normalizeIdentity(user == null ? null : user.getEmployeePhone()),
+        normalizeIdentity(user == null ? null : user.getEmployeeName()));
   }
 
-  private List<String> getUserIdentityKeys(AppUser user) {
-    List<String> keys = new ArrayList<>();
+  private boolean sharesPersistenceIdentity(AppUser existing, AppUser incoming) {
+    Set<String> existingKeys = buildPersistenceKeys(existing);
+    Set<String> incomingKeys = buildPersistenceKeys(incoming);
+    return existingKeys.stream().anyMatch(incomingKeys::contains);
+  }
 
-    addIdentityKey(keys, user.getUserId());
-    addIdentityKey(keys, user.getEmployeeId());
-    addIdentityKey(keys, user.getEmail());
-
+  private Set<String> buildPersistenceKeys(AppUser user) {
+    Set<String> keys = new java.util.LinkedHashSet<>();
+    addPersistenceKey(keys, user == null ? null : user.getId());
+    addPersistenceKey(keys, user == null ? null : user.getUserId());
     return keys;
   }
 
-  private void addIdentityKey(List<String> keys, String value) {
-    String normalized = lower(trimToNull(value));
-    if (normalized != null && !keys.contains(normalized)) {
+  private void addPersistenceKey(Set<String> keys, String value) {
+    String normalized = normalizeIdentity(value);
+    if (normalized != null && !normalized.isBlank()) {
       keys.add(normalized);
     }
   }
 
   private String buildFallbackUserId(AppUser user) {
-    return firstNonBlank(user.getEmployeeId(), user.getEmail(), "USR-" + System.currentTimeMillis());
+    return firstNonBlank(user == null ? null : user.getEmployeeId(), user == null ? null : user.getEmail(), "USR-" + System.currentTimeMillis());
   }
 
   @Nullable
@@ -228,6 +245,11 @@ public class UserController {
   @Nullable
   private String lower(String value) {
     return value == null ? null : value.toLowerCase(Locale.ROOT);
+  }
+
+  private String normalizeIdentity(String value) {
+    String trimmed = trimToNull(value);
+    return trimmed == null ? "" : trimmed.toLowerCase(Locale.ROOT);
   }
 
   @Nullable

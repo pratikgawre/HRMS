@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kavya.hrms.model.Asset;
 import com.kavya.hrms.model.AssetAssignment;
+import com.kavya.hrms.model.Employee;
 import com.kavya.hrms.repository.AssetAssignmentRepository;
 import com.kavya.hrms.repository.AssetRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
@@ -233,7 +234,10 @@ public class AssetController {
     dueDate = firstNonBlank(dueDate, returnDate);
     String assignedToEmployeeId = firstNonBlank(asset.getAssignedToEmployeeId(),
         resolveEmployeeId(asset.getAssignedTo()));
-    String assignedTo = firstNonBlank(asset.getAssignedTo(), resolveEmployeeName(assignedToEmployeeId));
+    String assignedTo = firstNonBlank(
+        resolveEmployeeName(assignedToEmployeeId),
+        resolveEmployeeName(asset.getAssignedTo()),
+        asset.getAssignedTo());
 
     asset.setCurrentDate(formatDisplayDate(currentDate));
     asset.setDueDate(formatDisplayDate(dueDate));
@@ -266,21 +270,57 @@ public class AssetController {
 
     return employeeRepository.findAll().stream()
         .filter(employee -> matchesEmployee(employee, normalizedEmployeeId))
-        .map(employee -> firstNonBlank(employee.getDisplayName(), employee.getName(), normalizedEmployeeId))
+        .map(this::buildEmployeeDisplayName)
+        .filter(name -> !name.isBlank())
         .findFirst()
         .orElse(normalizedEmployeeId);
   }
 
-  private boolean matchesEmployee(com.kavya.hrms.model.Employee employee, String value) {
+  private boolean matchesEmployee(Employee employee, String value) {
     if (employee == null || value == null || value.isBlank()) {
       return false;
     }
 
-    return value.equals(employee.getEmployeeCode())
-        || value.equals(employee.getEmployeeId())
-        || value.equals(employee.getId())
-        || value.equalsIgnoreCase(Optional.ofNullable(employee.getDisplayName()).orElse(""))
-        || value.equalsIgnoreCase(Optional.ofNullable(employee.getName()).orElse(""));
+    String normalizedValue = normalize(value).toLowerCase(Locale.ROOT);
+    return normalizedValue.equals(normalize(employee.getEmployeeCode()).toLowerCase(Locale.ROOT))
+        || normalizedValue.equals(normalize(employee.getEmployeeId()).toLowerCase(Locale.ROOT))
+        || normalizedValue.equals(normalize(employee.getId()).toLowerCase(Locale.ROOT))
+        || normalizedValue.equals(normalize(employee.getUserId()).toLowerCase(Locale.ROOT))
+        || normalizedValue.equals(normalize(employee.getEmail()).toLowerCase(Locale.ROOT))
+        || normalizedValue.equals(normalize(employee.getDisplayName()).toLowerCase(Locale.ROOT))
+        || normalizedValue.equals(normalize(employee.getName()).toLowerCase(Locale.ROOT))
+        || normalizedValue.equals(normalize(buildEmployeeDisplayName(employee)).toLowerCase(Locale.ROOT));
+  }
+
+  private String buildEmployeeDisplayName(Employee employee) {
+    if (employee == null) {
+      return "";
+    }
+
+    return firstNonBlank(
+        employee.getDisplayName(),
+        employee.getName(),
+        joinNonBlank(employee.getFirstName(), employee.getMiddleName(), employee.getLastName()));
+  }
+
+  private String joinNonBlank(String... values) {
+    if (values == null) {
+      return "";
+    }
+
+    StringBuilder builder = new StringBuilder();
+    for (String value : values) {
+      String normalized = normalize(value);
+      if (normalized.isBlank()) {
+        continue;
+      }
+      if (builder.length() > 0) {
+        builder.append(' ');
+      }
+      builder.append(normalized);
+    }
+
+    return builder.toString();
   }
 
   private String firstNonBlank(String... values) {

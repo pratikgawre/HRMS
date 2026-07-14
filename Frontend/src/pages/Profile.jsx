@@ -5,6 +5,7 @@ import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import { people } from '../data/dummyData.js';
 import { getCurrentEmployeeIdentity, getStoredEmployees, saveStoredEmployees, setEmployeesCache, upsertEmployeeLogin } from '../utils/employeeStorage.js';
+import { getEmployeeDuplicateCheck } from '../utils/employee-duplicate.js';
 import { getUsers, saveUsers, setUsersCache } from '../utils/user-management.js';
 import { normalizeAccessRole } from '../utils/role-access.js';
 import { getSessionValue, setSessionValue } from '../utils/appSession.js';
@@ -519,6 +520,15 @@ function Profile() {
       twoFactorEnabled: Boolean(form.twoFactorEnabled),
       twoFactorSecret: String(form.twoFactorSecret || '').trim(),
     };
+
+    const duplicateCheck = getEmployeeDuplicateCheck(nextEmployee, employees, {
+      excludeEmployeeId: employee.employeeCode || employee.employeeId || employee.id,
+    });
+    if (duplicateCheck.message) {
+      setStatusMessage(duplicateCheck.message);
+      showPopup(duplicateCheck.message, 'error');
+      return;
+    }
 
     const nextEmployees = upsertCurrentEmployee(employees, identity, nextEmployee);
     const currentAccessUser = users.find((user) => {

@@ -383,6 +383,9 @@ export function Hero({ title, copy }) {
 
   const exportReport = () => {
     const { metrics, tables, controls } = getPageSnapshot();
+    const role = getSessionValue('kavyaRole') || 'employee';
+    const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
+    const exportControls = shouldHideFormFields ? [] : controls;
     const escapeCell = (cell) => String(cell || '-')
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
@@ -407,12 +410,12 @@ export function Hero({ title, copy }) {
         ${bodyRows}
       `;
     }).join('');
-    const controlsRows = controls.length
+    const controlsRows = exportControls.length
       ? `
         <tr><td colspan="8" class="section-gap"></td></tr>
         <tr><td colspan="8" class="section-title">Visible Form Fields</td></tr>
         <tr><th>Field</th><th colspan="7">Value</th></tr>
-        ${controls.map((item) => `<tr><td>${escapeCell(item.label)}</td><td colspan="7">${escapeCell(item.value)}</td></tr>`).join('')}
+        ${exportControls.map((item) => `<tr><td>${escapeCell(item.label)}</td><td colspan="7">${escapeCell(item.value)}</td></tr>`).join('')}
       `
       : '';
     const excelHtml = `
