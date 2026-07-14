@@ -16,15 +16,6 @@ import {
   getSelectableTeamLeadProjects,
 } from '../utils/teamLeadAssignments.js';
 
-export const taskColumns = [
-  { key: 'id', label: 'Task ID' },
-  { key: 'title', label: 'Task' },
-  { key: 'owner', label: 'Assignee' },
-  { key: 'priority', label: 'Priority' },
-  { key: 'due', label: 'Due' },
-  { key: 'status', label: 'Status' },
-];
-
 export const employeeTaskColumns = [
   { key: 'id', label: 'Task ID' },
   { key: 'title', label: 'Task Title' },
@@ -180,6 +171,17 @@ function Tasks() {
       ? teamLeadAssigneeOptions
       : employees.filter((employee) => !isAdminEmployee(employee))
   ), [employees, isTeamLead, teamLeadAssigneeOptions]);
+  const employeeIdByName = useMemo(() => {
+    const map = new Map();
+    employees.forEach((employee) => {
+      const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim();
+      const employeeName = String(employee.displayName || employee.name || employee.employeeName || '').trim().toLowerCase();
+      if (employeeId && employeeName) {
+        map.set(employeeName, employeeId);
+      }
+    });
+    return map;
+  }, [employees]);
 
   const filteredRows = useMemo(() => {
     let rows = [...taskRows];
@@ -658,7 +660,7 @@ function Tasks() {
                 </button>
               </div>
               <DataTable
-                columns={taskColumns}
+                columns={hrStatusUpdateColumns}
                 rows={statusUpdateTasks}
                 emptyMessage="No tasks available."
                 onRowClick={(task) => openTaskStatusModal(task)}
