@@ -19,13 +19,9 @@ public class PasswordResetEmailService {
 
   public PasswordResetEmailService(
       ObjectProvider<JavaMailSender> mailSenderProvider,
-      @Value("${spring.mail.host:}") String host,
-      @Value("${spring.mail.from:}") String fromAddress,
-      @Value("${spring.mail.username:}") String username) {
+      Environment environment) {
     this.mailSenderProvider = mailSenderProvider;
-    this.host = host == null ? "" : host.trim();
-    this.fromAddress = fromAddress == null ? "" : fromAddress.trim();
-    this.username = username == null ? "" : username.trim();
+    this.smtpSettings = SmtpSettings.resolve(environment);
   }
 
   public DeliveryResult sendResetCode(AppUser user, String resetToken, String expiresAt) {
