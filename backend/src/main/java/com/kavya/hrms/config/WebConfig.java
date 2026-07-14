@@ -2,6 +2,8 @@ package com.kavya.hrms.config;
 
 import com.kavya.hrms.repository.AuthSessionRepository;
 import java.nio.file.Paths;
+import java.util.Arrays;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
@@ -14,15 +16,23 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @SuppressWarnings("all")
 public class WebConfig implements WebMvcConfigurer {
   private final AuthSessionRepository authSessionRepository;
+  private final String[] allowedOriginPatterns;
 
-  public WebConfig(@Nullable AuthSessionRepository authSessionRepository) {
+  public WebConfig(
+      @Nullable AuthSessionRepository authSessionRepository,
+      @Value("${app.cors.allowed-origin-patterns:http://127.0.0.1:*,http://localhost:*}")
+      String allowedOriginPatterns) {
     this.authSessionRepository = authSessionRepository;
+    this.allowedOriginPatterns = Arrays.stream(allowedOriginPatterns.split(","))
+        .map(String::trim)
+        .filter(pattern -> !pattern.isEmpty())
+        .toArray(String[]::new);
   }
 
   @Override
   public void addCorsMappings(@NonNull CorsRegistry registry) {
     registry.addMapping("/api/**")
-        .allowedOriginPatterns("http://127.0.0.1:*", "http://localhost:*")
+        .allowedOriginPatterns(allowedOriginPatterns)
         .allowedMethods("*")
         .allowedHeaders("*");
   }
