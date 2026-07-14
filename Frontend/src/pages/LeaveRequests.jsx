@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
@@ -18,8 +19,10 @@ const approveActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/20
 const rejectActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%23d94d63" stroke-width="2.4"/%3E%3Cpath d="M8.75 8.75l6.5 6.5M15.25 8.75l-6.5 6.5" stroke="%23d94d63" stroke-width="2.4" stroke-linecap="round"/%3E%3C/svg%3E';
 
 function LeaveRequests() {
+  const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isAdminOrHr = role === 'admin' || role === 'hr';
+  const isProjectManagerRoute = location.pathname.startsWith('/project-manager/');
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
   const canReviewRequests = isAdminOrHr || role === 'teamLead' || role === 'projectManager';
@@ -56,7 +59,18 @@ function LeaveRequests() {
   }, [leaveTypeOptions]);
 
   const visibleRequests = useMemo(() => requests.filter((request) => {
-    if (role === 'teamLead' || role === 'projectManager') {
+    if (role === 'projectManager') {
+      const requestOwnerRole = String(request.ownerRole || '').trim().toLowerCase().replace(/\s+/g, '');
+      const currentEmployeeId = String(currentEmployee.employeeId || '').trim();
+      const currentEmployeeName = String(currentEmployee.employee || '').trim().toLowerCase();
+      const requestEmployeeId = String(request.employeeId || '').trim();
+      const requestEmployeeName = String(request.employee || '').trim().toLowerCase();
+      return requestOwnerRole === 'projectmanager'
+        || requestEmployeeId === currentEmployeeId
+        || requestEmployeeName === currentEmployeeName;
+    }
+
+    if (role === 'teamLead') {
       return teamLeadMemberIds.includes(request.employeeId);
     }
 
@@ -185,9 +199,11 @@ function LeaveRequests() {
         const isReviewing = reviewingRequestIds.has(row.id);
         const isActionComplete = String(row.status || '').trim().toLowerCase() === targetStatus.toLowerCase();
         const isRejectComplete = String(row.status || '').trim().toLowerCase() === 'rejected';
+        const isPending = String(row.status || '').trim().toLowerCase() === 'pending';
+        const shouldDisableRecommend = !isAdminOrHr && isProjectManagerRoute && !isPending;
         const disableApprove = isReviewing || isActionComplete;
         const disableReject = isReviewing || isRejectComplete;
-        const showApproveAction = !isRejectComplete;
+        const showApproveAction = isProjectManagerRoute ? true : !isRejectComplete;
         const showRejectAction = isAdminOrHr && !isActionComplete;
 
         return (
@@ -196,7 +212,7 @@ function LeaveRequests() {
               <button
                 type="button"
                 className="leave-approve-action"
-                disabled={disableApprove}
+                disabled={disableApprove || shouldDisableRecommend}
                 onClick={() => updateLeaveStatus(row.id, targetStatus)}
               >
                 <img src={approveActionIcon} alt="" aria-hidden="true" />
@@ -997,6 +1013,3 @@ function getLeaveBalanceTone(name) {
 }
 
 export default LeaveRequests;
-
-
-

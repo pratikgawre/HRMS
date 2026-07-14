@@ -654,10 +654,6 @@ function Tasks() {
                   <p className="eyebrow">Status Update</p>
                   <h3>Update task progress</h3>
                 </div>
-                <button type="button" className="payroll-primary" onClick={() => setIsStatusModalOpen(true)}>
-                  <i className="ri-loop-left-line" aria-hidden="true" />
-                  Update Status
-                </button>
               </div>
               <DataTable
                 columns={hrStatusUpdateColumns}

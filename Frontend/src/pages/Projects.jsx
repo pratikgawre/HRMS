@@ -137,12 +137,18 @@ function Projects() {
   }, [canManage, location.search]);
 
   useEffect(() => {
-    setProjectForm((current) => ({
-      ...current,
-      manager: current.manager || managerName,
-      managerId: current.managerId || managerId,
-    }));
-  }, [managerId, managerName]);
+    setProjectForm((current) => (
+      editingProjectId
+        ? current
+        : {
+          ...current,
+          manager: current.manager || '',
+          managerId: current.managerId || '',
+          teamLeadId: current.teamLeadId || '',
+          teamLeadName: current.teamLeadName || '',
+        }
+    ));
+  }, [editingProjectId]);
 
   useEffect(() => () => {
     clearDeleteUndoTimer();
@@ -279,10 +285,12 @@ function Projects() {
     setProgressDraft(String(parseProgressValue(selectedProject.progress)));
     setMilestoneDraft(selectedProject.milestone || '');
     setStatusDraft(selectedProject.status || 'Planning');
-    if (!isTeamDraftDirty) {
+    if (editingProjectId && !isTeamDraftDirty) {
       setSelectedTeamMembers(Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers : []);
+    } else if (!editingProjectId) {
+      setSelectedTeamMembers([]);
     }
-  }, [isTeamDraftDirty, selectedProject]);
+  }, [editingProjectId, isTeamDraftDirty, selectedProject]);
 
   const projectStats = useMemo(() => [
     {
@@ -1617,8 +1625,8 @@ function createEmptyProjectForm(managerName, managerId) {
     id: '',
     name: '',
     description: '',
-    manager: managerName,
-    managerId,
+    manager: '',
+    managerId: '',
     teamLeadId: '',
     teamLeadName: '',
     teamLeadDesignation: 'Team Lead',
