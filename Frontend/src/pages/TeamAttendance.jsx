@@ -326,7 +326,6 @@ function TeamAttendance() {
     const blob = new Blob([reportHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    const exportStamp = selectedMonth || selectedDate || getDateInputValue(new Date());
     const exportStamp = dateRange === 'month' || dateRange === 'custom'
       ? selectedMonth
       : (selectedDate || getDateInputValue(new Date()));
@@ -1141,3 +1140,5 @@ function getWorkbookDateKey(date) {
 }
 
 export default TeamAttendance;
+
+

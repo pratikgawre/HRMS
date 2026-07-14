@@ -1,4 +1,5 @@
 import { apiRequest } from './api.js';
+import { normalizeBackendAssetUrl } from './runtime-config.js';
 import { getInitials, getUsers, saveUsers } from './user-management.js';
 import { getPermissions, normalizeAccessRole } from './role-access.js';
 import { getSessionValue, setSessionValue } from './appSession.js';
@@ -111,7 +112,7 @@ function sanitizeProfilePicture(value) {
     return '';
   }
 
-  return normalizedValue;
+  return normalizeBackendAssetUrl(normalizedValue);
 }
 
 const fallbackEmployee = {
@@ -270,3 +271,4 @@ export function getCurrentEmployeeIdentity() {
     email: getSessionValue('kavyaUserEmail') || fallbackEmployee.email,
   };
 }
+

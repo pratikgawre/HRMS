@@ -1,6 +1,7 @@
+import { API_BASE, normalizeBackendAssetUrl } from './runtime-config.js';
+
 const TOKEN_STORAGE_KEY = 'kavyaAuthToken';
 const SESSION_STORAGE_KEY = 'kavyaSessionData';
-const API_BASE = '/api';
 
 let session = {};
 const storage = typeof window !== 'undefined' ? window.sessionStorage : null;
@@ -157,7 +158,7 @@ export async function bootstrapSessionFromBackend() {
     kavyaEmployeeId: payload?.employeeId || '',
     kavyaEmployeeName: payload?.employeeName || '',
     kavyaEmployeeAvatar: payload?.avatar || buildInitials(payload?.employeeName || ''),
-    kavyaEmployeePhoto: payload?.profilePicture || '',
+    kavyaEmployeePhoto: normalizeBackendAssetUrl(payload?.profilePicture || ''),
     kavyaUserId: payload?.userId || '',
     kavyaLastLogin: payload?.lastLogin || '',
     kavyaMustChangePassword: Boolean(payload?.mustChangePassword),
@@ -196,3 +197,5 @@ function buildInitials(name) {
     .slice(0, 2)
     .toUpperCase() || 'US';
 }
+
+
