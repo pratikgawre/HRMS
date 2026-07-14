@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { safeApiRequest } from '../utils/api.js';
+import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import {
@@ -79,14 +79,11 @@ function TeamLeadMyTeamView() {
     () => buildTaskAssignmentGroups(tasks, currentTeamLeadIdentity),
     [currentTeamLeadIdentity, tasks],
   );
-  const visibleTaskRows = useMemo(() => (
-    Array.isArray(taskAssignmentData.tasks) ? taskAssignmentData.tasks : []
-  ), [taskAssignmentData.tasks]);
-
   const teamAssignmentGroups = assignmentData.groups.length > 0 ? assignmentData.groups : taskAssignmentData.groups;
   const effectiveEmployeeDirectory = assignmentData.employeeDirectory.size > 0
     ? assignmentData.employeeDirectory
     : taskAssignmentData.employeeDirectory;
+  const taskRoute = role === 'projectManager' ? '/project-manager/tasks' : '/team-lead/tasks';
   const memberProjectMap = useMemo(() => {
     const map = new Map();
     teamAssignmentGroups.forEach((group) => {
@@ -135,12 +132,7 @@ function TeamLeadMyTeamView() {
     const currentLeadId = normalize(currentTeamLeadIdentity.employeeId);
     const currentLeadName = normalize(currentTeamLeadIdentity.employeeName);
     const visibleTasks = (Array.isArray(tasks) ? tasks : []).filter((task) => {
-      const assignedById = normalize(task.assignedById);
-      const assignedByName = normalize(task.assignedByName);
-      return (
-        (currentLeadId && assignedById === currentLeadId)
-        || (currentLeadName && assignedByName === currentLeadName)
-      );
+      return matchesTeamLead(task, currentLeadId, currentLeadName);
     });
     if (teamAssignmentGroups.length > 0) {
       teamAssignmentGroups.forEach((group) => {
@@ -170,6 +162,30 @@ function TeamLeadMyTeamView() {
     });
     return map;
   }, [teamAssignmentGroups, tasks]);
+  const openAssignmentEditor = (row) => {
+    navigate(`${taskRoute}?tab=${row?.hasPersistedTask ? 'list' : 'assign'}`);
+  };
+  const deleteTask = async (row) => {
+    const primaryTask = getPrimaryTaskForMember(row);
+    const taskId = String(primaryTask?.id || '').trim();
+    if (!row?.hasPersistedTask || !taskId) {
+      return;
+    }
+
+    const confirmDelete = window.confirm('Are you sure you want to delete this task assignment?');
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      await apiRequest(`/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+      setTasks((current) => current.filter((task) => String(task.id || '').trim() !== taskId));
+      window.dispatchEvent(new Event('kavyaTasksChanged'));
+      window.dispatchEvent(new Event('kavyaProjectsChanged'));
+    } catch (_) {
+      // Keep the existing rows visible if the delete request fails.
+    }
+  };
   const activeTeamMembers = uniqueMemberRows.filter((member) => String(member.status || '').trim().toLowerCase() === 'active').length;
   const totalAssignments = assignmentData.groups.reduce((sum, group) => sum + group.teamMemberCount, 0);
   const cards = [
@@ -257,7 +273,8 @@ function TeamLeadMyTeamView() {
           type="button"
           className="section-action danger"
           style={{ background: '#fff', border: '1px solid #f2b8c0', color: '#ef5d74', borderRadius: '14px', padding: '0.45rem 0.9rem', fontWeight: 700 }}
-          onClick={() => deleteTask(row.taskRows?.[0] || row)}
+          onClick={() => deleteTask(row)}
+          disabled={!row.hasPersistedTask}
         >
           Delete
         </button>
@@ -320,6 +337,7 @@ function TeamLeadMyTeamView() {
                     projectName: group.name,
                     projectCode: group.projectCode || group.id,
                     title: '-',
+                    isPlaceholder: true,
                     status: source?.status || member.status || 'Active',
                   }, effectiveEmployeeDirectory);
                 })}
@@ -372,24 +390,7 @@ function TeamLeadMyTeamView() {
     </>
   );
 }
-function findTaskProject(task, projectIndex) {
-  const candidates = [
-    task?.projectId,
-    task?.projectCode,
-    task?.projectName,
-  ];
-  for (const candidate of candidates) {
-    const key = normalizeLookupValue(candidate);
-    if (!key) {
-      continue;
-    }
-    const project = projectIndex.get(key);
-    if (project) {
-      return project;
-    }
-  }
-  return null;
-}
+
 function matchesTeamLead(task, leadId, leadName) {
   const assignmentId = normalizeLookupValue(task?.assignedById);
   const assignmentName = normalizeLookupValue(task?.assignedByName);
@@ -428,6 +429,74 @@ function getInitials(name) {
     .join('')
     .slice(0, 2)
     .toUpperCase() || 'EM';
+}
+function normalizeTaskRowForTeamLead(task, employeeDirectory = new Map()) {
+  const baseTask = task || {};
+  const member = resolveTaskMember(baseTask, employeeDirectory);
+  const projectId = String(baseTask.projectId || baseTask.projectCode || '').trim();
+  const projectName = String(baseTask.projectName || baseTask.project || '-').trim() || '-';
+  const taskRows = Array.isArray(baseTask.taskRows) ? baseTask.taskRows.filter(Boolean) : [baseTask].filter(Boolean);
+  const rowKey = String(baseTask.clientTaskKey || baseTask.taskKey || baseTask.id || buildClientTaskKey(baseTask)).trim();
+
+  return {
+    id: rowKey || `${String(baseTask.assignedToId || '').trim()}::${projectId || projectName}`,
+    taskId: String(baseTask.id || '').trim(),
+    taskKey: rowKey,
+    clientTaskKey: rowKey,
+    employeeId: String(baseTask.assignedToId || member?.id || '').trim(),
+    avatar: member?.avatar || getInitials(baseTask.assignedToName || baseTask.owner || member?.name || ''),
+    name: String(baseTask.assignedToName || baseTask.owner || member?.name || '').trim() || String(baseTask.assignedToId || member?.id || '-').trim(),
+    projectName,
+    moduleName: String(baseTask.title || baseTask.moduleName || '-').trim() || '-',
+    projectIds: projectId ? [projectId] : [],
+    projectNames: projectName ? [projectName] : [],
+    taskRows,
+    hasPersistedTask: !baseTask.isPlaceholder && taskRows.some((taskRow) => String(taskRow?.id || '').trim()),
+    status: getMemberTaskStatus(taskRows, String(baseTask.status || 'Pending').trim() || 'Pending'),
+  };
+}
+function getPrimaryTaskForMember(row) {
+  if (!row) {
+    return null;
+  }
+
+  const existingTask = Array.isArray(row.taskRows)
+    ? row.taskRows.find((task) => String(task?.id || '').trim())
+    : null;
+  if (existingTask) {
+    return existingTask;
+  }
+
+  return {
+    id: String(row.taskId || row.taskKey || row.clientTaskKey || '').trim(),
+    assignedToId: String(row.employeeId || row.id || '').trim(),
+    assignedToName: String(row.name || '').trim(),
+    owner: String(row.name || '').trim(),
+    projectId: Array.isArray(row.projectIds) ? String(row.projectIds[0] || '') : '',
+    projectName: Array.isArray(row.projectNames) ? String(row.projectNames[0] || '') : '',
+    title: String(row.moduleName || '').trim(),
+    status: String(row.status || 'Pending').trim() || 'Pending',
+    isPlaceholder: true,
+  };
+}
+function findTaskForMemberInProject(tasks, member, group) {
+  const memberId = String(getEmployeeId(member) || '').trim().toLowerCase();
+  const memberName = String(getEmployeeName(member) || '').trim().toLowerCase();
+  const projectId = String(group?.id || group?.projectId || group?.projectCode || '').trim().toLowerCase();
+  const projectName = String(group?.name || '').trim().toLowerCase();
+
+  return (Array.isArray(tasks) ? tasks : []).find((task) => {
+    const assigneeValues = [task?.assignedToId, task?.assignedToName, task?.owner].map((value) => String(value || '').trim().toLowerCase());
+    const projectValues = [task?.projectId, task?.projectCode, task?.projectName, task?.project].map((value) => String(value || '').trim().toLowerCase());
+    const belongsToMember = assigneeValues.includes(memberId) || assigneeValues.includes(memberName);
+    const belongsToProject = projectValues.includes(projectId) || projectValues.includes(projectName);
+    return belongsToMember && belongsToProject;
+  }) || null;
+}
+function buildClientTaskKey(task) {
+  const assignee = String(task?.assignedToId || task?.assignedToName || task?.owner || '').trim().toLowerCase();
+  const project = String(task?.projectId || task?.projectCode || task?.projectName || '').trim().toLowerCase();
+  return [assignee, project].filter(Boolean).join('::') || String(task?.id || '').trim().toLowerCase();
 }
 function DefaultMyTeamView() {
   const navigate = useNavigate();

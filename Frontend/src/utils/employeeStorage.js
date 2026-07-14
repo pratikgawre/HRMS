@@ -141,7 +141,7 @@ function buildEmployeeLoginEmail(employee) {
   const lastName = String(employee?.lastName || '').trim().toLowerCase().replace(/\s+/g, '');
 
   if (firstName && lastName) {
-    return `${firstName}.${lastName}@kavyainfoweb.com`;
+    return `${firstName}${lastName}@kavyainfoweb.com`;
   }
 
   if (firstName) {
@@ -270,4 +270,3 @@ export function getCurrentEmployeeIdentity() {
     email: getSessionValue('kavyaUserEmail') || fallbackEmployee.email,
   };
 }
-

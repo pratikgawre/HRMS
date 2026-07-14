@@ -2,10 +2,10 @@ package com.kavya.hrms.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 @Configuration
 public class SmtpConfigurationLogger {
@@ -13,18 +13,16 @@ public class SmtpConfigurationLogger {
 
   @Bean
   ApplicationRunner smtpConfigurationWarningRunner(
-      @Value("${spring.mail.host:}") String host,
-      @Value("${spring.mail.username:}") String username,
-      @Value("${spring.mail.password:}") String password,
-      @Value("${spring.mail.from:}") String fromAddress) {
+      Environment environment) {
     return args -> {
-      String safeHost = host == null ? "" : host.trim();
-      String safeUsername = username == null ? "" : username.trim();
-      String safePassword = password == null ? "" : password.trim();
-      String safeFromAddress = fromAddress == null ? "" : fromAddress.trim();
+      SmtpSettings settings = SmtpSettings.resolve(environment);
+      String safeHost = settings.getHost();
+      String safeUsername = settings.getUsername();
+      String safePassword = settings.getPassword();
+      String safeFromAddress = settings.getFromAddress();
 
       if (safeHost.isBlank()) {
-        log.warn("SMTP is not configured. Email features will stay available but delivery will be skipped until spring.mail.host is provided.");
+        log.warn("SMTP is not configured. Email delivery will be skipped until the app can resolve a host from spring.mail.host, SMTP_HOST, or the .env file.");
         return;
       }
 

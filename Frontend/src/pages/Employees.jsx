@@ -1350,7 +1350,7 @@ function normalizeEmployee(form) {
   // Generate username and password
   const firstName = (form.firstName || 'employee').toLowerCase().trim();
   const lastName = (form.lastName || '').toLowerCase().trim();
-  const username = lastName ? `${firstName}.${lastName}` : firstName;
+  const username = lastName ? `${firstName}${lastName}` : firstName;
   const generatedUsername = `${username}@kavyainfoweb.com`;
   const passwordBase = (form.firstName || 'Employee').toLowerCase();
   const generatedPassword = passwordBase.charAt(0).toUpperCase() + passwordBase.slice(1) + '@123';
@@ -1536,7 +1536,7 @@ function buildEmployeeLoginEmail(employee) {
   const lastName = String(employee?.lastName || '').trim().toLowerCase().replace(/\s+/g, '');
 
   if (firstName && lastName) {
-    return `${firstName}.${lastName}@kavyainfoweb.com`;
+    return `${firstName}${lastName}@kavyainfoweb.com`;
   }
 
   if (firstName) {

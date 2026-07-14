@@ -97,6 +97,14 @@ export function applyAutoCheckoutPolicy(rows, now = new Date()) {
   return finalizeAttendanceRows(rows, now);
 }
 
+export function hasRecordedCheckIn(row) {
+  return Boolean(row?.checkInAt || (row?.checkIn && row.checkIn !== '-'));
+}
+
+export function hasRecordedCheckOut(row) {
+  return Boolean(row?.checkOutAt || (row?.checkOut && row.checkOut !== '-'));
+}
+
 async function persistAttendanceRows(rows) {
   const payload = rows.map((row) => ({
     id: row.id ? String(row.id) : null,
@@ -210,15 +218,17 @@ export function createCheckInRecord(employee, now = new Date(), lateCheckInCount
 }
 
 export function applyCheckOutToRecord(row, now = new Date()) {
+  const checkInMoment = resolveCheckInMoment(row, now);
   const checkOutAt = now.toISOString();
-  const workedMinutes = getWorkedMinutes(row.checkInAt, checkOutAt);
-  const finalStatus = getStatusFromMinutes(workedMinutes, row.checkInAt ? new Date(row.checkInAt) : null, row.lateCheckInCount);
+  const workedMinutes = getWorkedMinutes(checkInMoment ? checkInMoment.toISOString() : row.checkInAt, checkOutAt);
+  const finalStatus = getStatusFromMinutes(workedMinutes, checkInMoment, row.lateCheckInCount);
 
   return {
     ...row,
     checkOut: getTimeLabel(now),
     checkOutAt,
-    hours: getDurationLabel(row.checkInAt, checkOutAt),
+    checkInAt: row.checkInAt || (checkInMoment ? checkInMoment.toISOString() : ''),
+    hours: getDurationLabel(row.checkInAt || (checkInMoment ? checkInMoment.toISOString() : ''), checkOutAt),
     status: finalStatus,
   };
 }
@@ -397,6 +407,56 @@ function getAttendanceDayKey(row) {
   }
 
   return `${employeeKey}::${dateKey}`;
+}
+
+function resolveCheckInMoment(row, now = new Date()) {
+  if (row?.checkInAt) {
+    const parsed = new Date(row.checkInAt);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  const attendanceDate = parseAttendanceDate(row?.date || row?.dateLabel);
+  const checkInTime = parseTimeLabel(row?.checkIn);
+  if (attendanceDate && checkInTime) {
+    return new Date(
+      attendanceDate.getFullYear(),
+      attendanceDate.getMonth(),
+      attendanceDate.getDate(),
+      checkInTime.hours,
+      checkInTime.minutes,
+      0,
+      0,
+    );
+  }
+
+  return now;
+}
+
+function parseTimeLabel(value) {
+  const match = String(value || '').trim().toLowerCase().match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/);
+  if (!match) {
+    return null;
+  }
+
+  let hours = Number.parseInt(match[1], 10);
+  const minutes = Number.parseInt(match[2], 10);
+  const period = match[3];
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return null;
+  }
+
+  if (period === 'pm' && hours !== 12) {
+    hours += 12;
+  }
+
+  if (period === 'am' && hours === 12) {
+    hours = 0;
+  }
+
+  return { hours, minutes };
 }
 
 function pickPreferredRow(first, second) {

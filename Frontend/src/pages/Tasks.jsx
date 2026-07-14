@@ -410,6 +410,17 @@ function Tasks() {
       taskListColumns.find((column) => column.key === 'status'),
     ].filter(Boolean)
     : taskListColumns;
+  const taskAssignmentColumns = [
+    taskListColumns.find((column) => column.key === 'owner'),
+    taskListColumns.find((column) => column.key === 'title'),
+    {
+      key: 'due',
+      label: 'Due Date',
+      render: (row) => row.dueDate || row.due || '-',
+    },
+    taskListColumns.find((column) => column.key === 'status'),
+    showTaskActionColumns ? taskListColumns.find((column) => column.key === 'actions') : null,
+  ].filter(Boolean);
   const createTask = async (event) => {
     event.preventDefault();
     const isEditing = Boolean(editingTask);

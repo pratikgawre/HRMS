@@ -187,19 +187,22 @@ function LeaveRequests() {
         const isRejectComplete = String(row.status || '').trim().toLowerCase() === 'rejected';
         const disableApprove = isReviewing || isActionComplete;
         const disableReject = isReviewing || isRejectComplete;
+        const showApproveAction = !isRejectComplete;
         const showRejectAction = isAdminOrHr && !isActionComplete;
 
         return (
           <div className="table-actions table-actions-inline leave-review-actions">
-            <button
-              type="button"
-              className="leave-approve-action"
-              disabled={disableApprove}
-              onClick={() => updateLeaveStatus(row.id, targetStatus)}
-            >
-              <img src={approveActionIcon} alt="" aria-hidden="true" />
-              {isAdminOrHr ? 'Approve' : 'Recommend'}
-            </button>
+            {showApproveAction && (
+              <button
+                type="button"
+                className="leave-approve-action"
+                disabled={disableApprove}
+                onClick={() => updateLeaveStatus(row.id, targetStatus)}
+              >
+                <img src={approveActionIcon} alt="" aria-hidden="true" />
+                {isAdminOrHr ? 'Approve' : 'Recommend'}
+              </button>
+            )}
             {showRejectAction && (
               <button
                 type="button"
