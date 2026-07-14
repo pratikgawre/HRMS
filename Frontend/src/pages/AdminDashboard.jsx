@@ -312,11 +312,20 @@ export const checkedInColumns = [
   { key: 'status', label: 'Status' },
 ];
 
-export function Hero({ title, copy }) {
+export function Hero({ title, copy, reportData = null, onExport = null }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
 
   const getPageSnapshot = () => {
+    const fallbackExportData = window.__kavyaAttendanceExportData;
+    if (reportData) {
+      return reportData;
+    }
+
+    if (fallbackExportData) {
+      return fallbackExportData;
+    }
+
     const root = document.querySelector('.content-panel');
     const rows = [
       ['Page', title],
@@ -508,7 +517,7 @@ export function Hero({ title, copy }) {
           <p>{copy}</p>
         </div>
         <div className="hero-actions">
-          <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
+          <button className="secondary-btn" type="button" onClick={onExport || exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
           <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
         </div>
       </div>

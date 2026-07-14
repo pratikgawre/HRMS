@@ -8,6 +8,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -91,6 +92,7 @@ public class AttendanceAutoCheckoutService {
 
     AttendanceRecord updated = cloneRecord(record);
     updated.setCheckOut(formatTime(checkoutMoment.toLocalTime()));
+    updated.setCheckOutAt(checkoutMoment.atZone(KOLKATA_ZONE).toInstant().toString());
     updated.setWorkedHours(formatDuration(workedMinutes));
     updated.setTotalHours(formatDuration(workedMinutes));
     updated.setStatus(status);
@@ -98,6 +100,14 @@ public class AttendanceAutoCheckoutService {
   }
 
   private LocalDateTime parseCheckInMoment(AttendanceRecord record, LocalDate attendanceDate) {
+    if (record != null && !isBlank(record.getCheckInAt())) {
+      try {
+        return LocalDateTime.ofInstant(Instant.parse(record.getCheckInAt()), KOLKATA_ZONE);
+      } catch (DateTimeParseException ignored) {
+        // Fall back to the displayed check-in time when stored timestamp is unavailable or legacy.
+      }
+    }
+
     if (record != null && !isBlank(record.getCheckIn())) {
       LocalTime checkInTime = parseTime(record.getCheckIn());
       if (checkInTime != null) {
@@ -188,6 +198,7 @@ public class AttendanceAutoCheckoutService {
   private boolean isChanged(AttendanceRecord before, AttendanceRecord after) {
     return before == null || after == null
         || !Objects.equals(before.getCheckOut(), after.getCheckOut())
+        || !Objects.equals(before.getCheckOutAt(), after.getCheckOutAt())
         || !Objects.equals(before.getWorkedHours(), after.getWorkedHours())
         || !Objects.equals(before.getTotalHours(), after.getTotalHours())
         || !Objects.equals(before.getStatus(), after.getStatus());
@@ -202,6 +213,8 @@ public class AttendanceAutoCheckoutService {
     clone.setDate(record.getDate());
     clone.setCheckIn(record.getCheckIn());
     clone.setCheckOut(record.getCheckOut());
+    clone.setCheckInAt(record.getCheckInAt());
+    clone.setCheckOutAt(record.getCheckOutAt());
     clone.setWorkedHours(record.getWorkedHours());
     clone.setTotalHours(record.getTotalHours());
     clone.setStatus(record.getStatus());

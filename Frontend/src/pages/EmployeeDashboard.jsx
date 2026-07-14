@@ -10,6 +10,8 @@ import {
   getLateCheckInCountForMonth,
   getInitialAttendanceRows,
   getTodayLabel,
+  hasRecordedCheckIn,
+  hasRecordedCheckOut,
   refreshStoredAttendanceRows,
   saveAttendanceRows,
 } from '../utils/attendanceStorage.js';
@@ -37,7 +39,7 @@ function EmployeeDashboard() {
   const myRows = useMemo(() => attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId), [attendance, attendanceEmployee.employeeId]);
   const todayRecord = myRows.find((row) => row.date === todayLabel);
   const canCheckIn = !todayRecord;
-  const canCheckOut = Boolean(todayRecord?.checkInAt && !todayRecord?.checkOutAt);
+  const canCheckOut = Boolean(todayRecord && hasRecordedCheckIn(todayRecord) && !hasRecordedCheckOut(todayRecord));
   const presentDays = myRows.filter((row) => row.status === 'Present').length;
   const halfDays = myRows.filter((row) => row.status === 'Half Day').length;
   const totalConsideredDays = myRows.filter((row) => ['Present', 'Half Day', 'Absent', 'Late'].includes(row.status)).length;

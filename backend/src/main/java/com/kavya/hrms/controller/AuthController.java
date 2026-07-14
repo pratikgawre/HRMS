@@ -11,7 +11,6 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -280,7 +279,7 @@ public class AuthController {
     return response;
   }
 
-  private AppUser resolveSessionUser(@Nullable AuthSession session) {
+  private AppUser resolveSessionUser(AuthSession session) {
     if (session == null) {
       return null;
     }
@@ -357,7 +356,7 @@ public class AuthController {
     };
   }
 
-  private boolean passwordMatches(@Nullable String rawPassword, @Nullable AppUser user) {
+  private boolean passwordMatches(String rawPassword, AppUser user) {
     if (user == null) {
       return false;
     }
@@ -460,18 +459,18 @@ public class AuthController {
     return session;
   }
 
-  private String normalizeEmail(@Nullable String email) {
+  private String normalizeEmail(String email) {
     if (email == null) {
       return "";
     }
     return email.trim().toLowerCase(Locale.ROOT);
   }
 
-  private String normalizeValue(@Nullable String value) {
+  private String normalizeValue(String value) {
     return value == null ? "" : value.trim();
   }
 
-  private String extractToken(@Nullable String authorization) {
+  private String extractToken(String authorization) {
     if (authorization == null) {
       return "";
     }

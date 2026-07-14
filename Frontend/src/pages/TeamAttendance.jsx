@@ -20,7 +20,7 @@ import {
   refreshStoredAttendanceRows,
   saveAttendanceRows,
 } from '../utils/attendanceStorage.js';
-import { safeApiRequest } from '../utils/api.js';
+import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { people as fallbackPeople, projects as fallbackProjects } from '../data/dummyData.js';
 
@@ -68,6 +68,7 @@ function TeamAttendance() {
   const location = useLocation();
   const navigate = useNavigate();
   const attendanceEmployee = getAttendanceEmployee();
+  const isMyAttendanceView = location.pathname.startsWith('/project-manager/my-attendance');
   const todayInputValue = getDateInputValue(new Date());
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
   const [employees, setEmployees] = useState([]);
@@ -93,7 +94,9 @@ function TeamAttendance() {
 
     const refreshTeamAttendance = async () => {
       try {
-        const rows = await refreshStoredAttendanceRows();
+        const rows = isMyAttendanceView && attendanceEmployee.employeeId
+          ? await apiRequest(`/attendance/employee/${encodeURIComponent(attendanceEmployee.employeeId)}`)
+          : await refreshStoredAttendanceRows();
         if (active && Array.isArray(rows)) {
           setAttendance(rows);
         }
@@ -139,7 +142,7 @@ function TeamAttendance() {
       window.removeEventListener('kavyaEmployeesChanged', refreshTeamScope);
       window.removeEventListener('kavyaProjectsChanged', refreshTeamScope);
     };
-  }, []);
+  }, [attendanceEmployee.employeeId, isMyAttendanceView]);
 
   const teamIds = useMemo(() => (
     getVisibleTeamEmployeeIds({
@@ -152,8 +155,10 @@ function TeamAttendance() {
   ), [attendanceEmployee.employee, attendanceEmployee.employeeId, employees, projects, role]);
 
   const teamRows = useMemo(() => (
-    attendance.filter((row) => teamIds.has(String(row.employeeId || '').trim()))
-  ), [attendance, teamIds]);
+    isMyAttendanceView
+      ? attendance.filter((row) => String(row.employeeId || '').trim() === String(attendanceEmployee.employeeId || '').trim())
+      : attendance.filter((row) => teamIds.has(String(row.employeeId || '').trim()))
+  ), [attendance, attendanceEmployee.employeeId, isMyAttendanceView, teamIds]);
 
   const selectedDateLabel = useMemo(() => (
     new Intl.DateTimeFormat('en-IN', {
@@ -337,6 +342,7 @@ function TeamAttendance() {
   ];
 
   function downloadCsv() {
+    const exportRows = rows.length ? rows : teamRows;
     const reportHtml = buildAttendanceWorkbook({
       title: 'List of Logs',
       subtitle: `${roleLabel} team attendance register`,
@@ -432,6 +438,7 @@ function TeamAttendance() {
         <Hero
           title="Attendance"
           copy={`${roleLabel} view. ${summaryText}`}
+          reportData={isMyAttendanceView ? heroReportData : null}
         />
 
         {message && (
@@ -509,7 +516,13 @@ function TeamAttendance() {
                   type="month"
                   value={selectedMonth}
                   max={getMonthInputValue(new Date())}
-                  onChange={(event) => setSelectedMonth(event.target.value || getMonthInputValue(new Date()))}
+                  onChange={(event) => {
+                    const nextMonth = event.target.value || getMonthInputValue(new Date());
+                    setSelectedMonth(nextMonth);
+                    if (isMyAttendanceView) {
+                      setDateRange('month');
+                    }
+                  }}
                   aria-label="Select attendance month"
                 />
               </label>
@@ -556,7 +569,7 @@ function TeamAttendance() {
                   ),
                 },
                 ...attendanceColumns,
-                {
+                ...(isMyAttendanceView ? [] : [{
                   key: 'actions',
                   label: 'Actions',
                   render: (row) => (
@@ -1178,3 +1191,5 @@ function getWorkbookDateKey(date) {
 }
 
 export default TeamAttendance;
+
+

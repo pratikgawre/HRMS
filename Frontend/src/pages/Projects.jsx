@@ -137,12 +137,18 @@ function Projects() {
   }, [canManage, location.search]);
 
   useEffect(() => {
-    setProjectForm((current) => ({
-      ...current,
-      manager: current.manager || managerName,
-      managerId: current.managerId || managerId,
-    }));
-  }, [managerId, managerName]);
+    setProjectForm((current) => (
+      editingProjectId
+        ? current
+        : {
+          ...current,
+          manager: current.manager || '',
+          managerId: current.managerId || '',
+          teamLeadId: current.teamLeadId || '',
+          teamLeadName: current.teamLeadName || '',
+        }
+    ));
+  }, [editingProjectId]);
 
   useEffect(() => () => {
     clearDeleteUndoTimer();
@@ -279,10 +285,12 @@ function Projects() {
     setProgressDraft(String(parseProgressValue(selectedProject.progress)));
     setMilestoneDraft(selectedProject.milestone || '');
     setStatusDraft(selectedProject.status || 'Planning');
-    if (!isTeamDraftDirty) {
+    if (editingProjectId && !isTeamDraftDirty) {
       setSelectedTeamMembers(Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers : []);
+    } else if (!editingProjectId) {
+      setSelectedTeamMembers([]);
     }
-  }, [isTeamDraftDirty, selectedProject]);
+  }, [editingProjectId, isTeamDraftDirty, selectedProject]);
 
   const projectStats = useMemo(() => [
     {
@@ -646,6 +654,10 @@ function Projects() {
     setDeleteTargetProject(project);
   }
 
+  function removeProject(project) {
+    openDeleteProjectConfirm(project);
+  }
+
   function closeDeleteProjectConfirm() {
     setDeleteTargetProject(null);
   }
@@ -850,6 +862,38 @@ function Projects() {
             );
           })}
         </div>
+
+        {deleteTargetProject && (
+          <div className="project-delete-backdrop" role="presentation" onClick={closeDeleteProjectConfirm}>
+            <section
+              className="project-delete-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Delete project confirmation"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="project-delete-icon" aria-hidden="true">
+                <i className="ri-delete-bin-line" />
+              </div>
+              <div className="project-delete-copy">
+                <h3>Delete project?</h3>
+                <p>
+                  {deleteTargetProject.name || deleteTargetProject.projectCode || 'This project'}
+                  {' '}
+                  will be removed from Project List.
+                </p>
+              </div>
+              <div className="project-delete-actions">
+                <button type="button" className="project-delete-cancel" onClick={closeDeleteProjectConfirm}>
+                  No, Keep It
+                </button>
+                <button type="button" className="project-delete-confirm" onClick={handleDeleteProjectConfirm}>
+                  Yes, Delete
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
 
         <div className="project-workspace-layout">
           <div className="project-workspace-main">
@@ -1581,8 +1625,8 @@ function createEmptyProjectForm(managerName, managerId) {
     id: '',
     name: '',
     description: '',
-    manager: managerName,
-    managerId,
+    manager: '',
+    managerId: '',
     teamLeadId: '',
     teamLeadName: '',
     teamLeadDesignation: 'Team Lead',

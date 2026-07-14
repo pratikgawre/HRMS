@@ -6,6 +6,8 @@ import {
   createCheckInRecord,
   getAttendanceEmployee,
   getLateCheckInCountForMonth,
+  hasRecordedCheckIn,
+  hasRecordedCheckOut,
   getTodayLabel,
   refreshStoredAttendanceRows,
   saveAttendanceRows,
@@ -118,7 +120,7 @@ function EmployeeAttendance({ viewMode = 'auto' }) {
   const todayRecord = myRows.find((row) => getAttendanceDateKey(row) === getDateInputValue(today));
   const todayLeave = findApprovedLeaveForDate(leaveRequests, employeeIdentity, today);
   const canCheckIn = canUseSelfAttendance && !todayRecord && !todayLeave;
-  const canCheckOut = canUseSelfAttendance && Boolean(todayRecord?.checkInAt && !todayRecord?.checkOutAt && !todayLeave);
+  const canCheckOut = canUseSelfAttendance && Boolean(todayRecord && hasRecordedCheckIn(todayRecord) && !hasRecordedCheckOut(todayRecord) && !todayLeave);
   const todayStatusLabel = getTodayAttendanceLabel({ todayRecord, todayLeave, currentDate: today });
   const todayStatusCopy = getTodayAttendanceCopy({ todayRecord, todayLeave, currentDate: today });
 

@@ -1,13 +1,14 @@
 package com.kavya.hrms.service;
 
 import com.kavya.hrms.model.Employee;
+import com.kavya.hrms.config.SmtpSettings;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -21,9 +22,7 @@ import org.springframework.web.util.HtmlUtils;
 public class EmployeeWelcomeEmailService {
   private static final Logger log = LoggerFactory.getLogger(EmployeeWelcomeEmailService.class);
   private final ObjectProvider<JavaMailSender> mailSenderProvider;
-  private final String host;
-  private final String fromAddress;
-  private final String username;
+  private final SmtpSettings smtpSettings;
 
   public EmployeeWelcomeEmailService(
       ObjectProvider<JavaMailSender> mailSenderProvider,
@@ -63,8 +62,8 @@ public class EmployeeWelcomeEmailService {
       @NonNull String htmlMessage,
       @NonNull String emailType,
       @NonNull String successMessage) {
-    if (host.isBlank()) {
-      log.warn("{} skipped because spring.mail.host is blank.", emailType);
+    if (!smtpSettings.isConfigured()) {
+      log.warn("{} skipped because SMTP host is blank.", emailType);
       return DeliveryResult.notConfigured();
     }
 
@@ -75,8 +74,7 @@ public class EmployeeWelcomeEmailService {
 
     JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
     if (mailSender == null) {
-      log.warn("{} skipped because JavaMailSender bean is unavailable.", emailType);
-      return DeliveryResult.notConfigured();
+      mailSender = smtpSettings.createMailSender();
     }
 
     try {
@@ -102,13 +100,7 @@ public class EmployeeWelcomeEmailService {
 
   @NonNull
   private String resolveFromAddress() {
-    if (!fromAddress.isBlank()) {
-      return fromAddress;
-    }
-    if (!username.isBlank()) {
-      return username;
-    }
-    return "";
+    return firstNonBlank(smtpSettings.getFromAddress(), smtpSettings.getUsername());
   }
 
   @NonNull

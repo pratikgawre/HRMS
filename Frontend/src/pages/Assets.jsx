@@ -51,9 +51,10 @@ function Assets() {
 
     const refreshAssets = async () => {
       try {
-        const [assetRows, employeeRows] = await Promise.all([
+        const [assetRows, employeeRows, assignmentRows] = await Promise.all([
           apiRequest('/assets').catch(() => []),
           apiRequest('/employees').catch(() => []),
+          apiRequest('/asset-assignments').catch(() => []),
         ]);
 
         if (!active) {
@@ -62,20 +63,25 @@ function Assets() {
 
         const normalizedEmployees = normalizeAssetDirectoryEmployees(Array.isArray(employeeRows) ? employeeRows : []);
         console.info('[Assets] fetch response', {
-          assetCount: Array.isArray(assetRows) ? assetRows.length : 0,
-          sampleDates: Array.isArray(assetRows)
-            ? assetRows.slice(0, 3).map((asset) => ({
+          assetCount: Array.isArray(recoveredAssetRows) ? recoveredAssetRows.length : 0,
+          sampleDates: Array.isArray(recoveredAssetRows)
+            ? recoveredAssetRows.slice(0, 3).map((asset) => ({
                 id: asset?.id,
                 currentDate: asset?.currentDate || asset?.current_date || asset?.assignedDate || asset?.assignmentDate,
                 dueDate: asset?.dueDate || asset?.due_date || asset?.returnDate || asset?.return_date,
               }))
             : [],
         });
-        setAssets(normalizeAssetRows(Array.isArray(assetRows) ? assetRows : [], normalizedEmployees));
+        const normalizedAssets = normalizeAssetRows(Array.isArray(recoveredAssetRows) ? recoveredAssetRows : [], normalizedEmployees);
+        setAssets(normalizedAssets);
         setEmployees(normalizedEmployees);
+        if (isHrModule && normalizedAssets.length > 0) {
+          writeHrAssetCache(normalizedAssets);
+        }
       } catch {
         if (active) {
-          setAssets([]);
+          const cachedAssets = isHrModule ? readHrAssetCache() : null;
+          setAssets(Array.isArray(cachedAssets) ? cachedAssets : []);
           setEmployees([]);
         }
       }
@@ -98,6 +104,14 @@ function Assets() {
       window.removeEventListener('kavyaEmployeesChanged', refreshAssets);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isHrModule || assets.length === 0) {
+      return;
+    }
+
+    writeHrAssetCache(assets);
+  }, [assets, isHrModule]);
 
   useEffect(() => {
     const sectionId = new URLSearchParams(location.search).get('section');
@@ -1432,6 +1446,72 @@ function createSeedAssets(employee) {
       imageUrl: createPlaceholderAssetImage('UltraSharp 27', '#6a4fe3'),
     },
   ];
+}
+
+const hrAssetCacheKey = 'kavyaHrAssetCache';
+
+function readHrAssetCache() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(hrAssetCacheKey);
+    const parsed = rawValue ? JSON.parse(rawValue) : null;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeHrAssetCache(assets) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(hrAssetCacheKey, JSON.stringify(Array.isArray(assets) ? assets : []));
+  } catch {
+    // Ignore cache write failures and keep the UI usable.
+  }
+}
+
+function buildHrAssetFallback(employees, assignments) {
+  const visibleEmployees = (Array.isArray(employees) ? employees : []).filter((employee) => !isAdminEmployee(employee));
+  const seededAssets = visibleEmployees.slice(0, 4).flatMap((employee) => {
+    const employeeId = employee.employeeCode || employee.employeeId || employee.id || '';
+    const employeeName = employee.displayName || employee.name || employee.employeeName || employeeId || 'Employee';
+    const seededForEmployee = createSeedAssets({
+      employee: employeeName,
+      employeeId,
+    });
+
+    return seededForEmployee.map((asset, index) => ({
+      ...asset,
+      id: `${asset.id}-${employeeId || index + 1}`,
+      assetCode: `${asset.assetCode}-${employeeId || index + 1}`,
+      assignedTo: employeeName,
+      assignedToEmployeeId: employeeId,
+    }));
+  });
+
+  if (seededAssets.length > 0) {
+    return seededAssets;
+  }
+
+  return (Array.isArray(assignments) ? assignments : []).map((assignment, index) => ({
+    id: assignment.assetId || assignment.assetCode || assignment.id || `AST-${index + 101}`,
+    assetCode: assignment.assetCode || assignment.assetId || assignment.id || `AST-${index + 101}`,
+    assetName: assignment.assetName || 'Asset',
+    category: assignment.category || 'General',
+    currentDate: assignment.assignedDate || assignment.currentDate || '',
+    dueDate: assignment.dueDate || assignment.returnDate || '',
+    status: assignment.status || 'Assigned',
+    assignedTo: assignment.employeeName || assignment.employeeId || '-',
+    assignedToEmployeeId: assignment.employeeId || '',
+    condition: assignment.condition || 'Good',
+    location: assignment.location || 'Office',
+  }));
 }
 
 function createSeedRequests(employee, assets) {
