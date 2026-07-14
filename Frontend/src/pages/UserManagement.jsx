@@ -8,11 +8,11 @@ import { apiRequest, deleteUser as deleteUserRequest } from '../utils/api.js';
 import { ACCESS_ROLE_OPTIONS, USER_STATUS_OPTIONS, getRoleBadgeClass, normalizeAccessRole } from '../utils/role-access.js';
 import {
   buildUserAccess,
+  buildSystemUserIdentityKey,
   createUserAccess,
-  dedupeUsers,
+  dedupeSystemUsers,
   getInitials,
   getUsers,
-  saveUsers,
   setUsersCache,
   updateUserAccess,
 } from '../utils/user-management.js';
@@ -34,6 +34,7 @@ function UserManagement() {
   const [undoUser, setUndoUser] = useState(null);
   const [form, setForm] = useState(getEmptyUserForm());
   const [message, setMessage] = useState('');
+  const [isSavingUser, setIsSavingUser] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -65,7 +66,7 @@ function UserManagement() {
         }
 
         const normalizedEmployees = normalizeEmployees(employeeRows).filter((employee) => !isAdminEmployee(employee));
-        const normalizedUsers = dedupeUsers(normalizeUsers(userRows, normalizedEmployees)).filter((user) => !isAdminLikeUser(user));
+        const normalizedUsers = dedupeSystemUsers(normalizeUsers(userRows, normalizedEmployees)).filter((user) => !isAdminLikeUser(user));
 
         reconcileDeletedEmployees(normalizedEmployees);
         setEmployees(normalizedEmployees);
@@ -207,6 +208,7 @@ function UserManagement() {
       employeeId: user.employeeId,
       employeeName: user.employeeName,
       email: user.email,
+      employeePhone: user.employeePhone,
       department: user.department,
       designation: user.designation,
       role: user.role,
@@ -218,6 +220,9 @@ function UserManagement() {
 
   const saveUser = async (event) => {
     event.preventDefault();
+    if (isSavingUser) {
+      return;
+    }
 
     const employee = findEmployeeRecord(employees, form);
     if (!employee) {
@@ -225,16 +230,21 @@ function UserManagement() {
       return;
     }
 
+    setMessage('');
+    setIsSavingUser(true);
+
     try {
       if (editingUser?.hasAccessAccount) {
-        const nextUsers = updateUserAccess(editingUser.userId, {
+        const nextUsers = await updateUserAccess(editingUser.userId, {
           role: form.role,
           status: form.status,
         });
-        setUsers(dedupeUsers(nextUsers));
-        await syncEmployeeAccessRole(employees, setEmployees, form.employeeId, form.role);
+        setUsers(dedupeSystemUsers(nextUsers));
         setMessage('System access updated successfully. Changes apply on next login or refresh.');
         setIsModalOpen(false);
+        void syncEmployeeAccessRole(employees, setEmployees, form.employeeId, form.role).catch((error) => {
+          setMessage(error instanceof Error ? error.message : 'System access saved, but employee role sync failed.');
+        });
         return;
       }
 
@@ -243,18 +253,22 @@ function UserManagement() {
         accessRole: form.role,
         status: form.status,
       });
-      const result = createUserAccess(accessUser);
-      setUsers(dedupeUsers(getUsers()));
+      const result = await createUserAccess(accessUser);
       if (!result.ok) {
         setMessage(result.message);
         return;
       }
 
-      await syncEmployeeAccessRole(employees, setEmployees, form.employeeId, form.role);
+      setUsers(dedupeSystemUsers(result.users));
       setMessage(result.message);
       setIsModalOpen(false);
+      void syncEmployeeAccessRole(employees, setEmployees, form.employeeId, form.role).catch((error) => {
+        setMessage(error instanceof Error ? error.message : 'User access saved, but employee role sync failed.');
+      });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to save user access right now.');
+    } finally {
+      setIsSavingUser(false);
     }
   };
 
@@ -286,7 +300,7 @@ function UserManagement() {
     }
 
     const previousUsers = users;
-    const nextUsers = dedupeUsers(users.filter((item) => !isSameUser(item, user)));
+    const nextUsers = dedupeSystemUsers(users.filter((item) => !isSameUser(item, user)));
     setUsers(nextUsers);
     closeDeleteConfirm();
 
@@ -307,7 +321,7 @@ function UserManagement() {
       return;
     }
 
-    const restoredUsers = dedupeUsers([...users, undoUser]);
+    const restoredUsers = dedupeSystemUsers([...users, undoUser]);
     setUsers(restoredUsers);
     setUsersCache(restoredUsers);
     setUndoUser(null);
@@ -396,6 +410,7 @@ function UserManagement() {
           employees={employees}
           users={users}
           isEditing={Boolean(editingUser)}
+          isSavingUser={isSavingUser}
           title={editingUser ? (editingUser.hasAccessAccount ? 'Edit User Access' : 'Invite User Access') : 'Invite Existing Employee'}
           onClose={() => setIsModalOpen(false)}
           onSubmit={saveUser}
@@ -434,7 +449,7 @@ async function syncEmployeeAccessRole(employees, setEmployees, employeeId, acces
   await saveStoredEmployees(nextEmployees);
 }
 
-function UserModal({ form, setForm, employees, users, isEditing, title, onClose, onSubmit }) {
+function UserModal({ form, setForm, employees, users, isEditing, isSavingUser, title, onClose, onSubmit }) {
   const [employeeSearch, setEmployeeSearch] = useState(form.employeeName);
   const [hasSelectedEmployee, setHasSelectedEmployee] = useState(Boolean(form.employeeId));
   const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
@@ -446,12 +461,14 @@ function UserModal({ form, setForm, employees, users, isEditing, title, onClose,
 
     const existingEmployeeIds = new Set(users.map((user) => String(user.employeeId || '').trim().toLowerCase()));
     const existingEmails = new Set(users.map((user) => String(user.email || '').trim().toLowerCase()));
+    const existingPhones = new Set(users.map((user) => String(user.employeePhone || '').trim().toLowerCase()));
 
     return employees.filter((employee) => {
       const employeeId = String(employee.employeeCode || employee.id || '').trim().toLowerCase();
       const email = String(employee.generatedUsername || employee.email || '').trim().toLowerCase();
+      const phone = String(employee.mobileNo || employee.phone || employee.employeePhone || '').trim().toLowerCase();
 
-      if ((employeeId && existingEmployeeIds.has(employeeId)) || (email && existingEmails.has(email))) {
+      if ((employeeId && existingEmployeeIds.has(employeeId)) || (email && existingEmails.has(email)) || (phone && existingPhones.has(phone))) {
         return false;
       }
 
@@ -467,6 +484,7 @@ function UserModal({ form, setForm, employees, users, isEditing, title, onClose,
       employeeId: employee.employeeCode || employee.id,
       employeeName: employee.displayName || employee.name,
       email: employee.generatedUsername || employee.email || '',
+      employeePhone: employee.mobileNo || employee.phone || employee.employeePhone || '',
       department: employee.department || employee.departmentName || 'General',
       designation: employee.jobTitle || employee.role || '',
     }));
@@ -495,6 +513,7 @@ function UserModal({ form, setForm, employees, users, isEditing, title, onClose,
                   employeeId: '',
                   employeeName: '',
                   email: '',
+                  employeePhone: '',
                   department: '',
                   designation: '',
                 }));
@@ -522,7 +541,7 @@ function UserModal({ form, setForm, employees, users, isEditing, title, onClose,
           <label className="field"><span>Status</span><select value={form.status} onChange={(event) => update('status', event.target.value)}>{USER_STATUS_OPTIONS.map((status) => <option key={status}>{status}</option>)}</select></label>
 
           <div className="salary-form-actions">
-            <button className="payroll-primary" type="submit">Save User</button>
+            <button className="payroll-primary" type="submit" disabled={isSavingUser}>Save User</button>
             <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
           </div>
         </form>
@@ -541,6 +560,7 @@ function normalizeEmployees(rows) {
       id: employee.id || employeeCode,
       employeeId: employee.employeeId || employeeCode,
       employeeCode,
+      employeePhone: employee.employeePhone || employee.mobileNo || employee.phone || '',
       displayName,
       name: employee.name || displayName,
       department: employee.department || employee.departmentName || employee.team || 'General',
@@ -550,33 +570,40 @@ function normalizeEmployees(rows) {
 }
 
 function normalizeUsers(rows, employees = []) {
-  const employeeById = new Map();
-  const employeeByEmail = new Map();
-  const employeeByName = new Map();
+  const employeeByIdentity = new Map();
 
   normalizeEmployees(employees).forEach((employee) => {
-    const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase();
-    const employeeEmail = String(employee.email || '').trim().toLowerCase();
-    const employeeName = String(employee.displayName || employee.name || '').trim().toLowerCase();
-
-    if (employeeId) {
-      employeeById.set(employeeId, employee);
-    }
-
-    if (employeeEmail) {
-      employeeByEmail.set(employeeEmail, employee);
-    }
-
-    if (employeeName) {
-      employeeByName.set(employeeName, employee);
-    }
+    employeeByIdentity.set(buildSystemUserIdentityKey({
+      employeeId: employee.employeeCode || employee.employeeId || employee.id,
+      email: employee.generatedUsername || employee.email,
+      employeePhone: employee.mobileNo || employee.phone || employee.employeePhone,
+      employeeName: employee.displayName || employee.name || employee.employeeName,
+    }), employee);
   });
 
   return (Array.isArray(rows) ? rows : []).map((user, index) => {
     const employeeId = String(user.employeeId || '').trim().toLowerCase();
     const email = String(user.email || '').trim().toLowerCase();
+    const employeePhone = String(user.employeePhone || '').trim().toLowerCase();
     const employeeName = String(user.employeeName || '').trim().toLowerCase();
-    const matchedEmployee = employeeById.get(employeeId) || employeeByEmail.get(email) || employeeByName.get(employeeName);
+    const matchedEmployee = employeeByIdentity.get(buildSystemUserIdentityKey({
+      employeeId,
+      email,
+      employeePhone,
+      employeeName,
+    }))
+      || employeeByIdentity.get(buildSystemUserIdentityKey({
+        employeeId,
+        email,
+        employeePhone: '',
+        employeeName,
+      }))
+      || employeeByIdentity.get(buildSystemUserIdentityKey({
+        employeeId,
+        email,
+        employeePhone,
+        employeeName: '',
+      }));
     const userId = user.userId || user.id || `USR-${user.employeeId || index + 1}`;
     const role = user.role || 'Employee';
 
@@ -585,6 +612,7 @@ function normalizeUsers(rows, employees = []) {
       id: user.id || userId,
       userId,
       email: user.email || '',
+      employeePhone: user.employeePhone || matchedEmployee?.mobileNo || matchedEmployee?.phone || '',
       role,
       employeeId: user.employeeId || matchedEmployee?.employeeCode || matchedEmployee?.employeeId || '',
       employeeName: user.employeeName || matchedEmployee?.displayName || matchedEmployee?.name || 'Employee',
@@ -594,6 +622,12 @@ function normalizeUsers(rows, employees = []) {
       profilePicture: user.profilePicture || matchedEmployee?.profilePicture || '',
       status: user.status || 'Active',
       lastLogin: user.lastLogin || '-',
+      systemUserIdentityKey: user.systemUserIdentityKey || buildSystemUserIdentityKey({
+        employeeId: user.employeeId || matchedEmployee?.employeeCode || matchedEmployee?.employeeId || '',
+        email: user.email || matchedEmployee?.generatedUsername || matchedEmployee?.email || '',
+        employeePhone: user.employeePhone || matchedEmployee?.mobileNo || matchedEmployee?.phone || '',
+        employeeName: user.employeeName || matchedEmployee?.displayName || matchedEmployee?.name || '',
+      }),
     };
   });
 }
@@ -601,29 +635,34 @@ function normalizeUsers(rows, employees = []) {
 function findEmployeeRecord(employees, record) {
   const recordEmployeeId = normalizeIdentity(record?.employeeId);
   const recordEmail = normalizeIdentity(record?.email);
-  const recordName = normalizeIdentity(record?.employeeName || record?.displayName || record?.name);
+  const recordPhone = normalizeIdentity(record?.employeePhone || record?.mobileNo || record?.phone);
 
   return normalizeEmployees(employees).find((employee) => {
     const employeeId = normalizeIdentity(employee.employeeCode || employee.employeeId || employee.id);
     const employeeEmail = normalizeIdentity(employee.generatedUsername || employee.email);
-    const employeeName = normalizeIdentity(employee.displayName || employee.name || employee.employeeName);
+    const employeePhone = normalizeIdentity(employee.mobileNo || employee.phone || employee.employeePhone);
 
     return (recordEmployeeId && employeeId === recordEmployeeId)
       || (recordEmail && employeeEmail === recordEmail)
-      || (recordName && employeeName === recordName);
+      || (recordPhone && employeePhone === recordPhone);
   }) || null;
 }
 
 function buildDisplayedUsers(users, employees) {
   const normalizedEmployees = normalizeEmployees(employees).filter((employee) => !isAdminEmployee(employee));
-  const normalizedUsers = dedupeUsers(normalizeUsers(users, normalizedEmployees)).filter((user) => !isAdminLikeUser(user));
+  const normalizedUsers = dedupeSystemUsers(normalizeUsers(users, normalizedEmployees)).filter((user) => !isAdminLikeUser(user));
   const matchedUserKeys = new Set();
+  const matchedUserIdentityKeys = new Set();
 
   const employeeRows = normalizedEmployees.map((employee, index) => {
     const matchedUser = findMatchingEmployeeUser(employee, normalizedUsers);
     const matchedUserKey = getAccessUserKey(matchedUser);
+    const matchedUserIdentityKey = matchedUser ? buildSystemUserIdentityKey(matchedUser) : '';
     if (matchedUserKey) {
       matchedUserKeys.add(matchedUserKey);
+    }
+    if (matchedUserIdentityKey) {
+      matchedUserIdentityKeys.add(matchedUserIdentityKey);
     }
 
     return {
@@ -633,6 +672,7 @@ function buildDisplayedUsers(users, employees) {
       employeeId: employee.employeeCode || employee.employeeId || employee.id || '',
       employeeName: employee.displayName || employee.name || 'Employee',
       email: matchedUser?.email || employee.generatedUsername || employee.email || '',
+      employeePhone: matchedUser?.employeePhone || employee.mobileNo || employee.phone || '',
       role: normalizeAccessRole(matchedUser?.role || employee.accessRole || 'Employee'),
       department: employee.department || matchedUser?.department || 'General',
       designation: employee.jobTitle || employee.role || matchedUser?.designation || '',
@@ -646,7 +686,8 @@ function buildDisplayedUsers(users, employees) {
   const orphanUsers = normalizedUsers
     .filter((user) => {
       const userKey = getAccessUserKey(user);
-      return userKey && !matchedUserKeys.has(userKey);
+      const userIdentityKey = buildSystemUserIdentityKey(user);
+      return (userKey && !matchedUserKeys.has(userKey)) && (userIdentityKey && !matchedUserIdentityKeys.has(userIdentityKey));
     })
     .map((user) => ({
       ...user,
@@ -659,21 +700,21 @@ function buildDisplayedUsers(users, employees) {
 function findMatchingEmployeeUser(employee, users) {
   const employeeId = normalizeIdentity(employee?.employeeCode || employee?.employeeId || employee?.id);
   const employeeEmails = [employee?.generatedUsername, employee?.email].map(normalizeIdentity).filter(Boolean);
-  const employeeName = normalizeIdentity(employee?.displayName || employee?.name || employee?.employeeName);
+  const employeePhone = normalizeIdentity(employee?.mobileNo || employee?.phone || employee?.employeePhone);
 
   return users.find((user) => {
     const userEmployeeId = normalizeIdentity(user?.employeeId);
     const userEmail = normalizeIdentity(user?.email);
-    const userName = normalizeIdentity(user?.employeeName);
+    const userPhone = normalizeIdentity(user?.employeePhone);
 
     return (employeeId && userEmployeeId === employeeId)
       || (userEmail && employeeEmails.includes(userEmail))
-      || (employeeName && userName === employeeName);
+      || (employeePhone && userPhone === employeePhone);
   }) || null;
 }
 
 function getAccessUserKey(user) {
-  return normalizeIdentity(user?.userId || user?.id || user?.employeeId || user?.email);
+  return normalizeIdentity(user?.userId || user?.id);
 }
 
 function getEmptyUserForm() {
@@ -681,6 +722,7 @@ function getEmptyUserForm() {
     employeeId: '',
     employeeName: '',
     email: '',
+    employeePhone: '',
     department: '',
     designation: '',
     role: 'Employee',

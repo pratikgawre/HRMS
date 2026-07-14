@@ -197,5 +197,3 @@ function buildInitials(name) {
     .slice(0, 2)
     .toUpperCase() || 'US';
 }
-
-

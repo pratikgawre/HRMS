@@ -61,7 +61,7 @@ function HRDashboard() {
 
   const hrStats = useMemo(() => ([
     {
-      label: 'Team Members',
+      label: 'Employees',
       value: String(teamMembersCount).padStart(2, '0'),
       delta: teamMembersCount > 0 ? 'Live employee count' : 'No employees yet',
       tone: 'blue',

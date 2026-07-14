@@ -271,4 +271,3 @@ export function getCurrentEmployeeIdentity() {
     email: getSessionValue('kavyaUserEmail') || fallbackEmployee.email,
   };
 }
-

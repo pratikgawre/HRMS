@@ -42,6 +42,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/employees")
 @SuppressWarnings("all")
 public class EmployeeController {
+  private static final String DUPLICATE_EMPLOYEE_MESSAGE = "This employee already exists with the same Employee ID, Email or Mobile Number.";
   private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
       "image/png",
       "image/jpeg",
@@ -76,7 +77,9 @@ public class EmployeeController {
       @RequestBody Employee employee,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Employee saved = employeeRepository.save(Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null"));
+    Employee normalized = Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null");
+    ensureNoDuplicateEmployee(normalized, employeeRepository.findAll(), null);
+    Employee saved = employeeRepository.save(normalized);
     resetEmployeeLoginCredentials(saved);
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
@@ -105,6 +108,7 @@ public class EmployeeController {
     List<Employee> normalizedEmployees = (employees == null ? java.util.Collections.<Employee>emptyList() : employees).stream()
         .map(this::normalizeEmployeeIdentity)
         .collect(Collectors.toList());
+    ensureNoDuplicateEmployees(normalizedEmployees, existingEmployees, null);
     List<Employee> saved = employeeRepository.saveAll(Objects.requireNonNull(normalizedEmployees));
     syncCredentialEmailsForBulkSave(saved, existingByKey, shouldSendCredentialUpdates(sendCredentialUpdates), credentialUpdateEmployeeId);
     if (existingCount > 0) {
@@ -163,6 +167,58 @@ public class EmployeeController {
     employee.setCredentialEmailMessage(delivery.getMessage());
   }
 
+  private void ensureNoDuplicateEmployees(List<Employee> candidates, List<Employee> existingEmployees, String excludedEmployeeKey) {
+    for (Employee candidate : candidates == null ? java.util.Collections.<Employee>emptyList() : candidates) {
+      ensureNoDuplicateEmployee(candidate, existingEmployees, excludedEmployeeKey);
+      if (existingEmployees == null) {
+        existingEmployees = new ArrayList<>();
+      }
+      existingEmployees.add(candidate);
+    }
+  }
+
+  private void ensureNoDuplicateEmployee(Employee candidate, List<Employee> existingEmployees, String excludedEmployeeKey) {
+    if (candidate == null) {
+      return;
+    }
+
+    String candidateEmployeeId = normalizeKey(firstNonBlank(candidate.getEmployeeId(), candidate.getEmployeeCode(), candidate.getId()));
+    String candidateEmail = normalizeKey(candidate.getEmail());
+    String candidateMobile = normalizePhone(candidate.getMobileNo(), candidate.getPhone());
+
+    if (candidateEmployeeId.isBlank() && candidateEmail.isBlank() && candidateMobile.isBlank()) {
+      return;
+    }
+
+    for (Employee existing : existingEmployees == null ? java.util.Collections.<Employee>emptyList() : existingEmployees) {
+      if (existing == null || shouldIgnoreExistingEmployee(existing, excludedEmployeeKey)) {
+        continue;
+      }
+
+      String existingEmployeeId = normalizeKey(firstNonBlank(existing.getEmployeeId(), existing.getEmployeeCode(), existing.getId()));
+      String existingEmail = normalizeKey(existing.getEmail());
+      String existingMobile = normalizePhone(existing.getMobileNo(), existing.getPhone());
+
+      boolean duplicate = (!candidateEmployeeId.isBlank() && candidateEmployeeId.equals(existingEmployeeId))
+          || (!candidateEmail.isBlank() && candidateEmail.equals(existingEmail))
+          || (!candidateMobile.isBlank() && candidateMobile.equals(existingMobile));
+
+      if (duplicate) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT, DUPLICATE_EMPLOYEE_MESSAGE);
+      }
+    }
+  }
+
+  private boolean shouldIgnoreExistingEmployee(Employee existing, String excludedEmployeeKey) {
+    if (existing == null || excludedEmployeeKey == null || excludedEmployeeKey.isBlank()) {
+      return false;
+    }
+
+    return excludedEmployeeKey.equals(normalizeKey(existing.getEmployeeId()))
+        || excludedEmployeeKey.equals(normalizeKey(existing.getEmployeeCode()))
+        || excludedEmployeeKey.equals(normalizeKey(existing.getId()));
+  }
+
   private boolean shouldSendCredentialUpdateForEmployee(String requestedUpdateKey, String key, Employee employee) {
     if (requestedUpdateKey == null || requestedUpdateKey.isBlank()) {
       return true;
@@ -173,6 +229,21 @@ public class EmployeeController {
         || requestedUpdateKey.equals(normalizeKey(employee == null ? null : employee.getEmployeeCode()))
         || requestedUpdateKey.equals(normalizeKey(employee == null ? null : employee.getId()))
         || requestedUpdateKey.equals(normalizeKey(employee == null ? null : employee.getEmail()));
+  }
+
+  private String normalizePhone(String... values) {
+    if (values == null) {
+      return "";
+    }
+
+    for (String value : values) {
+      String normalized = normalizeKey(value).replaceAll("\\D", "");
+      if (!normalized.isBlank()) {
+        return normalized;
+      }
+    }
+
+    return "";
   }
 
   private Map<String, Employee> buildEmployeeMap(List<Employee> employees) {
@@ -217,7 +288,9 @@ public class EmployeeController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     employee.setEmployeeId(employeeId);
-    Employee saved = employeeRepository.save(Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null"));
+    Employee normalized = Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null");
+    ensureNoDuplicateEmployee(normalized, employeeRepository.findAll(), normalizeKey(employeeId));
+    Employee saved = employeeRepository.save(normalized);
     resetEmployeeLoginCredentials(saved);
     applyCredentialEmailStatus(saved, employeeWelcomeEmailService.sendCredentialUpdateEmail(saved));
     notificationService.notifyRoles(
@@ -701,6 +774,3 @@ public class EmployeeController {
     return "General";
   }
 }
-
-
-

@@ -11,6 +11,7 @@ import {
   setEmployeesCache,
   unmarkEmployeeDeleted,
 } from '../utils/employeeStorage.js';
+import { getEmployeeDuplicateCheck } from '../utils/employee-duplicate.js';
 import { apiRequest, deleteEmployee, safeApiRequest } from '../utils/api.js';
 import { getUsers, saveUsers, setUsersCache } from '../utils/user-management.js';
 import { ACCESS_ROLE_OPTIONS, normalizeAccessRole } from '../utils/role-access.js';
@@ -565,6 +566,12 @@ function Employees() {
       return;
     }
 
+    const duplicateCheck = getEmployeeDuplicateCheck(form, employees, { excludeEmployeeId: editingEmployee?.employeeCode || editingEmployee?.employeeId || editingEmployee?.id });
+    if (duplicateCheck.message) {
+      setMessage(duplicateCheck.message);
+      return;
+    }
+
     const isEditing = Boolean(editingEmployee);
     setMessage('');
     setIsSavingEmployee(true);
@@ -722,6 +729,8 @@ function Employees() {
         <EmployeeModal
           form={form}
           setForm={setForm}
+          employees={employees}
+          editingEmployee={editingEmployee}
           title={editingEmployee ? 'Edit Employee' : 'Add Employee'}
           onClose={() => setIsModalOpen(false)}
           onSubmit={saveEmployee}
@@ -883,7 +892,7 @@ function Avatar({ employee, className = '' }) {
   return <span className={classes}>{employee.avatar}</span>;
 }
 
-function EmployeeModal({ form, setForm, title, onClose, onSubmit, isSaving = false, submitLabel = 'Save Employee' }) {
+function EmployeeModal({ form, setForm, employees, editingEmployee, title, onClose, onSubmit, isSaving = false, submitLabel = 'Save Employee' }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [fileErrors, setFileErrors] = useState({});
   const [sameAsAboveAddress, setSameAsAboveAddress] = useState(false);
@@ -893,7 +902,10 @@ function EmployeeModal({ form, setForm, title, onClose, onSubmit, isSaving = fal
   const isLastStep = stepIndex === employeeSteps.length - 1;
   const isAddressStep = currentStep.title === 'Address Details';
   const isStatutoryStep = currentStep.title === 'Government / Statutory Details';
-  const canContinue = isStepComplete(form, currentStep) && !getEmployeeValidationError(form, currentStep, { requireFilled: false });
+  const duplicateCheck = useMemo(() => getEmployeeDuplicateCheck(form, employees, { excludeEmployeeId: editingEmployee?.employeeCode || editingEmployee?.employeeId || editingEmployee?.id }), [editingEmployee, employees, form]);
+  const canContinue = isStepComplete(form, currentStep)
+    && !getEmployeeValidationError(form, currentStep, { requireFilled: false })
+    && !duplicateCheck.message;
 
   const syncPresentAddress = (next) => {
     addressMirrorMap.forEach(([sourceKey, targetKey]) => {
@@ -1002,6 +1014,7 @@ function EmployeeModal({ form, setForm, title, onClose, onSubmit, isSaving = fal
     const isAddressCountryField = isAddressStep && (key === 'permanentCountry' || key === 'presentCountry');
     const isDisabled = isPresentAddressField && sameAsAboveAddress;
     const value = form[key];
+    const duplicateNote = duplicateCheck.fieldNotes[key];
 
     if (type === 'file') {
       const config = fileUploadConfig[key] || fileUploadConfig.profilePicture;
@@ -1045,7 +1058,7 @@ function EmployeeModal({ form, setForm, title, onClose, onSubmit, isSaving = fal
             <option value="">Select state</option>
             {stateOptions.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
-          {renderEmployeeFieldNote(key, value)}
+          {duplicateNote ? <small id={getEmployeeFieldNoteId(key, value)} className="employee-duplicate-note">{duplicateNote}</small> : renderEmployeeFieldNote(key, value)}
         </label>
       );
     }
@@ -1068,7 +1081,7 @@ function EmployeeModal({ form, setForm, title, onClose, onSubmit, isSaving = fal
             <option value="">Select city/district</option>
             {cityOptions.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
-          {renderEmployeeFieldNote(key, value)}
+          {duplicateNote ? <small id={getEmployeeFieldNoteId(key, value)} className="employee-duplicate-note">{duplicateNote}</small> : renderEmployeeFieldNote(key, value)}
         </label>
       );
     }
@@ -1087,7 +1100,7 @@ function EmployeeModal({ form, setForm, title, onClose, onSubmit, isSaving = fal
             aria-describedby={getEmployeeFieldNoteId(key, value)}
             {...getEmployeeInputProps(key)}
           />
-          {renderEmployeeFieldNote(key, value)}
+          {duplicateNote ? <small id={getEmployeeFieldNoteId(key, value)} className="employee-duplicate-note">{duplicateNote}</small> : renderEmployeeFieldNote(key, value)}
         </label>
       );
     }
@@ -1125,7 +1138,7 @@ function EmployeeModal({ form, setForm, title, onClose, onSubmit, isSaving = fal
           aria-describedby={getEmployeeFieldNoteId(key, value)}
           {...getEmployeeInputProps(key)}
         />
-        {renderEmployeeFieldNote(key, value)}
+        {duplicateNote ? <small id={getEmployeeFieldNoteId(key, value)} className="employee-duplicate-note">{duplicateNote}</small> : renderEmployeeFieldNote(key, value)}
       </label>
     );
   };
@@ -1146,6 +1159,13 @@ function EmployeeModal({ form, setForm, title, onClose, onSubmit, isSaving = fal
         </div>
 
         <form className="employee-step-form" onSubmit={onSubmit} aria-busy={isSaving}>
+          {duplicateCheck.message && (
+            <div className="user-alert employee-duplicate-alert" role="alert">
+              <i className="ri-alert-line" aria-hidden="true" />
+              <span>{duplicateCheck.message}</span>
+            </div>
+          )}
+
           <div className="employee-step-tabs" aria-label="Employee form steps">
             {employeeSteps.map((step, index) => (
               <button

@@ -81,6 +81,7 @@ function TeamAttendance() {
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState(null);
   const [editingRow, setEditingRow] = useState(null);
+  const [summaryFocus, setSummaryFocus] = useState('default');
   const [correctForm, setCorrectForm] = useState({
     checkIn: '',
     checkOut: '',
@@ -159,6 +160,42 @@ function TeamAttendance() {
       : attendance.filter((row) => teamIds.has(String(row.employeeId || '').trim()))
   ), [attendance, attendanceEmployee.employeeId, isMyAttendanceView, teamIds]);
 
+  const selectedDateLabel = useMemo(() => (
+    new Intl.DateTimeFormat('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(selectedDate))
+  ), [selectedDate]);
+
+  const selectedDateTeamRows = useMemo(() => {
+    const attendanceByEmployeeId = new Map();
+
+    teamRows.forEach((row) => {
+      if (String(row.date || '').trim() === selectedDateLabel) {
+        attendanceByEmployeeId.set(String(row.employeeId || '').trim(), row);
+      }
+    });
+
+    return normalizeEmployees(employees)
+      .filter((employee) => teamIds.has(String(employee.employeeId || '').trim()))
+      .map((employee) => {
+        const employeeId = String(employee.employeeId || '').trim();
+        const matchedRow = attendanceByEmployeeId.get(employeeId);
+
+        return matchedRow || {
+          employee: employee.displayName || employee.name || 'Employee',
+          employeeId,
+          avatar: employee.avatar || getInitials(employee.displayName || employee.name || ''),
+          date: selectedDateLabel,
+          checkIn: '-',
+          checkOut: '-',
+          hours: '-',
+          status: 'Absent',
+        };
+      });
+  }, [employees, selectedDateLabel, teamIds, teamRows]);
+
   const rows = useMemo(() => (
     teamRows
       .filter((row) => {
@@ -178,6 +215,39 @@ function TeamAttendance() {
         employeeId: row.employeeId || row.employeeCode || '-',
       }))
   ), [dateRange, searchText, selectedDate, selectedMonth, status, teamRows]);
+
+  const displayedRows = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    const isPageLevelQuery = query === 'team attendance' || query === 'team-attendance';
+
+    if (summaryFocus === 'team') {
+      return selectedDateTeamRows.filter((row) => (
+        !query
+        || String(row.employee || '').toLowerCase().includes(query)
+        || String(row.employeeId || '').toLowerCase().includes(query)
+        || isPageLevelQuery
+      ));
+    }
+
+    if (summaryFocus === 'status') {
+      return teamRows
+        .filter((row) => String(row.date || '').trim() === selectedDateLabel)
+        .filter((row) => status === 'All' || row.status === status)
+        .filter((row) => (
+          !query
+          || String(row.employee || '').toLowerCase().includes(query)
+          || String(row.employeeId || '').toLowerCase().includes(query)
+          || isPageLevelQuery
+        ))
+        .map((row) => ({
+          ...row,
+          employee: row.employee || row.employeeName || row.name || 'Employee',
+          employeeId: row.employeeId || row.employeeCode || '-',
+        }));
+    }
+
+    return rows;
+  }, [rows, searchText, selectedDateLabel, selectedDateTeamRows, status, summaryFocus, teamRows]);
   const summaryText = role === 'employee'
     ? 'This page is for managers and team leads. Use My Attendance for your own record.'
     : 'Review your team attendance records without mixing them with your personal check-in or check-out.';
@@ -186,63 +256,10 @@ function TeamAttendance() {
   const teamAttendancePath = getTeamAttendancePath(role);
   const myAttendancePath = getMyAttendancePath(role);
   const teamPagePath = getTeamPagePath(role);
-  const cardCount = teamIds.size;
-  const presentCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'present').length;
-  const lateCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'late').length;
-  const heroReportData = useMemo(() => {
-    if (!isMyAttendanceView) {
-      return null;
-    }
-
-    const normalizedStatus = (value) => String(value || '').trim().toLowerCase();
-    const presentRows = rows.filter((row) => normalizedStatus(row.status) === 'present');
-    const absentRows = rows.filter((row) => normalizedStatus(row.status) === 'absent');
-    const leaveRows = rows.filter((row) => normalizedStatus(row.status) === 'leave');
-    const halfDayRows = rows.filter((row) => normalizedStatus(row.status) === 'half day');
-
-    return {
-      metrics: [
-        { label: 'Present', value: String(presentRows.length).padStart(2, '0'), delta: rangeLabel },
-        { label: 'Absent', value: String(absentRows.length).padStart(2, '0'), delta: currentRangeValue },
-        { label: 'Leave', value: String(leaveRows.length).padStart(2, '0'), delta: 'Approved leave days' },
-        { label: 'Half Day', value: String(halfDayRows.length).padStart(2, '0'), delta: 'Partial days' },
-      ],
-      tables: [
-        {
-          sectionTitle: 'Attendance Register',
-          headers: ['Employee', 'ID', 'Date', 'Check In', 'Check Out', 'Hours', 'Status'],
-          bodyRows: rows.map((row) => ([
-            row.employee || '-',
-            row.employeeId || '-',
-            row.date || '-',
-            row.checkIn || '-',
-            row.checkOut || '-',
-            row.hours || '-',
-            row.status || '-',
-          ])),
-        },
-      ],
-      controls: [
-        { label: 'Month', value: selectedMonth },
-        { label: 'Range', value: dateRange },
-        { label: 'Employee', value: attendanceEmployee.employee || '-' },
-      ],
-    };
-  }, [attendanceEmployee.employee, dateRange, isMyAttendanceView, rangeLabel, rows, selectedMonth, currentRangeValue]);
-
-  useEffect(() => {
-    if (!isMyAttendanceView) {
-      window.__kavyaAttendanceExportData = null;
-      return undefined;
-    }
-
-    window.__kavyaAttendanceExportData = heroReportData;
-    return () => {
-      if (window.__kavyaAttendanceExportData === heroReportData) {
-        window.__kavyaAttendanceExportData = null;
-      }
-    };
-  }, [heroReportData, isMyAttendanceView]);
+  const cardCount = selectedDateTeamRows.length;
+  const presentCount = teamRows.filter((row) => String(row.date || '').trim() === selectedDateLabel && String(row.status || '').toLowerCase() === 'present').length;
+  const lateCount = teamRows.filter((row) => String(row.date || '').trim() === selectedDateLabel && String(row.status || '').toLowerCase() === 'late').length;
+  const halfDayCount = teamRows.filter((row) => String(row.date || '').trim() === selectedDateLabel && String(row.status || '').toLowerCase() === 'half day').length;
 
   useEffect(() => {
     if (!toast) {
@@ -265,6 +282,7 @@ function TeamAttendance() {
 
     if (nextStatus && ['All', 'Present', 'Half Day', 'Absent', 'Late', 'Leave'].includes(nextStatus)) {
       setStatus(nextStatus);
+      setSummaryFocus('status');
     }
 
     if (nextRange && ['day', 'last7', 'last15', 'month', 'custom', 'all'].includes(nextRange)) {
@@ -280,7 +298,10 @@ function TeamAttendance() {
       delta: 'Visible in this scope',
       tone: 'teal',
       icon: 'ri-team-line',
-      onClick: () => navigate(teamPagePath),
+      onClick: () => {
+        setStatus('All');
+        setSummaryFocus('team');
+      },
     },
     {
       key: 'present',
@@ -301,6 +322,15 @@ function TeamAttendance() {
       onClick: () => navigate(`${teamAttendancePath}?status=Late`),
     },
     {
+      key: 'half-day',
+      label: 'Half Day',
+      value: String(halfDayCount).padStart(2, '0'),
+      delta: 'Selected date attendance',
+      tone: 'green',
+      icon: 'ri-sun-line',
+      onClick: () => navigate(`${teamAttendancePath}?status=Half%20Day`),
+    },
+    {
       key: 'range',
       label: 'Range',
       value: currentRangeValue,
@@ -314,14 +344,14 @@ function TeamAttendance() {
   function downloadCsv() {
     const exportRows = rows.length ? rows : teamRows;
     const reportHtml = buildAttendanceWorkbook({
-      title: 'Attendance',
-      subtitle: `${roleLabel} monthly attendance log`,
+      title: 'List of Logs',
+      subtitle: `${roleLabel} team attendance register`,
       rangeLabel,
       currentRangeValue,
       dateRange,
       selectedDate,
       selectedMonth,
-      rows: exportRows,
+      rows: displayedRows,
     });
     const blob = new Blob([reportHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -330,7 +360,7 @@ function TeamAttendance() {
       ? selectedMonth
       : (selectedDate || getDateInputValue(new Date()));
     link.href = url;
-    link.download = `attendance-report-${exportStamp}.xls`;
+    link.download = `attendance-log-${exportStamp}.xls`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -364,19 +394,35 @@ function TeamAttendance() {
     const targetDate = String(editingRow.date || '').trim();
     const formattedCheckIn = formatTimeLabel(correctForm.checkIn);
     const formattedCheckOut = formatTimeLabel(correctForm.checkOut);
-    const nextRows = attendance.map((row) => (
-      String(row.employeeId || '').trim() === targetEmployeeId && String(row.date || '').trim() === targetDate
-        ? {
-          ...row,
-          checkIn: formattedCheckIn,
-          checkOut: formattedCheckOut,
-          checkInAt: correctForm.checkIn ? buildTimeStamp(row.date, correctForm.checkIn, row.checkInAt) : row.checkInAt,
-          checkOutAt: correctForm.checkOut ? buildTimeStamp(row.date, correctForm.checkOut, row.checkOutAt) : row.checkOutAt,
-          hours: correctForm.hours || '-',
-          status: correctForm.status || row.status,
-        }
-        : row
-    ));
+    let updated = false;
+    const nextRows = attendance.map((row) => {
+      if (String(row.employeeId || '').trim() !== targetEmployeeId || String(row.date || '').trim() !== targetDate) {
+        return row;
+      }
+
+      updated = true;
+      return {
+        ...row,
+        checkIn: formattedCheckIn,
+        checkOut: formattedCheckOut,
+        checkInAt: correctForm.checkIn ? buildTimeStamp(row.date, correctForm.checkIn, row.checkInAt) : row.checkInAt,
+        checkOutAt: correctForm.checkOut ? buildTimeStamp(row.date, correctForm.checkOut, row.checkOutAt) : row.checkOutAt,
+        hours: correctForm.hours || '-',
+        status: correctForm.status || row.status,
+      };
+    });
+
+    if (!updated) {
+      nextRows.unshift({
+        ...editingRow,
+        checkIn: formattedCheckIn,
+        checkOut: formattedCheckOut,
+        checkInAt: correctForm.checkIn ? buildTimeStamp(targetDate, correctForm.checkIn) : '',
+        checkOutAt: correctForm.checkOut ? buildTimeStamp(targetDate, correctForm.checkOut) : '',
+        hours: correctForm.hours || '-',
+        status: correctForm.status || 'Present',
+      });
+    }
 
     setAttendance(nextRows);
     saveAttendanceRows(nextRows);
@@ -493,7 +539,10 @@ function TeamAttendance() {
               />
             </label>
 
-            <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter attendance status">
+            <select value={status} onChange={(event) => {
+              setStatus(event.target.value);
+              setSummaryFocus('status');
+            }} aria-label="Filter attendance status">
               <option>All</option>
               <option>Present</option>
               <option>Half Day</option>
@@ -530,13 +579,15 @@ function TeamAttendance() {
                       onClick={() => openRecommendDialog(row)}
                     >
                       <i className="ri-edit-line" aria-hidden="true" />
-                      Recommend
+                      Correct Login
                     </button>
                   ),
-                }]),
-              ]}
-              rows={rows}
-              emptyMessage={`No attendance records found for ${rangeLabel}.`}
+                },
+              ]} 
+              rows={displayedRows}
+              emptyMessage={summaryFocus === 'team'
+                ? 'No team members found for the selected lead.'
+                : `No attendance records found for ${rangeLabel}.`}
             />
           </div>
         </Section>
