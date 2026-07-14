@@ -26,7 +26,7 @@ public class AppUser {
   private String passwordResetTokenExpiresAt;
   private Boolean mustChangePassword;
 
-  @Indexed(unique = true, sparse = true)
+  @Indexed(sparse = true)
   private String systemUserIdentityKey;
   private String employeePhone;
 
