@@ -20,7 +20,7 @@ import {
   refreshStoredAttendanceRows,
   saveAttendanceRows,
 } from '../utils/attendanceStorage.js';
-import { safeApiRequest } from '../utils/api.js';
+import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { people as fallbackPeople, projects as fallbackProjects } from '../data/dummyData.js';
 
@@ -68,6 +68,7 @@ function TeamAttendance() {
   const location = useLocation();
   const navigate = useNavigate();
   const attendanceEmployee = getAttendanceEmployee();
+  const isMyAttendanceView = location.pathname.startsWith('/project-manager/my-attendance');
   const todayInputValue = getDateInputValue(new Date());
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
   const [employees, setEmployees] = useState([]);
@@ -92,7 +93,9 @@ function TeamAttendance() {
 
     const refreshTeamAttendance = async () => {
       try {
-        const rows = await refreshStoredAttendanceRows();
+        const rows = isMyAttendanceView && attendanceEmployee.employeeId
+          ? await apiRequest(`/attendance/employee/${encodeURIComponent(attendanceEmployee.employeeId)}`)
+          : await refreshStoredAttendanceRows();
         if (active && Array.isArray(rows)) {
           setAttendance(rows);
         }
@@ -138,7 +141,7 @@ function TeamAttendance() {
       window.removeEventListener('kavyaEmployeesChanged', refreshTeamScope);
       window.removeEventListener('kavyaProjectsChanged', refreshTeamScope);
     };
-  }, []);
+  }, [attendanceEmployee.employeeId, isMyAttendanceView]);
 
   const teamIds = useMemo(() => (
     getVisibleTeamEmployeeIds({
@@ -151,8 +154,10 @@ function TeamAttendance() {
   ), [attendanceEmployee.employee, attendanceEmployee.employeeId, employees, projects, role]);
 
   const teamRows = useMemo(() => (
-    attendance.filter((row) => teamIds.has(String(row.employeeId || '').trim()))
-  ), [attendance, teamIds]);
+    isMyAttendanceView
+      ? attendance.filter((row) => String(row.employeeId || '').trim() === String(attendanceEmployee.employeeId || '').trim())
+      : attendance.filter((row) => teamIds.has(String(row.employeeId || '').trim()))
+  ), [attendance, attendanceEmployee.employeeId, isMyAttendanceView, teamIds]);
 
   const rows = useMemo(() => (
     teamRows
@@ -184,6 +189,60 @@ function TeamAttendance() {
   const cardCount = teamIds.size;
   const presentCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'present').length;
   const lateCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'late').length;
+  const heroReportData = useMemo(() => {
+    if (!isMyAttendanceView) {
+      return null;
+    }
+
+    const normalizedStatus = (value) => String(value || '').trim().toLowerCase();
+    const presentRows = rows.filter((row) => normalizedStatus(row.status) === 'present');
+    const absentRows = rows.filter((row) => normalizedStatus(row.status) === 'absent');
+    const leaveRows = rows.filter((row) => normalizedStatus(row.status) === 'leave');
+    const halfDayRows = rows.filter((row) => normalizedStatus(row.status) === 'half day');
+
+    return {
+      metrics: [
+        { label: 'Present', value: String(presentRows.length).padStart(2, '0'), delta: rangeLabel },
+        { label: 'Absent', value: String(absentRows.length).padStart(2, '0'), delta: currentRangeValue },
+        { label: 'Leave', value: String(leaveRows.length).padStart(2, '0'), delta: 'Approved leave days' },
+        { label: 'Half Day', value: String(halfDayRows.length).padStart(2, '0'), delta: 'Partial days' },
+      ],
+      tables: [
+        {
+          sectionTitle: 'Attendance Register',
+          headers: ['Employee', 'ID', 'Date', 'Check In', 'Check Out', 'Hours', 'Status'],
+          bodyRows: rows.map((row) => ([
+            row.employee || '-',
+            row.employeeId || '-',
+            row.date || '-',
+            row.checkIn || '-',
+            row.checkOut || '-',
+            row.hours || '-',
+            row.status || '-',
+          ])),
+        },
+      ],
+      controls: [
+        { label: 'Month', value: selectedMonth },
+        { label: 'Range', value: dateRange },
+        { label: 'Employee', value: attendanceEmployee.employee || '-' },
+      ],
+    };
+  }, [attendanceEmployee.employee, dateRange, isMyAttendanceView, rangeLabel, rows, selectedMonth, currentRangeValue]);
+
+  useEffect(() => {
+    if (!isMyAttendanceView) {
+      window.__kavyaAttendanceExportData = null;
+      return undefined;
+    }
+
+    window.__kavyaAttendanceExportData = heroReportData;
+    return () => {
+      if (window.__kavyaAttendanceExportData === heroReportData) {
+        window.__kavyaAttendanceExportData = null;
+      }
+    };
+  }, [heroReportData, isMyAttendanceView]);
 
   useEffect(() => {
     if (!toast) {
@@ -253,24 +312,26 @@ function TeamAttendance() {
   ];
 
   function downloadCsv() {
+    const exportRows = rows.length ? rows : teamRows;
     const reportHtml = buildAttendanceWorkbook({
-      title: 'List of Logs',
-      subtitle: `${roleLabel} team attendance register`,
+      title: 'Attendance',
+      subtitle: `${roleLabel} monthly attendance log`,
       rangeLabel,
       currentRangeValue,
       dateRange,
       selectedDate,
       selectedMonth,
-      rows,
+      rows: exportRows,
     });
     const blob = new Blob([reportHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
+    const exportStamp = selectedMonth || selectedDate || getDateInputValue(new Date());
     const exportStamp = dateRange === 'month' || dateRange === 'custom'
       ? selectedMonth
       : (selectedDate || getDateInputValue(new Date()));
     link.href = url;
-    link.download = `attendance-log-${exportStamp}.xls`;
+    link.download = `attendance-report-${exportStamp}.xls`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -332,6 +393,7 @@ function TeamAttendance() {
         <Hero
           title="Attendance"
           copy={`${roleLabel} view. ${summaryText}`}
+          reportData={isMyAttendanceView ? heroReportData : null}
         />
 
         {message && (
@@ -409,7 +471,13 @@ function TeamAttendance() {
                   type="month"
                   value={selectedMonth}
                   max={getMonthInputValue(new Date())}
-                  onChange={(event) => setSelectedMonth(event.target.value || getMonthInputValue(new Date()))}
+                  onChange={(event) => {
+                    const nextMonth = event.target.value || getMonthInputValue(new Date());
+                    setSelectedMonth(nextMonth);
+                    if (isMyAttendanceView) {
+                      setDateRange('month');
+                    }
+                  }}
                   aria-label="Select attendance month"
                 />
               </label>
@@ -453,7 +521,7 @@ function TeamAttendance() {
                   ),
                 },
                 ...attendanceColumns,
-                {
+                ...(isMyAttendanceView ? [] : [{
                   key: 'actions',
                   label: 'Actions',
                   render: (row) => (
@@ -466,7 +534,7 @@ function TeamAttendance() {
                       Recommend
                     </button>
                   ),
-                },
+                }]),
               ]}
               rows={rows}
               emptyMessage={`No attendance records found for ${rangeLabel}.`}

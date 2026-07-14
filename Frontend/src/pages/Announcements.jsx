@@ -51,6 +51,7 @@ function Announcements() {
   const roleKey = normalizeRoleKey(role);
   const canCreate = roleKey === "admin" || roleKey === "superadmin" || roleKey === "hr" || roleKey === "hrmanager";
   const isAdmin = roleKey === "admin" || roleKey === "superadmin";
+  const isProjectManager = roleKey === "projectmanager";
 
   const [announcements, setAnnouncements] = useState([]);
   const [editingId, setEditingId] = useState("");
@@ -69,6 +70,39 @@ function Announcements() {
     if (!filterCategory) return announcements;
     return announcements.filter((item) => toLower(item.category) === toLower(filterCategory));
   }, [announcements, filterCategory]);
+
+  const exportReportData = useMemo(() => {
+    if (!isProjectManager) {
+      return null;
+    }
+
+    const escapeValue = (value) => String(value || "-").replace(/\s+/g, " ").trim();
+    const tableRows = filteredAnnouncements.map((item) => ([
+      escapeValue(item.dateLabel || formatDateTime(item.postedAt)),
+      escapeValue(item.title),
+      escapeValue(item.category),
+      escapeValue(item.priority),
+      escapeValue(item.status),
+      escapeValue(item.postedBy || "Admin"),
+      escapeValue(item.body),
+    ]));
+
+    return {
+      metrics: [
+        { label: "Announcements", value: String(filteredAnnouncements.length).padStart(2, "0"), delta: filterCategory ? `${filterCategory} filtered` : "All categories" },
+      ],
+      tables: [
+        {
+          sectionTitle: "Announcement List",
+          headers: ["Date", "Title", "Category", "Priority", "Status", "Posted By", "Description"],
+          bodyRows: tableRows,
+        },
+      ],
+      controls: filterCategory
+        ? [{ label: "Filter by category", value: filterCategory }]
+        : [],
+    };
+  }, [filterCategory, filteredAnnouncements, isProjectManager]);
 
   const clearMessage = () => setMessage("");
 
@@ -291,8 +325,9 @@ function Announcements() {
   return (
     <>
       <Hero
-      title="Announcements"
-      copy="Only Admin and HR can post announcements. PM, TL, and Employee can view announcements only."
+        title="Announcements"
+        copy="Only Admin and HR can post announcements. PM, TL, and Employee can view announcements only."
+        reportData={exportReportData}
       />
 
       {message && (
