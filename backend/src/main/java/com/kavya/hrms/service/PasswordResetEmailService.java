@@ -1,10 +1,11 @@
 package com.kavya.hrms.service;
 
 import com.kavya.hrms.model.AppUser;
+import com.kavya.hrms.config.SmtpSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -14,23 +15,18 @@ import org.springframework.stereotype.Service;
 public class PasswordResetEmailService {
   private static final Logger log = LoggerFactory.getLogger(PasswordResetEmailService.class);
   private final ObjectProvider<JavaMailSender> mailSenderProvider;
-  private final String host;
-  private final String fromAddress;
-  private final String username;
+  private final SmtpSettings smtpSettings;
 
   public PasswordResetEmailService(
       ObjectProvider<JavaMailSender> mailSenderProvider,
-      @Value("${spring.mail.host:}") String host,
-      @Value("${spring.mail.username:}") String username) {
+      Environment environment) {
     this.mailSenderProvider = mailSenderProvider;
-    this.host = host == null ? "" : host.trim();
-    this.username = username == null ? "" : username.trim();
-    this.fromAddress = this.username;
+    this.smtpSettings = SmtpSettings.resolve(environment);
   }
 
   public DeliveryResult sendResetCode(AppUser user, String resetToken, String expiresAt) {
-    if (host.isBlank()) {
-      log.warn("Password reset email skipped because spring.mail.host is blank.");
+    if (!smtpSettings.isConfigured()) {
+      log.warn("Password reset email skipped because SMTP host is blank.");
       return DeliveryResult.notConfigured();
     }
 
@@ -41,8 +37,7 @@ public class PasswordResetEmailService {
 
     JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
     if (mailSender == null) {
-      log.warn("Password reset email skipped because JavaMailSender bean is unavailable.");
-      return DeliveryResult.notConfigured();
+      mailSender = smtpSettings.createMailSender();
     }
 
     SimpleMailMessage message = new SimpleMailMessage();
@@ -65,11 +60,21 @@ public class PasswordResetEmailService {
   }
 
   private String resolveFromAddress() {
-    if (!fromAddress.isBlank()) {
-      return fromAddress;
+    return firstNonBlank(smtpSettings.getFromAddress(), smtpSettings.getUsername());
+  }
+
+  private String firstNonBlank(String... values) {
+    if (values == null) {
+      return "";
     }
-    if (!username.isBlank()) {
-      return username;
+
+    for (String value : values) {
+      if (value != null) {
+        String trimmed = value.trim();
+        if (!trimmed.isEmpty()) {
+          return trimmed;
+        }
+      }
     }
     return "";
   }

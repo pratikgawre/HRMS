@@ -135,8 +135,13 @@ function FirstLoginPasswordChange() {
                   setError('');
                 }}
               />
-              <button type="button" onClick={() => setShowCurrentPassword((current) => !current)}>
-                {showCurrentPassword ? 'Hide' : 'Show'}
+              <button
+                type="button"
+                className="password-visibility-toggle"
+                onClick={() => setShowCurrentPassword((current) => !current)}
+                aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+              >
+                <i className={showCurrentPassword ? 'ri-eye-off-line' : 'ri-eye-line'} aria-hidden="true" />
               </button>
             </label>
 
@@ -152,8 +157,13 @@ function FirstLoginPasswordChange() {
                   setError('');
                 }}
               />
-              <button type="button" onClick={() => setShowNewPassword((current) => !current)}>
-                {showNewPassword ? 'Hide' : 'Show'}
+              <button
+                type="button"
+                className="password-visibility-toggle"
+                onClick={() => setShowNewPassword((current) => !current)}
+                aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+              >
+                <i className={showNewPassword ? 'ri-eye-off-line' : 'ri-eye-line'} aria-hidden="true" />
               </button>
             </label>
 
@@ -169,8 +179,13 @@ function FirstLoginPasswordChange() {
                   setError('');
                 }}
               />
-              <button type="button" onClick={() => setShowConfirmPassword((current) => !current)}>
-                {showConfirmPassword ? 'Hide' : 'Show'}
+              <button
+                type="button"
+                className="password-visibility-toggle"
+                onClick={() => setShowConfirmPassword((current) => !current)}
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+              >
+                <i className={showConfirmPassword ? 'ri-eye-off-line' : 'ri-eye-line'} aria-hidden="true" />
               </button>
             </label>
 

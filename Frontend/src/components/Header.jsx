@@ -61,24 +61,27 @@ function Header({ role, onMenuClick }) {
   }, [showNotifications]);
 
   useEffect(() => {
-    const syncEmployeeIdentity = () => {
+    const syncEmployeeIdentity = ({ syncSessionPhoto = false } = {}) => {
       const nextIdentity = getHeaderEmployeeIdentity(role);
       setEmployeeIdentity(nextIdentity);
-      const nextPhoto = nextIdentity?.profilePicture || '';
-      if ((getSessionValue('kavyaEmployeePhoto') || '') !== nextPhoto) {
-        setSessionValue('kavyaEmployeePhoto', nextPhoto);
+
+      if (syncSessionPhoto) {
+        setSessionValue('kavyaEmployeePhoto', nextIdentity?.profilePicture || '', { dispatch: false });
       }
     };
 
-    syncEmployeeIdentity();
-    window.addEventListener('kavyaSessionChanged', syncEmployeeIdentity);
-    window.addEventListener('kavyaEmployeesChanged', syncEmployeeIdentity);
-    window.addEventListener('kavyaUsersChanged', syncEmployeeIdentity);
+    const handleSessionChange = () => syncEmployeeIdentity();
+    const handleEmployeeDataChange = () => syncEmployeeIdentity({ syncSessionPhoto: true });
+
+    handleEmployeeDataChange();
+    window.addEventListener('kavyaSessionChanged', handleSessionChange);
+    window.addEventListener('kavyaEmployeesChanged', handleEmployeeDataChange);
+    window.addEventListener('kavyaUsersChanged', handleEmployeeDataChange);
 
     return () => {
-      window.removeEventListener('kavyaSessionChanged', syncEmployeeIdentity);
-      window.removeEventListener('kavyaEmployeesChanged', syncEmployeeIdentity);
-      window.removeEventListener('kavyaUsersChanged', syncEmployeeIdentity);
+      window.removeEventListener('kavyaSessionChanged', handleSessionChange);
+      window.removeEventListener('kavyaEmployeesChanged', handleEmployeeDataChange);
+      window.removeEventListener('kavyaUsersChanged', handleEmployeeDataChange);
     };
   }, [role]);
 

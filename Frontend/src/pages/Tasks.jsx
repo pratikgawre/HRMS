@@ -412,27 +412,17 @@ function Tasks() {
       taskListColumns.find((column) => column.key === 'status'),
     ].filter(Boolean)
     : taskListColumns;
-  const taskAssignmentColumns = taskListColumns;
-  const hrStatusUpdateColumns = role === 'hr'
-    ? [
-      taskListColumns.find((column) => column.key === 'owner'),
-      {
-        key: 'assignedToId',
-        label: 'Assign ID',
-        render: (row) => {
-          const ownerName = String(row.owner || row.assignedToName || row.assignedTo || '').trim().toLowerCase();
-          return row.assignedToId || employeeIdByName.get(ownerName) || '-';
-        },
-      },
-      taskListColumns.find((column) => column.key === 'title'),
-      {
-        key: 'due',
-        label: 'Due Date',
-        render: (row) => row.dueDate || row.due || '-',
-      },
-      taskListColumns.find((column) => column.key === 'status'),
-    ].filter(Boolean)
-    : taskListColumns;
+  const taskAssignmentColumns = [
+    taskListColumns.find((column) => column.key === 'owner'),
+    taskListColumns.find((column) => column.key === 'title'),
+    {
+      key: 'due',
+      label: 'Due Date',
+      render: (row) => row.dueDate || row.due || '-',
+    },
+    taskListColumns.find((column) => column.key === 'status'),
+    showTaskActionColumns ? taskListColumns.find((column) => column.key === 'actions') : null,
+  ].filter(Boolean);
   const createTask = async (event) => {
     event.preventDefault();
     const isEditing = Boolean(editingTask);

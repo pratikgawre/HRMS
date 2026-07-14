@@ -3,7 +3,11 @@
 ## Run
 1. `cd backend`
 2. `mvn spring-boot:run`
-3. Backend starts at `http://localhost:8080`
+3. Backend starts at `http://localhost:8080` by default
+4. If port `8080` is already in use in PowerShell, run:
+   `$env:SERVER_PORT=8081; mvn spring-boot:run`
+5. If you move the backend to another port, start the frontend with:
+   `$env:VITE_BACKEND_URL='http://localhost:8081'; npm run dev`
 
 ## MongoDB (Local + Compass)
 - Backend expects MongoDB at: `mongodb://localhost:27017/hrmsdb`

@@ -336,14 +336,7 @@ function Projects() {
             Edit
           </button>
           {canManage && (
-            <button
-              type="button"
-              className="danger"
-              onClick={(event) => {
-                event.stopPropagation();
-                removeProject(row);
-              }}
-            >
+            <button type="button" className="danger" onClick={() => openDeleteProjectConfirm(row)}>
               Delete
             </button>
           )}
@@ -675,15 +668,33 @@ function Projects() {
 
     const projectToDelete = deleteTargetProject;
     const projectName = projectToDelete.name || projectToDelete.projectCode || 'This project';
+    const projectId = projectToDelete.backendId || projectToDelete.id;
+    const previousProjects = [...projects];
     closeDeleteProjectConfirm();
 
+    if (!projectId) {
+      const errorMessage = 'Project could not be deleted because its ID is missing.';
+      setMessage(errorMessage);
+      showProjectToast(errorMessage, 'error');
+      return;
+    }
+
     try {
-      await apiRequest(`/projects/${projectToDelete.backendId || projectToDelete.id}`, { method: 'DELETE' });
-      const previousProjects = [...projects];
-      const nextProjects = previousProjects.filter((item) => item.id !== projectToDelete.id && item.backendId !== projectToDelete.id);
-      setProjects(nextProjects);
-      setSelectedProjectId((current) => (current === projectToDelete.id ? '' : current));
+      await apiRequest(`/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+      const refreshedProjects = await loadProjectsFromServer(setProjects, setSelectedProjectId);
+      const projectStillExists = refreshedProjects.some((item) => {
+        const itemKeys = [item.id, item.backendId].filter(Boolean);
+        return itemKeys.includes(projectId)
+          || itemKeys.includes(projectToDelete.id)
+          || itemKeys.includes(projectToDelete.backendId);
+      });
+
+      if (projectStillExists) {
+        throw new Error('Project is still showing in the database. Please try deleting it again.');
+      }
+
       setMessage(`${projectName} deleted. Undo available for a short time.`);
+      showProjectToast(`${projectName} deleted successfully.`, 'success');
       clearDeleteUndoTimer();
       setDeleteUndoState({
         project: projectToDelete,
@@ -807,9 +818,13 @@ function Projects() {
             <span>{projects.length} stored projects</span>
           </div>
         </div>
-
       {savePopup && <ProjectToast popup={savePopup} onClose={closeProjectToast} />}
-      {deleteUndoState && <ProjectUndoToast projectName={deleteUndoState.projectName} onUndo={undoDeleteProject} />}
+      {deleteUndoState?.project && (
+        <ProjectUndoToast
+          projectName={deleteUndoState.projectName || deleteUndoState.project.name || deleteUndoState.project.projectCode || 'Project'}
+          onUndo={undoDeleteProject}
+        />
+      )}
 
         <div className="project-tab-strip" role="tablist" aria-label="Project modules">
           {PROJECT_TABS.map((tab) => {
@@ -1216,6 +1231,36 @@ function Projects() {
           </aside>
         </div>
       </Section>
+      {deleteTargetProject && (
+        <div className="project-delete-backdrop" role="presentation" onClick={closeDeleteProjectConfirm}>
+          <div
+            className="project-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="project-delete-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="project-delete-icon" aria-hidden="true">
+              <i className="ri-delete-bin-line" />
+            </div>
+            <div className="project-delete-copy">
+              <h3 id="project-delete-title">Delete project?</h3>
+              <p>
+                {deleteTargetProject.name || deleteTargetProject.projectCode || 'This project'} will be removed from the
+                database. Do you want to continue?
+              </p>
+            </div>
+            <div className="project-delete-actions">
+              <button type="button" className="project-delete-cancel" onClick={closeDeleteProjectConfirm}>
+                Cancel
+              </button>
+              <button type="button" className="project-delete-confirm" onClick={handleDeleteProjectConfirm}>
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {isTeamRosterOpen && selectedProject && (
         <div className="project-team-modal-backdrop" role="presentation" onClick={closeTeamRoster}>
           <div

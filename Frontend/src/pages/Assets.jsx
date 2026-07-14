@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
@@ -44,6 +44,7 @@ function Assets() {
     dueDate: '',
   });
   const [assetMessage, setAssetMessage] = useState('');
+  const hasLoadedInitialDataRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -60,12 +61,7 @@ function Assets() {
           return;
         }
 
-        const normalizedEmployees = Array.isArray(employeeRows) ? employeeRows : [];
-        const recoveredAssetRows = Array.isArray(assetRows) && assetRows.length > 0
-          ? assetRows
-          : (isHrModule
-              ? readHrAssetCache() || buildHrAssetFallback(normalizedEmployees, Array.isArray(assignmentRows) ? assignmentRows : [])
-              : []);
+        const normalizedEmployees = normalizeAssetDirectoryEmployees(Array.isArray(employeeRows) ? employeeRows : []);
         console.info('[Assets] fetch response', {
           assetCount: Array.isArray(recoveredAssetRows) ? recoveredAssetRows.length : 0,
           sampleDates: Array.isArray(recoveredAssetRows)
@@ -91,16 +87,21 @@ function Assets() {
       }
     };
 
-    refreshAssets();
+    if (!hasLoadedInitialDataRef.current) {
+      hasLoadedInitialDataRef.current = true;
+      refreshAssets();
+    }
     window.addEventListener('focus', refreshAssets);
     window.addEventListener('kavyaAssetsChanged', refreshAssets);
     window.addEventListener('kavyaAssetAssignmentsChanged', refreshAssets);
+    window.addEventListener('kavyaEmployeesChanged', refreshAssets);
 
     return () => {
       active = false;
       window.removeEventListener('focus', refreshAssets);
       window.removeEventListener('kavyaAssetsChanged', refreshAssets);
       window.removeEventListener('kavyaAssetAssignmentsChanged', refreshAssets);
+      window.removeEventListener('kavyaEmployeesChanged', refreshAssets);
     };
   }, []);
 
@@ -381,10 +382,14 @@ function Assets() {
       return;
     }
 
-    const selectedEmployee = employeeLookup.get(String(assetForm.assignedTo || '').trim().toLowerCase());
-    const enteredEmployeeValue = selectedEmployee?.employeeId || assetForm.assignedTo || assignedEmployeeQuery.trim();
-    const assignedTo = enteredEmployeeValue || '-';
-    const isAssignedAsset = assetForm.status === 'Assigned' || Boolean(enteredEmployeeValue);
+    const rawEmployeeQuery = assignedEmployeeQuery.trim();
+    const selectedEmployee = employeeLookup.get(normalizeLookupValue(assetForm.assignedTo))
+      || employeeLookup.get(normalizeLookupValue(rawEmployeeQuery));
+    const enteredEmployeeId = String(selectedEmployee?.employeeId || assetForm.assignedTo || rawEmployeeQuery).trim();
+    const enteredEmployeeName = String(selectedEmployee?.employeeName || '').trim()
+      || (rawEmployeeQuery && normalizeLookupValue(rawEmployeeQuery) !== normalizeLookupValue(enteredEmployeeId) ? rawEmployeeQuery : '');
+    const assignedTo = enteredEmployeeName || (enteredEmployeeId || '-');
+    const isAssignedAsset = assetForm.status === 'Assigned' || Boolean(enteredEmployeeId);
     const isEditingAsset = Boolean(editingAssetId);
     const assetId = isEditingAsset ? editingAssetId : getNextAssetCode(assets);
 
@@ -401,7 +406,7 @@ function Assets() {
       dueDate: assetForm.dueDate || '',
       status: assetForm.status,
       assignedTo,
-      assignedToEmployeeId: enteredEmployeeValue,
+      assignedToEmployeeId: enteredEmployeeId,
       condition: assetForm.condition.trim() || 'Good',
       location: assetForm.location.trim() || 'Store',
     };
@@ -458,40 +463,46 @@ function Assets() {
   };
 
   const employeeOptions = useMemo(() => employees.map((employee) => {
-    const employeeId = employee.employeeCode || employee.employeeId || employee.id || '';
-    const employeeName = employee.displayName || employee.name || employee.employeeName || '';
+    const employeeId = getEmployeeDirectoryId(employee);
+    const employeeName = getEmployeeDisplayName(employee);
+    const searchTokens = getEmployeeSearchAliases(employee, employeeId, employeeName);
     return {
       value: employeeId || employeeName,
-      label: employeeId ? `${employeeName} (${employeeId})` : employeeName,
+      label: employeeId && employeeName ? `${employeeName} (${employeeId})` : (employeeName || employeeId),
       employeeId,
       employeeName,
+      searchTokens,
+      searchText: searchTokens.join(' ').toLowerCase(),
     };
-  }).filter((option) => option.value), [employees]);
+  }).filter((option) => option.value || option.employeeName), [employees]);
 
   const employeeLookup = useMemo(() => {
     const map = new Map();
     employeeOptions.forEach((option) => {
-      map.set(String(option.value).toLowerCase(), option);
-      if (option.employeeName) {
-        map.set(option.employeeName.toLowerCase(), option);
-      }
-      if (option.employeeId) {
-        map.set(option.employeeId.toLowerCase(), option);
-      }
+      [
+        option.value,
+        option.label,
+        option.employeeName,
+        option.employeeId,
+        ...(option.searchTokens || []),
+      ].forEach((candidate) => {
+        const normalizedCandidate = normalizeLookupValue(candidate);
+        if (normalizedCandidate) {
+          map.set(normalizedCandidate, option);
+        }
+      });
     });
     return map;
   }, [employeeOptions]);
 
   const filteredEmployeeOptions = useMemo(() => {
-    const query = assignedEmployeeQuery.trim().toLowerCase();
+    const query = normalizeLookupValue(assignedEmployeeQuery);
     const options = employeeOptions.filter((option) => {
       if (!query) {
         return true;
       }
 
-      return option.label.toLowerCase().includes(query)
-        || option.employeeName.toLowerCase().includes(query)
-        || String(option.employeeId || '').toLowerCase().includes(query);
+      return option.searchText.includes(query);
     });
 
     return options.slice(0, 20);
@@ -747,7 +758,7 @@ function Assets() {
                           selectEmployee(option);
                         }}
                       >
-                        <strong>{option.employeeName}</strong>
+                        <strong>{option.employeeName || option.employeeId || 'Unknown Employee'}</strong>
                         <small>{option.employeeId || 'No ID'}</small>
                       </button>
                     ))}
@@ -845,9 +856,11 @@ function EmployeeAssetsView() {
   const [toast, setToast] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const lastLoadedEmployeeIdRef = useRef('');
 
   useEffect(() => {
     let active = true;
+    const employeeLoadKey = String(currentEmployee.employeeId || '').trim() || '__anonymous__';
 
     const refreshAssets = async () => {
       setIsLoading(true);
@@ -930,10 +943,13 @@ function EmployeeAssetsView() {
       }
     };
 
-    refreshAssets();
-    refreshAssignments();
-    refreshRequests();
-    refreshAnnouncements();
+    if (lastLoadedEmployeeIdRef.current !== employeeLoadKey) {
+      lastLoadedEmployeeIdRef.current = employeeLoadKey;
+      refreshAssets();
+      refreshAssignments();
+      refreshRequests();
+      refreshAnnouncements();
+    }
     window.addEventListener('focus', refreshAssets);
     window.addEventListener('focus', refreshAssignments);
     window.addEventListener('focus', refreshRequests);
@@ -1731,36 +1747,104 @@ function capitalizeFirst(value) {
   return text ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase() : 'Request';
 }
 
+function normalizeLookupValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function firstNonBlankText(...values) {
+  for (const value of values) {
+    const text = String(value || '').trim();
+    if (text) {
+      return text;
+    }
+  }
+
+  return '';
+}
+
+function joinEmployeeNameParts(...values) {
+  return values.map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+}
+
+function getEmployeeDisplayName(employee) {
+  return firstNonBlankText(
+    employee?.displayName,
+    employee?.name,
+    employee?.employeeName,
+    employee?.employee,
+    joinEmployeeNameParts(employee?.firstName, employee?.middleName, employee?.lastName),
+    joinEmployeeNameParts(employee?.firstName, employee?.lastName),
+  );
+}
+
+function getEmployeeDirectoryId(employee) {
+  return firstNonBlankText(
+    employee?.employeeCode,
+    employee?.employeeId,
+    employee?.id,
+    employee?.userId,
+  );
+}
+
+function getEmployeeSearchAliases(employee, employeeId = getEmployeeDirectoryId(employee), employeeName = getEmployeeDisplayName(employee)) {
+  return Array.from(new Set([
+    employeeId,
+    employee?.employeeCode,
+    employee?.employeeId,
+    employee?.id,
+    employee?.userId,
+    employee?.email,
+    employeeName,
+    employee?.displayName,
+    employee?.name,
+    employee?.employeeName,
+    employee?.employee,
+    joinEmployeeNameParts(employee?.firstName, employee?.middleName, employee?.lastName),
+    joinEmployeeNameParts(employee?.firstName, employee?.lastName),
+  ].map((value) => String(value || '').trim()).filter(Boolean)));
+}
+
+function normalizeAssetDirectoryEmployees(rows) {
+  return (Array.isArray(rows) ? rows : []).map((employee) => {
+    const employeeId = getEmployeeDirectoryId(employee);
+    const employeeName = getEmployeeDisplayName(employee);
+
+    return {
+      ...employee,
+      id: employee.id || employeeId,
+      employeeId: employee.employeeId || employeeId,
+      employeeCode: employee.employeeCode || employeeId,
+      displayName: employee.displayName || employeeName,
+      name: employee.name || employeeName,
+      employeeName: employee.employeeName || employeeName,
+    };
+  });
+}
+
 function normalizeAssetRows(rows, employees = []) {
-  const employeeByName = new Map();
-  const employeeById = new Map();
+  const employeeDirectory = new Map();
 
   employees.forEach((employee) => {
-    const employeeId = String(employee.employeeCode || employee.employeeId || employee.id || '').trim();
-    const employeeName = String(employee.displayName || employee.name || employee.employeeName || '').trim();
-    if (employeeName) {
-      employeeByName.set(employeeName.toLowerCase(), { employeeId, employeeName });
-    }
-    if (employeeId) {
-      employeeById.set(employeeId.toLowerCase(), { employeeId, employeeName });
-    }
+    const employeeId = getEmployeeDirectoryId(employee);
+    const employeeName = getEmployeeDisplayName(employee);
+    const entry = { employeeId, employeeName };
+
+    getEmployeeSearchAliases(employee, employeeId, employeeName).forEach((alias) => {
+      const normalizedAlias = normalizeLookupValue(alias);
+      if (normalizedAlias) {
+        employeeDirectory.set(normalizedAlias, entry);
+      }
+    });
   });
 
   return rows.map((asset, index) => {
     const assetCode = asset.assetCode || asset.id || `AST-${String(101 + index)}`;
     const currentDate = formatDateForDisplay(asset.currentDate || asset.current_date || asset.assignedDate || asset.assigned_date || asset.assignmentDate || asset.assignment_date || '');
     const dueDate = formatDateForDisplay(asset.dueDate || asset.due_date || asset.returnDate || asset.return_date || '');
-    const assignedToEmployeeIdValue = asset.assignedToEmployeeId || asset.employee_id || asset.employeeId || '';
-    const assignedToValue = asset.assignedTo || asset.employee_name || asset.employeeName || '';
-    const employeeByAssetId = asset.assignedToEmployeeId
-      ? employeeById.get(String(asset.assignedToEmployeeId).toLowerCase())
-      : assignedToEmployeeIdValue
-        ? employeeById.get(String(assignedToEmployeeIdValue).toLowerCase())
-        : null;
-    const employeeByAssetValue = !employeeByAssetId && assignedToValue
-      ? employeeByName.get(String(assignedToValue).toLowerCase()) || employeeById.get(String(assignedToValue).toLowerCase())
-      : null;
-    const matchedEmployee = employeeByAssetId || employeeByAssetValue;
+    const assignedToEmployeeIdValue = firstNonBlankText(asset.assignedToEmployeeId, asset.employee_id, asset.employeeId);
+    const assignedToValue = firstNonBlankText(asset.assignedTo, asset.employee_name, asset.employeeName);
+    const matchedEmployee = employeeDirectory.get(normalizeLookupValue(assignedToEmployeeIdValue))
+      || employeeDirectory.get(normalizeLookupValue(assignedToValue));
     const assignedToEmployeeId = matchedEmployee?.employeeId || assignedToEmployeeIdValue || '';
     const assignedToEmployeeName = matchedEmployee?.employeeName || assignedToValue || '-';
     return {
@@ -1786,6 +1870,7 @@ function normalizeAssetRows(rows, employees = []) {
 
 function serializeAssetForApi(asset) {
   const assignedToEmployeeId = String(asset.assignedToEmployeeId || asset.assignedTo || '').trim();
+  const assignedTo = String(asset.assignedTo || '').trim();
 
   return {
     id: asset.id,
@@ -1795,7 +1880,7 @@ function serializeAssetForApi(asset) {
     brand: asset.brand || '',
     model: asset.model || '',
     serialNo: asset.serialNo || '',
-      purchaseDate: asset.purchaseDate || '',
+    purchaseDate: asset.purchaseDate || '',
     currentDate: asset.currentDate || '',
     dueDate: asset.dueDate || '',
     assignedDate: asset.assignedDate || asset.currentDate || '',
@@ -1807,10 +1892,11 @@ function serializeAssetForApi(asset) {
     assignment_date: asset.assignmentDate || asset.currentDate || '',
     return_date: asset.returnDate || asset.dueDate || '',
     status: asset.status,
-      assignedTo: assignedToEmployeeId || '-',
-      condition: asset.condition || 'Good',
-      location: asset.location || 'Store',
-    };
+    assignedToEmployeeId,
+    assignedTo: assignedTo || (assignedToEmployeeId || '-'),
+    condition: asset.condition || 'Good',
+    location: asset.location || 'Store',
+  };
 }
 
 function getTodayInputValue(referenceDate = new Date()) {

@@ -63,21 +63,21 @@ function syncMemorySession() {
 
 syncMemorySession();
 
-export function setSessionValue(key, value) {
+export function setSessionValue(key, value, options = {}) {
   const nextValue = key === 'kavyaAuthToken' ? String(value || '').trim() : value;
-  if (session[key] === nextValue) {
+  if (Object.is(session[key], nextValue)) {
     return;
   }
 
+  session[key] = nextValue;
   if (key === 'kavyaAuthToken') {
-    session[key] = nextValue;
-    persistToken(session[key]);
-  } else {
-    session[key] = nextValue;
+    persistToken(nextValue);
   }
 
   persistSessionSnapshot();
-  window.dispatchEvent(new Event('kavyaSessionChanged'));
+  if (options.dispatch !== false) {
+    window.dispatchEvent(new Event('kavyaSessionChanged'));
+  }
 }
 
 export function getSessionValue(key) {
