@@ -11,7 +11,11 @@ function ProtectedRoute({ allowedRoles }) {
     const refreshSession = () => setSessionVersion((current) => current + 1);
 
     window.addEventListener('kavyaSessionChanged', refreshSession);
-    return () => window.removeEventListener('kavyaSessionChanged', refreshSession);
+    window.addEventListener('storage', refreshSession);
+    return () => {
+      window.removeEventListener('kavyaSessionChanged', refreshSession);
+      window.removeEventListener('storage', refreshSession);
+    };
   }, []);
 
   const session = syncSessionFromAccessUser();

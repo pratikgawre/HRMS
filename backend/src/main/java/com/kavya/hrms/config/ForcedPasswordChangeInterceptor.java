@@ -60,6 +60,10 @@ public class ForcedPasswordChangeInterceptor implements HandlerInterceptor {
           || "/api/auth/change-password".equals(normalizedPath);
     }
 
+    if ("GET".equals(normalizedMethod)) {
+      return "/api/auth/session".equals(normalizedPath);
+    }
+
     return "DELETE".equals(normalizedMethod) && "/api/auth/session".equals(normalizedPath);
   }
 

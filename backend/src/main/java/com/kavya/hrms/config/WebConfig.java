@@ -34,7 +34,8 @@ public class WebConfig implements WebMvcConfigurer {
     registry.addMapping("/api/**")
         .allowedOriginPatterns(allowedOriginPatterns)
         .allowedMethods("*")
-        .allowedHeaders("*");
+        .allowedHeaders("*")
+        .allowCredentials(true);
   }
 
   @Override
@@ -44,6 +45,8 @@ public class WebConfig implements WebMvcConfigurer {
       return;
     }
 
+    registry.addInterceptor(new AuthSessionInterceptor(authSessionRepository))
+        .addPathPatterns("/api/**");
     registry.addInterceptor(new ForcedPasswordChangeInterceptor(authSessionRepository))
         .addPathPatterns("/api/**");
   }

@@ -715,6 +715,8 @@ function Tasks() {
 }
 
 function EmployeeTasksView() {
+  const role = getSessionValue('kavyaRole') || 'employee';
+  const isTeamLead = role === 'teamLead';
   const [taskRows, setTaskRows] = useState([]);
   const [status, setStatus] = useState('All');
   const [priority, setPriority] = useState('All');
