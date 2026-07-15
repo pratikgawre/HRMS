@@ -581,7 +581,7 @@ function TeamAttendance() {
                       Correct Login
                     </button>
                   ),
-                }]),
+                }])
               ]}
               rows={displayedRows}
               emptyMessage={summaryFocus === 'team'
@@ -1190,5 +1190,7 @@ function getWorkbookDateKey(date) {
 }
 
 export default TeamAttendance;
+
+
 
 
