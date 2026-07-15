@@ -6,14 +6,30 @@ import './styles.css';
 import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { bootstrapData } from './utils/bootstrapData.js';
-import { bootstrapSessionFromBackend } from './utils/appSession.js';
+import { bootstrapSessionFromBackend, getSessionSnapshot } from './utils/appSession.js';
 
-Promise.all([bootstrapSessionFromBackend(), bootstrapData()]).finally(() => {
-  ReactDOMClient.createRoot(document.getElementById('root')).render(
-    <StrictMode>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </StrictMode>,
-  );
-});
+const cachedSession = getSessionSnapshot();
+const hasCachedSession = Boolean(cachedSession.kavyaRole || cachedSession.kavyaAccessRole);
+const sessionBootstrap = hasCachedSession
+  ? bootstrapSessionFromBackend()
+  : Promise.resolve(cachedSession);
+
+sessionBootstrap
+  .then((session) => {
+    const hasActiveSession = Boolean(session?.kavyaRole || session?.kavyaAccessRole);
+    if (!hasActiveSession) {
+      return null;
+    }
+
+    return bootstrapData().catch(() => null);
+  })
+  .catch(() => null)
+  .finally(() => {
+    ReactDOMClient.createRoot(document.getElementById('root')).render(
+      <StrictMode>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </StrictMode>,
+    );
+  });

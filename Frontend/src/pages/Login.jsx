@@ -5,6 +5,7 @@ import { authenticateUser, startSession } from '../utils/auth.js';
 function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
@@ -15,15 +16,32 @@ function Login() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    const email = form.email.trim().toLowerCase();
-    const result = await authenticateUser(email, form.password);
+    const loginIdentifier = form.email.trim();
 
-    if (!result.ok) {
-      setError(result.message);
+    if (isSubmitting) {
       return;
     }
 
-    navigate(startSession(result.user), { replace: true });
+    if (!loginIdentifier || !form.password) {
+      setError('Please enter your login ID and password.');
+      return;
+    }
+
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      const result = await authenticateUser(loginIdentifier, form.password);
+
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+
+      navigate(startSession(result.user), { replace: true });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -69,16 +87,16 @@ function Login() {
       <section className="login-card">
         <div className="login-panel">
           <h2>Welcome back</h2>
-          <p className="login-copy">Login to continue</p>
+          <p className="login-copy">Login with email, employee ID, or user ID</p>
 
           <form className="login-form" onSubmit={handleSubmit}>
             <label className="login-field">
               <i className="ri-mail-line" aria-hidden="true" />
               <input
                 type="text"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="teamlead@gmail.com"
+                inputMode="text"
+                autoComplete="username"
+                placeholder="teamlead@gmail.com or KV003"
                 value={form.email}
                 onChange={(event) => updateField('email', event.target.value)}
               />
@@ -102,7 +120,9 @@ function Login() {
               </button>
             </label>
             {error && <p className="login-error" role="alert">{error}</p>}
-            <button className="primary-btn" type="submit">Login</button>
+            <button className="primary-btn" type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>
+              {isSubmitting ? 'Signing in...' : 'Login'}
+            </button>
             <Link className="login-link" to="/forgot-password">Forgot Password?</Link>
           </form>
         </div>

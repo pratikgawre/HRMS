@@ -55,7 +55,7 @@ class AuthControllerTest {
         user.setUserId("USR-ADMIN-001");
         user.setStatus("Active");
 
-        when(appUserRepository.findAllByEmailIgnoreCase("admin@example.com"))
+        when(appUserRepository.findAll())
             .thenReturn(Collections.singletonList(user));
         when(authSessionRepository.save(any(AuthSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
         LoginRequest request = new LoginRequest();
@@ -69,6 +69,49 @@ class AuthControllerTest {
         LoginResponse body = java.util.Objects.requireNonNull(response.getBody(), "Response body should not be null");
         assertTrue(body.isOk());
         assertEquals("Super Admin", body.getRole());
+    }
+
+    @Test
+    void loginShouldAcceptEmployeeIdThroughLegacyFallback() {
+        when(authSessionRepository.save(any(AuthSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        LoginRequest request = new LoginRequest();
+        request.setEmail("KV003");
+        request.setPassword("teamlead123");
+
+        ResponseEntity<LoginResponse> response = authController.login(request);
+        LoginResponse body = java.util.Objects.requireNonNull(response.getBody(), "Response body should not be null");
+
+        assertEquals(200, response.getStatusCode().value());
+        assertTrue(body.isOk());
+        assertEquals("Team Lead", body.getRole());
+        assertEquals("KV003", body.getEmployeeId());
+    }
+
+    @Test
+    void loginShouldNotBypassStoredPasswordWithLegacyFallback() {
+        AppUser user = new AppUser();
+        user.setEmail("admin@gmail.com");
+        user.setPassword("Custom@123");
+        user.setRole("admin");
+        user.setEmployeeId("ADMIN-001");
+        user.setEmployeeName("Admin Kavya");
+        user.setUserId("USR-ADMIN-001");
+        user.setStatus("Active");
+
+        when(appUserRepository.findAll())
+            .thenReturn(Collections.singletonList(user));
+
+        LoginRequest request = new LoginRequest();
+        request.setEmail("ADMIN-001");
+        request.setPassword("admin123");
+
+        ResponseEntity<LoginResponse> response = authController.login(request);
+        LoginResponse body = java.util.Objects.requireNonNull(response.getBody(), "Response body should not be null");
+
+        assertEquals(401, response.getStatusCode().value());
+        assertTrue(!body.isOk());
+        assertEquals("Invalid credentials", body.getMessage());
     }
 
     @Test
@@ -183,6 +226,9 @@ class AuthControllerTest {
         session.setEmployeeId("KV001");
         session.setEmployeeName("Aarav Sharma");
         session.setStatus("Active");
+        session.setLastLogin(Instant.now().toString());
+        session.setCreatedAt(Instant.now().toString());
+        session.setLastSeenAt(Instant.now().toString());
         session.setMustChangePassword(true);
 
         when(authSessionRepository.findById("token-123")).thenReturn(Optional.of(session));
@@ -207,3 +253,4 @@ class AuthControllerTest {
         assertTrue(!Boolean.TRUE.equals(session.getMustChangePassword()));
     }
 }
+

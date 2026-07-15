@@ -9,7 +9,8 @@ import { getSessionValue, removeSessionValue } from '../utils/appSession.js';
 import { setUsersCache } from '../utils/user-management.js';
 import { setEmployeesCache } from '../utils/employeeStorage.js';
 
-const ACCESS_REFRESH_MS = 10000;
+const ACCESS_REFRESH_MS = 30000;
+const LOGIN_TOAST_MS = 900;
 
 const rolePathPrefixes = {
   admin: '/admin',
@@ -43,7 +44,7 @@ function DashboardLayout() {
 
     const timer = window.setTimeout(() => {
       setShowLoginToast(false);
-    }, 2000);
+    }, LOGIN_TOAST_MS);
 
     return () => window.clearTimeout(timer);
   }, [showLoginToast]);
@@ -79,13 +80,14 @@ function DashboardLayout() {
     };
 
     syncRole();
-    refreshAccessData();
+    const refreshTimer = window.setTimeout(refreshAccessData, 250);
     window.addEventListener('storage', syncRole);
     window.addEventListener('kavyaUsersChanged', syncRole);
     window.addEventListener('kavyaEmployeesChanged', syncRole);
     const refreshInterval = window.setInterval(refreshAccessData, ACCESS_REFRESH_MS);
 
     return () => {
+      window.clearTimeout(refreshTimer);
       window.removeEventListener('storage', syncRole);
       window.removeEventListener('kavyaUsersChanged', syncRole);
       window.removeEventListener('kavyaEmployeesChanged', syncRole);
@@ -118,4 +120,3 @@ function DashboardLayout() {
 }
 
 export default DashboardLayout;                      
-

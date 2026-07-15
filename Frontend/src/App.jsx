@@ -26,6 +26,7 @@ import MyTeam from './pages/MyTeam.jsx';
 import Departments from './pages/Departments.jsx';
 import AnnouncementTextView from './pages/AnnouncementTextView.jsx';
 import ScheduledInterviews from './pages/ScheduledInterviews.jsx';
+import SessionTimeoutManager from './components/SessionTimeoutManager.jsx';
 import { getSessionValue } from './utils/appSession.js';
 
 const roleDashboards = {
@@ -162,6 +163,4 @@ function RoleRedirect({ dashboards, fallback }) {
 }
 
 export default App;
-
-
 

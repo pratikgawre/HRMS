@@ -1,10 +1,11 @@
-import { getSessionValue } from './appSession.js';
+import { clearSessionValues, getSessionValue, markSessionActivity } from './appSession.js';
 import { API_BASE, normalizeBackendAssetUrl } from './runtime-config.js';
 
 export async function apiRequest(path, options = {}) {
   const accessRole = getSessionValue('kavyaAccessRole') || getSessionValue('kavyaRole');
   const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId');
   const employeeId = getSessionValue('kavyaEmployeeId');
+  const authToken = getSessionValue('kavyaAuthToken');
   const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const { headers: optionHeaders, ...requestOptions } = options;
   const headers = {
@@ -12,6 +13,7 @@ export async function apiRequest(path, options = {}) {
     ...(accessRole ? { 'X-Kavya-Access-Role': accessRole } : {}),
     ...(userId ? { 'X-Kavya-User-Id': userId } : {}),
     ...(employeeId ? { 'X-Kavya-Employee-Id': employeeId } : {}),
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     ...(optionHeaders || {}),
   };
 
@@ -23,7 +25,7 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     const text = await response.text();
-    if (response.status === 401) {
+    if (response.status === 401 && getSessionValue('kavyaAuthMode') !== 'local') {
       clearSessionValues();
     }
     throw buildApiError(text, response.status);

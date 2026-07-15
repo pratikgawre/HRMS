@@ -1569,52 +1569,53 @@ button.attendance-summary-card.is-clickable:focus-visible {
 
 .login-success-backdrop {
   position: fixed;
-  z-index: 100;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgba(24, 35, 47, 0.42);
-  animation: popup-fade-in 0.2s ease both;
-  backdrop-filter: blur(4px);
+  top: 1rem;
+  right: 1rem;
+  left: 1rem;
+  z-index: 40;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+  animation: popup-fade-in 0.18s ease both;
 }
 
 .login-success-popup {
   display: grid;
-  width: min(92vw, 360px);
-  gap: 0.65rem;
-  justify-items: center;
-  padding: 1.7rem 1.4rem 1.5rem;
+  width: min(92vw, 320px);
+  gap: 0.45rem;
+  justify-items: start;
+  padding: 1rem 1rem 0.95rem;
   color: var(--dark-text);
   border: 1px solid rgba(201, 221, 221, 0.9);
-  border-radius: var(--radius);
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 26px 70px rgba(24, 35, 47, 0.24), var(--shadow-line);
-  text-align: center;
+  box-shadow: 0 18px 42px rgba(24, 35, 47, 0.18), var(--shadow-line);
+  text-align: left;
   animation: popup-scale-in 0.22s ease both;
 }
 
 .login-success-icon {
   display: grid;
-  width: 72px;
-  height: 72px;
+  width: 48px;
+  height: 48px;
   place-items: center;
   color: var(--success);
-  border: 5px solid rgba(25, 168, 117, 0.18);
+  border: 3px solid rgba(25, 168, 117, 0.18);
   border-radius: 999px;
   background: rgba(25, 168, 117, 0.08);
-  font-size: 2.2rem;
+  font-size: 1.45rem;
 }
 
 .login-success-popup strong {
   color: var(--dark-text);
-  font-size: 1.35rem;
+  font-size: 1.05rem;
   font-weight: 900;
 }
 
 .login-success-popup p {
   margin: 0;
   color: var(--muted-text);
+  font-size: 0.9rem;
   font-weight: 800;
 }
 

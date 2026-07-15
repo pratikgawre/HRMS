@@ -427,6 +427,25 @@ function Tasks() {
     taskListColumns.find((column) => column.key === 'status'),
     showTaskActionColumns ? taskListColumns.find((column) => column.key === 'actions') : null,
   ].filter(Boolean);
+  const hrStatusUpdateColumns = [
+    taskListColumns.find((column) => column.key === 'owner'),
+    taskListColumns.find((column) => column.key === 'title'),
+    {
+      key: 'due',
+      label: 'Due Date',
+      render: (row) => row.dueDate || row.due || '-',
+    },
+    taskListColumns.find((column) => column.key === 'status'),
+    {
+      key: 'statusAction',
+      label: role === 'hr' ? 'Review' : 'Action',
+      render: (row) => (
+        <button type="button" className="section-action" onClick={() => openTaskStatusModal(row)}>
+          {role === 'hr' ? 'Review' : 'Update Status'}
+        </button>
+      ),
+    },
+  ].filter(Boolean);
   const createTask = async (event) => {
     event.preventDefault();
     const isEditing = Boolean(editingTask);
@@ -1499,4 +1518,3 @@ function isAdminEmployee(employee) {
 }
 
 export default Tasks;
-
