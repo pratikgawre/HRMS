@@ -1,6 +1,5 @@
 import { getSessionValue } from './appSession.js';
-
-const API_BASE = '/api';
+import { API_BASE, normalizeBackendAssetUrl } from './runtime-config.js';
 
 export async function apiRequest(path, options = {}) {
   const token = getSessionValue('kavyaAuthToken');
@@ -32,9 +31,28 @@ export async function apiRequest(path, options = {}) {
 
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
-    return response.json();
+    const payload = await response.json();
+    return normalizeApiPayload(payload);
   }
   return null;
+}
+
+function normalizeApiPayload(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeApiPayload);
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entryValue]) => [key, normalizeApiPayload(entryValue)])
+    );
+  }
+
+  if (typeof value === 'string' && value.trim().startsWith('/uploads/')) {
+    return normalizeBackendAssetUrl(value);
+  }
+
+  return value;
 }
 
 function formatApiError(bodyText, status) {
@@ -87,8 +105,3 @@ export async function removeEmployeeProfilePhoto(employeeId) {
 export async function deleteUser(userId) {
   return apiRequest(`/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
 }
-
-
-
-
-

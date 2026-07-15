@@ -13,6 +13,10 @@ public interface AppUserRepository extends MongoRepository<AppUser, String> {
   default Optional<AppUser> findByUserId(String userId) {
     return findAllByUserId(userId).stream().findFirst();
   }
+  List<AppUser> findAllBySystemUserIdentityKey(String systemUserIdentityKey);
+  default Optional<AppUser> findBySystemUserIdentityKey(String systemUserIdentityKey) {
+    return findAllBySystemUserIdentityKey(systemUserIdentityKey).stream().findFirst();
+  }
   List<AppUser> findAllByEmployeeId(String employeeId);
   default Optional<AppUser> findByEmployeeId(String employeeId) {
     return findAllByEmployeeId(employeeId).stream().findFirst();
@@ -20,4 +24,3 @@ public interface AppUserRepository extends MongoRepository<AppUser, String> {
   List<AppUser> findByEmployeeIdIn(Collection<String> employeeIds);
   List<AppUser> findByRoleIgnoreCase(String role);
 }
-

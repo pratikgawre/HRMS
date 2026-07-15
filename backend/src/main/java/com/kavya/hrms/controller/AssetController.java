@@ -8,7 +8,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Locale;
 import java.util.logging.Logger;
-import org.jspecify.annotations.Nullable;
+import org.bson.Document;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,22 +38,25 @@ public class AssetController {
   private final AssetAssignmentRepository assetAssignmentRepository;
   private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
+  private final MongoTemplate mongoTemplate;
 
   public AssetController(
       AssetRepository assetRepository,
       AssetAssignmentRepository assetAssignmentRepository,
       EmployeeRepository employeeRepository,
-      NotificationService notificationService) {
+      NotificationService notificationService,
+      MongoTemplate mongoTemplate) {
     this.assetRepository = assetRepository;
     this.assetAssignmentRepository = assetAssignmentRepository;
     this.employeeRepository = employeeRepository;
     this.notificationService = notificationService;
+    this.mongoTemplate = mongoTemplate;
   }
 
   @GetMapping
   public List<Asset> list() {
-    List<AssetAssignment> assignments = assetAssignmentRepository.findAll();
-    List<Asset> assets = assetRepository.findAll().stream()
+    List<AssetAssignment> assignments = loadAssignments();
+    List<Asset> assets = loadAssets().stream()
         .map((asset) -> normalizeAssetResponse(mergeAssignmentDates(asset, assignments)))
         .toList();
     long assetsWithDates = assets.stream()
@@ -76,8 +80,8 @@ public class AssetController {
 
     String resolvedEmployeeName = resolveEmployeeName(resolvedEmployeeId);
 
-    List<Asset> allAssets = assetRepository.findAll();
-    List<AssetAssignment> matchingAssignments = assetAssignmentRepository.findAll().stream()
+    List<Asset> allAssets = loadAssets();
+    List<AssetAssignment> matchingAssignments = loadAssignments().stream()
         .filter((assignment) -> isAssignmentForEmployee(assignment, resolvedEmployeeId, resolvedEmployeeName))
         .toList();
 
@@ -218,7 +222,106 @@ public class AssetController {
     return value == null ? "" : value.trim();
   }
 
-  @Nullable
+  private List<Asset> loadAssets() {
+    List<Asset> assets = assetRepository.findAll();
+    if (!assets.isEmpty()) {
+      return assets;
+    }
+
+    List<Asset> fallbackAssets = mongoTemplate.findAll(Document.class, "assets").stream()
+        .map(this::mapDocumentToAsset)
+        .filter(Objects::nonNull)
+        .toList();
+    if (!fallbackAssets.isEmpty()) {
+      LOGGER.info(() -> "[AssetController] repository returned 0 assets, fallback MongoTemplate loaded=" + fallbackAssets.size());
+    }
+    return fallbackAssets;
+  }
+
+  private List<AssetAssignment> loadAssignments() {
+    List<AssetAssignment> assignments = assetAssignmentRepository.findAll();
+    if (!assignments.isEmpty()) {
+      return assignments;
+    }
+
+    List<AssetAssignment> fallbackAssignments = mongoTemplate.findAll(Document.class, "asset_assignments").stream()
+        .map(this::mapDocumentToAssignment)
+        .filter(Objects::nonNull)
+        .toList();
+    if (!fallbackAssignments.isEmpty()) {
+      LOGGER.info(() -> "[AssetController] repository returned 0 assignments, fallback MongoTemplate loaded=" + fallbackAssignments.size());
+    }
+    return fallbackAssignments;
+  }
+
+  private Asset mapDocumentToAsset(Document document) {
+    if (document == null) {
+      return null;
+    }
+
+    Asset asset = new Asset();
+    asset.setId(readDocumentValue(document, "_id", "id", "assetId", "asset_id"));
+    asset.setAssetCode(readDocumentValue(document, "assetCode", "asset_code", "_id", "id"));
+    asset.setAssetName(readDocumentValue(document, "assetName", "asset_name"));
+    asset.setCategory(readDocumentValue(document, "category"));
+    asset.setBrand(readDocumentValue(document, "brand"));
+    asset.setModel(readDocumentValue(document, "model"));
+    asset.setSerialNo(readDocumentValue(document, "serialNo", "serial_no"));
+    asset.setPurchaseDate(readDocumentValue(document, "purchaseDate", "purchase_date"));
+    asset.setCurrentDate(readDocumentValue(document, "currentDate", "current_date", "assignedDate", "assigned_date", "assignmentDate", "assignment_date"));
+    asset.setDueDate(readDocumentValue(document, "dueDate", "due_date", "returnDate", "return_date"));
+    asset.setAssignedDate(readDocumentValue(document, "assignedDate", "assigned_date", "currentDate", "current_date"));
+    asset.setAssignmentDate(readDocumentValue(document, "assignmentDate", "assignment_date", "currentDate", "current_date"));
+    asset.setReturnDate(readDocumentValue(document, "returnDate", "return_date", "dueDate", "due_date"));
+    asset.setStatus(readDocumentValue(document, "status"));
+    asset.setAssignedToEmployeeId(readDocumentValue(document, "assignedToEmployeeId", "employeeId", "employee_id"));
+    asset.setAssignedTo(readDocumentValue(document, "assignedTo", "employeeName", "employee_name"));
+    asset.setEmployeeName(readDocumentValue(document, "employeeName", "employee_name", "assignedTo"));
+    asset.setCondition(readDocumentValue(document, "condition"));
+    asset.setLocation(readDocumentValue(document, "location"));
+    return asset;
+  }
+
+  private AssetAssignment mapDocumentToAssignment(Document document) {
+    if (document == null) {
+      return null;
+    }
+
+    AssetAssignment assignment = new AssetAssignment();
+    assignment.setId(readDocumentValue(document, "_id", "id"));
+    assignment.setAssetId(readDocumentValue(document, "assetId", "asset_id"));
+    assignment.setAssetCode(readDocumentValue(document, "assetCode", "asset_code", "assetId", "asset_id"));
+    assignment.setAssetName(readDocumentValue(document, "assetName", "asset_name"));
+    assignment.setEmployeeId(readDocumentValue(document, "employeeId", "employee_id"));
+    assignment.setEmployeeName(readDocumentValue(document, "employeeName", "employee_name"));
+    assignment.setAssignedDate(readDocumentValue(document, "assignedDate", "assigned_date", "currentDate", "current_date", "assignmentDate", "assignment_date"));
+    assignment.setDueDate(readDocumentValue(document, "dueDate", "due_date", "returnDate", "return_date"));
+    assignment.setReturnDate(readDocumentValue(document, "returnDate", "return_date", "dueDate", "due_date"));
+    assignment.setCondition(readDocumentValue(document, "condition"));
+    assignment.setStatus(readDocumentValue(document, "status"));
+    assignment.setDispatchReason(readDocumentValue(document, "dispatchReason", "dispatch_reason", "reason"));
+    assignment.setDispatchedBy(readDocumentValue(document, "dispatchedBy", "dispatched_by", "handledBy"));
+    return assignment;
+  }
+
+  private String readDocumentValue(Document document, String... keys) {
+    if (document == null || keys == null) {
+      return "";
+    }
+
+    for (String key : keys) {
+      Object value = document.get(key);
+      if (value != null) {
+        String normalizedValue = String.valueOf(value).trim();
+        if (!normalizedValue.isBlank()) {
+          return normalizedValue;
+        }
+      }
+    }
+
+    return "";
+  }
+
   private Asset normalizeAssetResponse(Asset asset) {
     if (asset == null) {
       return null;
@@ -453,7 +556,6 @@ public class AssetController {
     return asset;
   }
 
-  @Nullable
   private AssetAssignment resolveLatestAssignment(String assetId, String assetCode, List<AssetAssignment> assignments) {
     if (assignments == null || assignments.isEmpty()) {
       return null;
@@ -573,7 +675,6 @@ public class AssetController {
     return parsed.format(DateTimeFormatter.ofPattern("dd MMM uuuu", Locale.ENGLISH));
   }
 
-  @Nullable
   private LocalDate parseDate(String value) {
     String normalized = normalize(value);
     if (normalized.isBlank()) {

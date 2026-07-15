@@ -3,8 +3,7 @@ import { apiRequest } from './api.js';
 import { getUsers, saveUsers } from './user-management.js';
 import { getStoredEmployees } from './employeeStorage.js';
 import { clearSessionValues, getSessionValue, setSessionValue } from './appSession.js';
-
-const API_BASE = '/api';
+import { API_BASE, normalizeBackendAssetUrl } from './runtime-config.js';
 
 const legacyUsers = {
   'admin@gmail.com': { password: 'admin123', role: 'Super Admin', employeeId: 'ADMIN-001', employeeName: 'Admin Kavya', avatar: 'AK', department: 'Platform', designation: 'System Admin' },
@@ -94,7 +93,7 @@ export async function authenticateUser(email, password) {
         mustChangePassword: Boolean(result.mustChangePassword),
         lastLogin: result.lastLogin || '',
         avatar: result.avatar || (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
-        profilePicture: result.profilePicture || '',
+        profilePicture: normalizeBackendAssetUrl(result.profilePicture || ''),
       };
       return { ok: true, user };
     }
@@ -160,7 +159,7 @@ function findLocalUser(email, password) {
     token: user.token || `local-${Date.now()}`,
     mustChangePassword: Boolean(user.mustChangePassword),
     avatar: user.avatar || (user.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
-    profilePicture: user.profilePicture || '',
+    profilePicture: normalizeBackendAssetUrl(user.profilePicture || ''),
   };
 }
 
@@ -318,3 +317,4 @@ export async function changePassword(currentPassword, newPassword, confirmPasswo
     };
   }
 }
+

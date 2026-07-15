@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.List;
 import org.springframework.http.HttpStatus;
-import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -72,7 +71,7 @@ public class TaskController {
 
   @PostMapping
   public TaskItem create(
-      @Nullable @RequestBody TaskItem task,
+      @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     if (task == null) {
@@ -92,7 +91,7 @@ public class TaskController {
 
   @PostMapping("/bulk")
   public List<TaskItem> bulkSave(
-      @Nullable @RequestBody List<TaskItem> tasks,
+      @RequestBody List<TaskItem> tasks,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     if (tasks == null) {
@@ -120,7 +119,7 @@ public class TaskController {
   @PutMapping("/{id}")
   public TaskItem update(
       @PathVariable("id") String id,
-      @Nullable @RequestBody TaskItem task,
+      @RequestBody TaskItem task,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     if (task == null) {
@@ -142,7 +141,7 @@ public class TaskController {
   @PatchMapping("/{id}/status")
   public TaskItem updateStatus(
       @PathVariable("id") String id,
-      @Nullable @RequestBody TaskStatusRequest request,
+      @RequestBody TaskStatusRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     TaskItem current = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
@@ -176,7 +175,6 @@ public class TaskController {
         safeAccessRole,
         "System");
   }
-
 
   private String buildTaskMessage(TaskItem task, String action) {
     String title = task != null && task.getTitle() != null ? task.getTitle() : "Task";
@@ -292,7 +290,6 @@ public class TaskController {
     }
   }
 
-  @Nullable
   private Employee findEmployee(String... candidates) {
     for (Employee employee : employeeRepository.findAll()) {
       if (employee == null) {

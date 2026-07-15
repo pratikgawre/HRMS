@@ -22,6 +22,7 @@ class ProjectControllerTest {
   private MockMvc mockMvc;
 
   @BeforeEach
+  @SuppressWarnings("unused")
   void setUp() {
     projectRepository = mock(ProjectRepository.class);
     notificationService = mock(NotificationService.class);

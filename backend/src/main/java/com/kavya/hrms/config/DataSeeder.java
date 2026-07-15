@@ -7,8 +7,6 @@ import java.util.Objects;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.jspecify.annotations.NonNull;
-
 import com.kavya.hrms.model.Announcement;
 import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.LeaveRequest;
@@ -231,7 +229,6 @@ public class DataSeeder {
     appUserRepository.save(Objects.requireNonNull(user));
   }
 
-  @NonNull
   private TaskItem buildTask(String id, String title, String owner, String priority, String dueDate, String status) {
     TaskItem task = new TaskItem();
     task.setId(id);
@@ -243,7 +240,6 @@ public class DataSeeder {
     return task;
   }
 
-  @NonNull
   private Project buildProject(
       String id,
       String name,

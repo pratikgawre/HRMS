@@ -20,7 +20,7 @@ import {
   refreshStoredAttendanceRows,
   saveAttendanceRows,
 } from '../utils/attendanceStorage.js';
-import { safeApiRequest } from '../utils/api.js';
+import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { people as fallbackPeople, projects as fallbackProjects } from '../data/dummyData.js';
 
@@ -68,6 +68,7 @@ function TeamAttendance() {
   const location = useLocation();
   const navigate = useNavigate();
   const attendanceEmployee = getAttendanceEmployee();
+  const isMyAttendanceView = location.pathname.startsWith('/project-manager/my-attendance');
   const todayInputValue = getDateInputValue(new Date());
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
   const [employees, setEmployees] = useState([]);
@@ -80,6 +81,7 @@ function TeamAttendance() {
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState(null);
   const [editingRow, setEditingRow] = useState(null);
+  const [summaryFocus, setSummaryFocus] = useState('default');
   const [correctForm, setCorrectForm] = useState({
     checkIn: '',
     checkOut: '',
@@ -92,7 +94,9 @@ function TeamAttendance() {
 
     const refreshTeamAttendance = async () => {
       try {
-        const rows = await refreshStoredAttendanceRows();
+        const rows = isMyAttendanceView && attendanceEmployee.employeeId
+          ? await apiRequest(`/attendance/employee/${encodeURIComponent(attendanceEmployee.employeeId)}`)
+          : await refreshStoredAttendanceRows();
         if (active && Array.isArray(rows)) {
           setAttendance(rows);
         }
@@ -138,7 +142,7 @@ function TeamAttendance() {
       window.removeEventListener('kavyaEmployeesChanged', refreshTeamScope);
       window.removeEventListener('kavyaProjectsChanged', refreshTeamScope);
     };
-  }, []);
+  }, [attendanceEmployee.employeeId, isMyAttendanceView]);
 
   const teamIds = useMemo(() => (
     getVisibleTeamEmployeeIds({
@@ -151,8 +155,46 @@ function TeamAttendance() {
   ), [attendanceEmployee.employee, attendanceEmployee.employeeId, employees, projects, role]);
 
   const teamRows = useMemo(() => (
-    attendance.filter((row) => teamIds.has(String(row.employeeId || '').trim()))
-  ), [attendance, teamIds]);
+    isMyAttendanceView
+      ? attendance.filter((row) => String(row.employeeId || '').trim() === String(attendanceEmployee.employeeId || '').trim())
+      : attendance.filter((row) => teamIds.has(String(row.employeeId || '').trim()))
+  ), [attendance, attendanceEmployee.employeeId, isMyAttendanceView, teamIds]);
+
+  const selectedDateLabel = useMemo(() => (
+    new Intl.DateTimeFormat('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(selectedDate))
+  ), [selectedDate]);
+
+  const selectedDateTeamRows = useMemo(() => {
+    const attendanceByEmployeeId = new Map();
+
+    teamRows.forEach((row) => {
+      if (String(row.date || '').trim() === selectedDateLabel) {
+        attendanceByEmployeeId.set(String(row.employeeId || '').trim(), row);
+      }
+    });
+
+    return normalizeEmployees(employees)
+      .filter((employee) => teamIds.has(String(employee.employeeId || '').trim()))
+      .map((employee) => {
+        const employeeId = String(employee.employeeId || '').trim();
+        const matchedRow = attendanceByEmployeeId.get(employeeId);
+
+        return matchedRow || {
+          employee: employee.displayName || employee.name || 'Employee',
+          employeeId,
+          avatar: employee.avatar || getInitials(employee.displayName || employee.name || ''),
+          date: selectedDateLabel,
+          checkIn: '-',
+          checkOut: '-',
+          hours: '-',
+          status: 'Absent',
+        };
+      });
+  }, [employees, selectedDateLabel, teamIds, teamRows]);
 
   const rows = useMemo(() => (
     teamRows
@@ -173,6 +215,39 @@ function TeamAttendance() {
         employeeId: row.employeeId || row.employeeCode || '-',
       }))
   ), [dateRange, searchText, selectedDate, selectedMonth, status, teamRows]);
+
+  const displayedRows = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    const isPageLevelQuery = query === 'team attendance' || query === 'team-attendance';
+
+    if (summaryFocus === 'team') {
+      return selectedDateTeamRows.filter((row) => (
+        !query
+        || String(row.employee || '').toLowerCase().includes(query)
+        || String(row.employeeId || '').toLowerCase().includes(query)
+        || isPageLevelQuery
+      ));
+    }
+
+    if (summaryFocus === 'status') {
+      return teamRows
+        .filter((row) => String(row.date || '').trim() === selectedDateLabel)
+        .filter((row) => status === 'All' || row.status === status)
+        .filter((row) => (
+          !query
+          || String(row.employee || '').toLowerCase().includes(query)
+          || String(row.employeeId || '').toLowerCase().includes(query)
+          || isPageLevelQuery
+        ))
+        .map((row) => ({
+          ...row,
+          employee: row.employee || row.employeeName || row.name || 'Employee',
+          employeeId: row.employeeId || row.employeeCode || '-',
+        }));
+    }
+
+    return rows;
+  }, [rows, searchText, selectedDateLabel, selectedDateTeamRows, status, summaryFocus, teamRows]);
   const summaryText = role === 'employee'
     ? 'This page is for managers and team leads. Use My Attendance for your own record.'
     : 'Review your team attendance records without mixing them with your personal check-in or check-out.';
@@ -206,6 +281,7 @@ function TeamAttendance() {
 
     if (nextStatus && ['All', 'Present', 'Half Day', 'Absent', 'Late', 'Leave'].includes(nextStatus)) {
       setStatus(nextStatus);
+      setSummaryFocus('status');
     }
 
     if (nextRange && ['day', 'last7', 'last15', 'month', 'custom', 'all'].includes(nextRange)) {
@@ -221,7 +297,10 @@ function TeamAttendance() {
       delta: 'Visible in this scope',
       tone: 'teal',
       icon: 'ri-team-line',
-      onClick: () => navigate(teamPagePath),
+      onClick: () => {
+        setStatus('All');
+        setSummaryFocus('team');
+      },
     },
     {
       key: 'present',
@@ -242,6 +321,15 @@ function TeamAttendance() {
       onClick: () => navigate(`${teamAttendancePath}?status=Late`),
     },
     {
+      key: 'half-day',
+      label: 'Half Day',
+      value: String(halfDayCount).padStart(2, '0'),
+      delta: 'Selected date attendance',
+      tone: 'green',
+      icon: 'ri-sun-line',
+      onClick: () => navigate(`${teamAttendancePath}?status=Half%20Day`),
+    },
+    {
       key: 'range',
       label: 'Range',
       value: currentRangeValue,
@@ -253,6 +341,7 @@ function TeamAttendance() {
   ];
 
   function downloadCsv() {
+    const exportRows = rows.length ? rows : teamRows;
     const reportHtml = buildAttendanceWorkbook({
       title: 'List of Logs',
       subtitle: `${roleLabel} team attendance register`,
@@ -304,19 +393,35 @@ function TeamAttendance() {
     const targetDate = String(editingRow.date || '').trim();
     const formattedCheckIn = formatTimeLabel(correctForm.checkIn);
     const formattedCheckOut = formatTimeLabel(correctForm.checkOut);
-    const nextRows = attendance.map((row) => (
-      String(row.employeeId || '').trim() === targetEmployeeId && String(row.date || '').trim() === targetDate
-        ? {
-          ...row,
-          checkIn: formattedCheckIn,
-          checkOut: formattedCheckOut,
-          checkInAt: correctForm.checkIn ? buildTimeStamp(row.date, correctForm.checkIn, row.checkInAt) : row.checkInAt,
-          checkOutAt: correctForm.checkOut ? buildTimeStamp(row.date, correctForm.checkOut, row.checkOutAt) : row.checkOutAt,
-          hours: correctForm.hours || '-',
-          status: correctForm.status || row.status,
-        }
-        : row
-    ));
+    let updated = false;
+    const nextRows = attendance.map((row) => {
+      if (String(row.employeeId || '').trim() !== targetEmployeeId || String(row.date || '').trim() !== targetDate) {
+        return row;
+      }
+
+      updated = true;
+      return {
+        ...row,
+        checkIn: formattedCheckIn,
+        checkOut: formattedCheckOut,
+        checkInAt: correctForm.checkIn ? buildTimeStamp(row.date, correctForm.checkIn, row.checkInAt) : row.checkInAt,
+        checkOutAt: correctForm.checkOut ? buildTimeStamp(row.date, correctForm.checkOut, row.checkOutAt) : row.checkOutAt,
+        hours: correctForm.hours || '-',
+        status: correctForm.status || row.status,
+      };
+    });
+
+    if (!updated) {
+      nextRows.unshift({
+        ...editingRow,
+        checkIn: formattedCheckIn,
+        checkOut: formattedCheckOut,
+        checkInAt: correctForm.checkIn ? buildTimeStamp(targetDate, correctForm.checkIn) : '',
+        checkOutAt: correctForm.checkOut ? buildTimeStamp(targetDate, correctForm.checkOut) : '',
+        hours: correctForm.hours || '-',
+        status: correctForm.status || 'Present',
+      });
+    }
 
     setAttendance(nextRows);
     saveAttendanceRows(nextRows);
@@ -332,6 +437,7 @@ function TeamAttendance() {
         <Hero
           title="Attendance"
           copy={`${roleLabel} view. ${summaryText}`}
+          reportData={isMyAttendanceView ? heroReportData : null}
         />
 
         {message && (
@@ -409,7 +515,13 @@ function TeamAttendance() {
                   type="month"
                   value={selectedMonth}
                   max={getMonthInputValue(new Date())}
-                  onChange={(event) => setSelectedMonth(event.target.value || getMonthInputValue(new Date()))}
+                  onChange={(event) => {
+                    const nextMonth = event.target.value || getMonthInputValue(new Date());
+                    setSelectedMonth(nextMonth);
+                    if (isMyAttendanceView) {
+                      setDateRange('month');
+                    }
+                  }}
                   aria-label="Select attendance month"
                 />
               </label>
@@ -426,7 +538,10 @@ function TeamAttendance() {
               />
             </label>
 
-            <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter attendance status">
+            <select value={status} onChange={(event) => {
+              setStatus(event.target.value);
+              setSummaryFocus('status');
+            }} aria-label="Filter attendance status">
               <option>All</option>
               <option>Present</option>
               <option>Half Day</option>
@@ -453,7 +568,7 @@ function TeamAttendance() {
                   ),
                 },
                 ...attendanceColumns,
-                {
+                ...(isMyAttendanceView ? [] : [{
                   key: 'actions',
                   label: 'Actions',
                   render: (row) => (
@@ -463,13 +578,15 @@ function TeamAttendance() {
                       onClick={() => openRecommendDialog(row)}
                     >
                       <i className="ri-edit-line" aria-hidden="true" />
-                      Recommend
+                      Correct Login
                     </button>
                   ),
                 },
-              ]}
-              rows={rows}
-              emptyMessage={`No attendance records found for ${rangeLabel}.`}
+              ]} 
+              rows={displayedRows}
+              emptyMessage={summaryFocus === 'team'
+                ? 'No team members found for the selected lead.'
+                : `No attendance records found for ${rangeLabel}.`}
             />
           </div>
         </Section>
@@ -1073,3 +1190,5 @@ function getWorkbookDateKey(date) {
 }
 
 export default TeamAttendance;
+
+

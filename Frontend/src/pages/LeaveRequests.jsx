@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
@@ -18,8 +19,10 @@ const approveActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/20
 const rejectActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%23d94d63" stroke-width="2.4"/%3E%3Cpath d="M8.75 8.75l6.5 6.5M15.25 8.75l-6.5 6.5" stroke="%23d94d63" stroke-width="2.4" stroke-linecap="round"/%3E%3C/svg%3E';
 
 function LeaveRequests() {
+  const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isAdminOrHr = role === 'admin' || role === 'hr';
+  const isProjectManagerRoute = location.pathname.startsWith('/project-manager/');
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
   const canReviewRequests = isAdminOrHr || role === 'teamLead' || role === 'projectManager';
@@ -77,6 +80,10 @@ function LeaveRequests() {
   const filteredLeaveRequests = useMemo(() => {
     const baseRows = queueFilter === 'approved'
       ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved')
+      : queueFilter === 'recommended'
+        ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'recommended')
+        : queueFilter === 'rejected'
+          ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'rejected')
       : queueFilter === 'pending'
         ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending')
         : queueFilter === 'used'
@@ -103,6 +110,8 @@ function LeaveRequests() {
   const visibleLeaveSummary = useMemo(() => {
     const showingRows = visibleRequests;
     const approvedRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved');
+    const recommendedRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'recommended');
+    const rejectedRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'rejected');
     const pendingRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending');
     const usedRows = approvedRows.filter((request) => normalizeLeaveDays(request.days) > 0);
     const usedDays = usedRows.reduce((total, request) => total + normalizeLeaveDays(request.days), 0);
@@ -110,6 +119,8 @@ function LeaveRequests() {
     return {
       totalCount: showingRows.length,
       usedCount: usedRows.length,
+      recommendedCount: recommendedRows.length,
+      rejectedCount: rejectedRows.length,
       approvedCount: approvedRows.length,
       pendingCount: pendingRows.length,
       usedDays,
@@ -192,6 +203,8 @@ function LeaveRequests() {
         const isReviewing = reviewingRequestIds.has(row.id);
         const isActionComplete = String(row.status || '').trim().toLowerCase() === targetStatus.toLowerCase();
         const isRejectComplete = String(row.status || '').trim().toLowerCase() === 'rejected';
+        const isPending = String(row.status || '').trim().toLowerCase() === 'pending';
+        const shouldDisableRecommend = !isAdminOrHr && isProjectManagerRoute && !isPending;
         const disableApprove = isReviewing || isActionComplete;
         const disableReject = isReviewing || isRejectComplete;
         const isOwnHrRequest = role === 'hr'
@@ -462,7 +475,7 @@ function LeaveRequests() {
 
         <Section title="Leave Request Queue">
           <section className="leave-queue-summary-grid" aria-label="Visible leave request count">
-            {[
+            {[ 
               {
                 label: 'Showing',
                 value: String(visibleLeaveSummary.totalCount).padStart(2, '0'),
@@ -472,20 +485,20 @@ function LeaveRequests() {
                 filter: 'all',
               },
               {
-                label: 'Used Days',
-                value: String(visibleLeaveSummary.usedCount).padStart(2, '0'),
-                delta: 'Approved leave deducted',
-                tone: 'blue',
-                icon: 'ri-calendar-check-line',
-                filter: 'used',
-              },
-              {
                 label: 'Approved',
                 value: String(visibleLeaveSummary.approvedCount).padStart(2, '0'),
-                delta: 'Already deducted',
+                delta: 'Approved leave requests',
+                tone: 'blue',
+                icon: 'ri-calendar-check-line',
+                filter: 'approved',
+              },
+              {
+                label: 'Rejected',
+                value: String(visibleLeaveSummary.rejectedCount).padStart(2, '0'),
+                delta: 'Not approved requests',
                 tone: 'orange',
                 icon: 'ri-checkbox-circle-line',
-                filter: 'approved',
+                filter: 'rejected',
               },
               {
                 label: 'Pending',
@@ -1005,3 +1018,4 @@ function getLeaveBalanceTone(name) {
 }
 
 export default LeaveRequests;
+

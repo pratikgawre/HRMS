@@ -317,6 +317,15 @@ export function Hero({ title, copy, actions }) {
   const [summaryData, setSummaryData] = useState(null);
 
   const getPageSnapshot = () => {
+    const fallbackExportData = window.__kavyaAttendanceExportData;
+    if (reportData) {
+      return reportData;
+    }
+
+    if (fallbackExportData) {
+      return fallbackExportData;
+    }
+
     const root = document.querySelector('.content-panel');
     const rows = [
       ['Page', title],
@@ -442,12 +451,12 @@ export function Hero({ title, copy, actions }) {
         ${bodyRows}
       `;
     }).join('');
-    const controlsRows = controls.length
+    const controlsRows = exportControls.length
       ? `
         <tr><td colspan="8" class="section-gap"></td></tr>
         <tr><td colspan="8" class="section-title">Visible Form Fields</td></tr>
         <tr><th>Field</th><th colspan="7">Value</th></tr>
-        ${controls.map((item) => `<tr><td>${escapeCell(item.label)}</td><td colspan="7">${escapeCell(item.value)}</td></tr>`).join('')}
+        ${exportControls.map((item) => `<tr><td>${escapeCell(item.label)}</td><td colspan="7">${escapeCell(item.value)}</td></tr>`).join('')}
       `
       : '';
     const excelHtml = `
