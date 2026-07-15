@@ -1234,44 +1234,6 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
     downloadPayslipPdf(record);
   };
 
-  const handleHrPayslipAction = async (action) => {
-    if (isFuturePreviewPeriod) {
-      setMessage('Payroll data is not available for future periods.');
-      return;
-    }
-
-    let record = hrActualRecord;
-
-    if (!record) {
-      try {
-        record = await loadPayrollPayslip({
-          employeeId,
-          month: previewMonth,
-          year: previewYear,
-        });
-        const normalizedRecord = normalizePayrollRecords([record])[0] || null;
-        setPayrollData(normalizedRecord);
-        record = normalizedRecord;
-      } catch (error) {
-        setMessage(getPayrollRecordErrorMessage(error));
-        return;
-      }
-    }
-
-    if (!isPaidStatus(record.status)) {
-      setMessage('The salary for the selected month and year has not been marked as paid yet.');
-      return;
-    }
-
-    setMessage('');
-
-    if (action === 'view') {
-      openPayslipPreview(record);
-      return;
-    }
-
-    downloadPayslipPdf(record);
-  };
 
   return (
     <>
@@ -1945,90 +1907,6 @@ function getPayslipFileName(record) {
   return `Payslip_${employeeCode}_${month}_${year}.pdf`;
 }
 
-function downloadPayslipPdf(record) {
-  const blob = createPayslipPdfBlob(record);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = getPayslipFileName(record);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function createPayslipPdfBlob(record) {
-  const lines = buildPayslipPdfLines(record);
-  const pageWidth = 842;
-  const pageHeight = 595;
-  const left = 40;
-  const top = 40;
-  const lineHeight = 18;
-  const content = lines.map((line, index) => {
-    const y = pageHeight - top - (index * lineHeight);
-    return `BT /F1 10 Tf ${left} ${y} Td (${escapePdfText(line)}) Tj ET`;
-  }).join('\n');
-
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>`,
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
-  ];
-
-  let pdf = '%PDF-1.4\n';
-  const offsets = ['0000000000 65535 f \n'];
-  objects.forEach((object, index) => {
-    offsets.push(`${String(pdf.length).padStart(10, '0')} 00000 n \n`);
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-  const xrefStart = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n${offsets.join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-  return new Blob([pdf], { type: 'application/pdf' });
-}
-
-function buildPayslipPdfLines(record) {
-  const earningsRows = getPayslipEarnings(record);
-  const deductionRows = getPayslipDeductions(record);
-  const lines = [
-    'KAVYA INFOWEB PVT. LTD.',
-    'Payslip',
-    `Employee: ${record.employeeName || '-'}`,
-    `Employee ID: ${record.employeeId || '-'}`,
-    `Designation: ${record.role || '-'}`,
-    `Department: ${record.department || '-'}`,
-    `Month: ${record.month || '-'}`,
-    `Year: ${record.year || '-'}`,
-    `Payment Status: ${record.status || '-'}`,
-    `Payment Date: ${record.paidDate || '-'}`,
-    ' ',
-    'Earnings',
-  ];
-
-  earningsRows.forEach((item) => {
-    lines.push(`${item.label}: Full ${formatPayslipAmount(item.full)} | Actual ${formatPayslipAmount(item.actual)}`);
-  });
-
-  lines.push(`Total Earnings: ${formatPayslipAmount(getEarnings(record))}`);
-  lines.push(' ');
-  lines.push('Deductions');
-  deductionRows.forEach((item) => {
-    lines.push(`${item.label}: ${formatPayslipAmount(item.actual)}`);
-  });
-  lines.push(`Total Deductions: ${formatPayslipAmount(getDeductions(record))}`);
-  lines.push(`Net Salary: ${formatPayslipAmount(getNetSalary(record))}`);
-  lines.push(`Generated Date: ${new Date().toLocaleString('en-IN')}`);
-  return lines;
-}
-
-function escapePdfText(value) {
-  return String(value ?? '')
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)')
-    .replace(/[^\x20-\x7E]/g, ' ');
-}
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({
