@@ -53,6 +53,14 @@ export function isPaidStatus(status) {
   return String(status ?? '').trim().toLowerCase() === 'paid';
 }
 
+export function isUnpaidStatus(status) {
+  const normalizedStatus = String(status ?? '').trim().toLowerCase();
+  return normalizedStatus === 'unpaid'
+    || normalizedStatus === 'pending'
+    || normalizedStatus === 'pending payment'
+    || normalizedStatus === 'not paid';
+}
+
 export function canGeneratePayslip(status) {
   return isPaidStatus(status);
 }

@@ -2,7 +2,6 @@ import { getSessionValue } from './appSession.js';
 import { API_BASE, normalizeBackendAssetUrl } from './runtime-config.js';
 
 export async function apiRequest(path, options = {}) {
-  const token = getSessionValue('kavyaAuthToken');
   const accessRole = getSessionValue('kavyaAccessRole') || getSessionValue('kavyaRole');
   const userId = getSessionValue('kavyaUserId') || getSessionValue('kavyaEmployeeId');
   const employeeId = getSessionValue('kavyaEmployeeId');
@@ -10,7 +9,6 @@ export async function apiRequest(path, options = {}) {
   const { headers: optionHeaders, ...requestOptions } = options;
   const headers = {
     ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(accessRole ? { 'X-Kavya-Access-Role': accessRole } : {}),
     ...(userId ? { 'X-Kavya-User-Id': userId } : {}),
     ...(employeeId ? { 'X-Kavya-Employee-Id': employeeId } : {}),
@@ -19,15 +17,19 @@ export async function apiRequest(path, options = {}) {
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...requestOptions,
+    credentials: 'include',
     headers,
   });
 
   if (!response.ok) {
     const text = await response.text();
-    const message = formatApiError(text, response.status);
-
-    throw new Error(message);
+    if (response.status === 401) {
+      clearSessionValues();
+    }
+    throw buildApiError(text, response.status);
   }
+
+  markSessionActivity();
 
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
@@ -75,6 +77,53 @@ function formatApiError(bodyText, status) {
   }
 
   return rawText.length > 220 ? `${rawText.slice(0, 217)}...` : rawText;
+}
+
+function buildApiError(bodyText, status) {
+  const rawText = String(bodyText || '').trim();
+  let parsed = null;
+
+  if (rawText.startsWith('{') || rawText.startsWith('[')) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  const fieldErrors = normalizeFieldErrors(parsed?.fieldErrors || parsed?.errors || parsed?.validationErrors);
+  const message = formatApiError(bodyText, status);
+  const errorMessage = fieldErrors && Object.keys(fieldErrors).length > 0
+    ? (parsed?.message || parsed?.error || 'Validation failed')
+    : message;
+
+  const error = new Error(String(errorMessage));
+  error.status = status;
+  if (fieldErrors && Object.keys(fieldErrors).length > 0) {
+    error.fieldErrors = fieldErrors;
+  }
+
+  return error;
+}
+
+function normalizeFieldErrors(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const fieldErrors = {};
+  Object.entries(value).forEach(([field, message]) => {
+    if (typeof message === 'string' && message.trim()) {
+      fieldErrors[field] = message.trim();
+    } else if (Array.isArray(message)) {
+      const firstMessage = message.find((item) => typeof item === 'string' && item.trim());
+      if (firstMessage) {
+        fieldErrors[field] = firstMessage.trim();
+      }
+    }
+  });
+
+  return Object.keys(fieldErrors).length > 0 ? fieldErrors : null;
 }
 
 export async function safeApiRequest(path, fallback, options = {}) {

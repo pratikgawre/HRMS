@@ -5,10 +5,11 @@ import { Hero, Section } from './AdminDashboard.jsx';
 import { salaryRecords } from '../data/dummyData.js';
 import { apiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
+import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { getInitialAttendanceRows, refreshStoredAttendanceRows } from '../utils/attendanceStorage.js';
 import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
 import { getStoredPayrollRecords, refreshStoredPayrollRecords } from '../utils/payrollStorage.js';
-import { isMarkPaidDisabled, isPaidStatus } from '../utils/payrollRules.js';
+import { isMarkPaidDisabled, isPaidStatus, isUnpaidStatus } from '../utils/payrollRules.js';
 import kavyaLogo from '../assets/logo.png';
 
 const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -59,6 +60,25 @@ function getPayrollAvailabilityText(month, year) {
   }).format(monthEnd);
 
   return `Salary can only be processed after the month is completed. This payslip will be available after ${formattedEndDate}.`;
+}
+
+function normalizePayrollEmployeeId(employeeId) {
+  return String(employeeId || '').trim().toLowerCase();
+}
+
+function resolvePayrollRecordForEmployee(records, employeeId, month, year) {
+  const normalizedEmployeeId = normalizePayrollEmployeeId(employeeId);
+  if (!normalizedEmployeeId) {
+    return null;
+  }
+
+  const normalizedMonth = normalizePayrollMonthValue(month);
+  const normalizedYear = normalizePayrollYearValue(year, month);
+
+  return (Array.isArray(records) ? records : []).find((record) => (
+    normalizePayrollEmployeeId(record?.employeeId) === normalizedEmployeeId
+    && matchesPayrollPeriod(record, normalizedMonth, normalizedYear)
+  )) || null;
 }
 
 function normalizePayrollMonthValue(month) {
@@ -173,6 +193,22 @@ async function loadPayrollPayslip(record) {
   );
 
   return normalizePayrollRecords([payslipRecord])[0] || normalizePayrollRecords([record])[0] || record;
+}
+
+function getPayrollRecordErrorMessage(error) {
+  if (!error) {
+    return 'Unable to load payslip.';
+  }
+
+  if (error.status === 404) {
+    return 'No payroll record found for the selected month and year.';
+  }
+
+  if (error.status === 403) {
+    return 'The salary for the selected month and year has not been paid yet.';
+  }
+
+  return error instanceof Error ? error.message : 'Unable to load payslip.';
 }
 
 function Payroll() {
@@ -369,12 +405,28 @@ function Payroll() {
 function PayrollManagement({ records, savedPayrollRecords, selectedMonth, selectedYear, setSelectedMonth, setSelectedYear, setStatusOverrides, focusRecordId = '', role = 'employee' }) {
   const [message, setMessage] = useState('');
   const [selectedPayslip, setSelectedPayslip] = useState(null);
-  const [activeSummary, setActiveSummary] = useState('total');
+  const [activeSummary, setActiveSummary] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isHrEmployeeFilterActive, setIsHrEmployeeFilterActive] = useState(false);
   const [payslipMonth, setPayslipMonth] = useState('');
   const [payslipYear, setPayslipYear] = useState('');
   const tableSectionRef = useRef(null);
+  const payrollRows = useMemo(() => mergePayrollRecordsForDisplay(records, savedPayrollRecords), [records, savedPayrollRecords]);
+  const searchFilteredRecords = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) {
+      return payrollRows;
+    }
+
+    return payrollRows.filter((record) => matchesPayrollSearch(record, query));
+  }, [payrollRows, searchTerm]);
+  const tableBaseRecords = useMemo(() => (
+    role === 'hr' && isHrEmployeeFilterActive
+      ? searchFilteredRecords.filter((record) => isHrPayrollEmployee(record))
+      : searchFilteredRecords
+  ), [isHrEmployeeFilterActive, role, searchFilteredRecords]);
+  const visibleRecords = useMemo(() => getFilteredPayrollRecords(activeSummary, tableBaseRecords), [activeSummary, tableBaseRecords]);
   const previewRecord = selectedPayslip
     || records.find((record) => record.id === focusRecordId)
     || records.find((record) => isPaidStatus(record.status))
@@ -391,44 +443,34 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   const selectedPayslipRecord = payslipReady && !hrPayslipFuturePeriod
     ? (selectedPayslipActualRecord || getEmptyPayslip(role, normalizedPayslipMonth, normalizedPayslipYear))
     : null;
+  const handleExportReport = useMemo(() => () => {
+    downloadPayrollExportReport({
+      month: selectedMonth,
+      year: selectedYear,
+      searchTerm,
+      activeSummary,
+      records: visibleRecords,
+      title: 'Payroll Management',
+      copy: 'Manage employee salary records, generate payslips, and track paid or unpaid payroll status.',
+    });
+  }, [activeSummary, searchTerm, selectedMonth, selectedYear, visibleRecords]);
 
   const summary = useMemo(() => {
-    const totalPayroll = records.reduce((sum, record) => sum + getNetSalary(record), 0);
-    const paid = records.filter((record) => isPaidStatus(record.status)).length;
-    const unpaid = records.length - paid;
+    const totalPayroll = tableBaseRecords.reduce((sum, record) => sum + getNetSalary(record), 0);
+    const paid = tableBaseRecords.filter((record) => isPaidStatus(record.status)).length;
+    const unpaid = tableBaseRecords.filter((record) => isUnpaidStatus(record.status)).length;
+    const totalCount = tableBaseRecords.length;
 
     return [
-      { id: 'total', label: 'Total Payroll', value: formatCurrency(totalPayroll), delta: `${records.length} salary records`, tone: 'blue', icon: 'ri-wallet-3-line' },
+      { id: 'total', label: 'Total Payroll', value: formatCurrency(totalPayroll), delta: `${totalCount} salary records`, tone: 'blue', icon: 'ri-wallet-3-line' },
       { id: 'paid', label: 'Paid Salaries', value: String(paid).padStart(2, '0'), delta: 'Completed this cycle', tone: 'green', icon: 'ri-checkbox-circle-line' },
       { id: 'unpaid', label: 'Unpaid Salaries', value: String(unpaid).padStart(2, '0'), delta: 'Needs action', tone: 'orange', icon: 'ri-time-line' },
-      { id: 'average', label: 'Avg Net Salary', value: formatCurrency(Math.round(totalPayroll / Math.max(records.length, 1))), delta: 'Current month', tone: 'pink', icon: 'ri-line-chart-line' },
+      { id: 'average', label: 'Avg Net Salary', value: formatCurrency(Math.round(totalPayroll / Math.max(totalCount, 1))), delta: 'Current month', tone: 'pink', icon: 'ri-line-chart-line' },
     ];
-  }, [records]);
+  }, [tableBaseRecords]);
 
-  const summaryDetail = useMemo(() => getPayrollSummaryDetail(activeSummary, records), [activeSummary, records]);
-  const filteredRecords = useMemo(() => {
-    const summaryFilteredRecords = getFilteredPayrollRecords(activeSummary, records);
-    const hrFilteredRecords = role === 'hr' && isHrEmployeeFilterActive
-      ? summaryFilteredRecords.filter((record) => isHrPayrollEmployee(record))
-      : summaryFilteredRecords;
-    const query = searchTerm.trim().toLowerCase();
-
-    if (!query) {
-      return hrFilteredRecords;
-    }
-
-    return hrFilteredRecords.filter((record) => [
-      record.employeeName,
-      record.employeeId,
-      record.department,
-      record.month,
-      record.year,
-      record.status,
-      formatCurrency(getNetSalary(record)),
-      formatCurrency(getEarnings(record)),
-      formatCurrency(getDeductions(record)),
-    ].some((value) => String(value || '').toLowerCase().includes(query)));
-  }, [activeSummary, isHrEmployeeFilterActive, records, role, searchTerm]);
+  const summaryDetail = useMemo(() => getPayrollSummaryDetail(activeSummary, visibleRecords), [activeSummary, visibleRecords]);
+  const filteredRecords = visibleRecords;
 
   useEffect(() => {
     if (!focusRecordId) {
@@ -460,7 +502,13 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   };
 
   const handleSummaryClick = (summaryId) => {
-    setActiveSummary(summaryId);
+    setActiveSummary((current) => {
+      if (summaryId === 'paid' || summaryId === 'unpaid') {
+        return current === summaryId ? '' : summaryId;
+      }
+
+      return '';
+    });
     requestAnimationFrame(() => {
       tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -512,7 +560,11 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
 
   return (
     <>
-      <Hero title="Payroll Management" copy="Manage employee salary records, generate payslips, and track paid or unpaid payroll status." />
+      <Hero
+        title="Payroll Management"
+        copy="Manage employee salary records, generate payslips, and track paid or unpaid payroll status."
+        onExportReport={handleExportReport}
+      />
 
 
       {role === 'hr' && (
@@ -682,11 +734,12 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
         </div>
       )}
 
-      <div className="card-grid">
+      <div className="card-grid payroll-summary-grid">
         {summary.map((item) => (
           <DashboardCard
             key={item.label}
             {...item}
+            isActive={item.id === activeSummary}
             onClick={() => handleSummaryClick(item.id)}
           />
         ))}
@@ -992,7 +1045,8 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
   const [payrollLoading, setPayrollLoading] = useState(false);
   const [payslipMonth, setPayslipMonth] = useState(month);
   const [payslipYear, setPayslipYear] = useState(year);
-  const employeeId = getSessionValue('kavyaEmployeeId') || roleEmployeeFallback[role] || '';
+  const currentEmployeeIdentity = getCurrentEmployeeIdentity();
+  const employeeId = String(currentEmployeeIdentity.employeeId || getSessionValue('kavyaEmployeeId') || '').trim();
   const safeRecords = Array.isArray(records) ? records : [];
   const safeSavedPayrollRecords = Array.isArray(savedPayrollRecords) ? savedPayrollRecords : [];
   const isHrPayroll = role === 'hr';
@@ -1016,7 +1070,6 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
   const matchingPreviewRecords = useMemo(() => (
     payrollRecordsForSelection.filter((record) => matchesPayrollPeriod(record, normalizedPreviewMonth, normalizedPreviewYear))
   ), [normalizedPreviewMonth, normalizedPreviewYear, payrollRecordsForSelection]);
-
   useEffect(() => {
     let active = true;
 
@@ -1077,33 +1130,32 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
       setPayrollData(null);
 
       try {
-        const payload = await apiRequest(`/payroll/${encodeURIComponent(previewMonth)}/${encodeURIComponent(previewYear)}`);
+        const payload = await loadPayrollPayslip({
+          employeeId,
+          month: previewMonth,
+          year: previewYear,
+        });
 
         if (!active) {
           return;
         }
 
-        const normalizedRecords = normalizePayrollRecords(payload).filter((record) => matchesPayrollPeriod(record, normalizedPreviewMonth, normalizedPreviewYear));
-        const focusedRecord = focusRecordId
-          ? normalizedRecords.find((record) => record.id === focusRecordId)
-          : null;
-        const paidRecord = normalizedRecords.find((record) => isPaidStatus(record.status));
-        const fallbackRecord = normalizedRecords[0] || null;
-        const normalizedRecord = focusedRecord || paidRecord || fallbackRecord;
+        const normalizedRecord = normalizePayrollRecords([payload])[0] || null;
         setPayrollData(normalizedRecord);
 
         if (!normalizedRecord) {
-          setMessage('');
-        } else {
-          setMessage('');
+          setMessage('No payroll record found for the selected month and year.');
+          return;
         }
+
+        setMessage('');
       } catch (error) {
         if (!active) {
           return;
         }
 
         setPayrollData(null);
-        setMessage('');
+        setMessage(getPayrollRecordErrorMessage(error));
       } finally {
         if (active) {
           setPayrollLoading(false);
@@ -1116,7 +1168,7 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
     return () => {
       active = false;
     };
-  }, [focusRecordId, isFuturePreviewPeriod, isHrPayroll, normalizedPreviewMonth, normalizedPreviewYear, previewMonth, previewYear]);
+  }, [employeeId, isFuturePreviewPeriod, isHrPayroll, previewMonth, previewYear]);
 
   useEffect(() => {
     if (!focusRecordId) {
@@ -1133,18 +1185,93 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
     || matchingPreviewRecords.find((record) => record.ownerRole === role)
     || payrollRecordsForSelection.find((record) => record.id === roleEmployeeFallback[role])
     || getEmptyPayslip(role, normalizedPreviewMonth, normalizedPreviewYear);
-  const hrActualRecord = isHrPayroll
-    ? (payrollData || matchingPreviewRecords.find((record) => record.id === focusRecordId) || matchingPreviewRecords[0] || null)
-    : null;
+  const hrActualRecord = isHrPayroll ? payrollData : null;
   const previewRecord = isHrPayroll ? hrActualRecord : (selectedPayslip || payslip);
   const displayRecord = isFuturePreviewPeriod
     ? null
-    : (previewRecord || getEmptyPayslip(role, normalizedPreviewMonth, normalizedPreviewYear));
-  const isSelectedPayslipPaid = isPaidStatus(previewRecord?.status);
+    : (isHrPayroll ? (hrActualRecord || getEmptyPayslip(role, normalizedPreviewMonth, normalizedPreviewYear)) : (previewRecord || getEmptyPayslip(role, normalizedPreviewMonth, normalizedPreviewYear)));
   const canDownloadPayslip = isHrPayroll
     ? Boolean(hrActualRecord) && isPaidStatus(hrActualRecord.status) && !isFuturePreviewPeriod
     : Boolean(previewRecord) && isPaidStatus(previewRecord.status) && isPayrollPeriodAvailable(previewMonth, previewYear);
   const activePayslipRecord = isHrPayroll ? hrActualRecord : previewRecord;
+
+  const handleHrPayslipAction = async (action) => {
+    if (isFuturePreviewPeriod) {
+      setMessage('Payroll data is not available for future periods.');
+      return;
+    }
+
+    let record = hrActualRecord;
+
+    if (!record) {
+      try {
+        record = await loadPayrollPayslip({
+          employeeId,
+          month: previewMonth,
+          year: previewYear,
+        });
+        const normalizedRecord = normalizePayrollRecords([record])[0] || null;
+        setPayrollData(normalizedRecord);
+        record = normalizedRecord;
+      } catch (error) {
+        setMessage(getPayrollRecordErrorMessage(error));
+        return;
+      }
+    }
+
+    if (!isPaidStatus(record.status)) {
+      setMessage('The salary for the selected month and year has not been marked as paid yet.');
+      return;
+    }
+
+    setMessage('');
+
+    if (action === 'view') {
+      openPayslipPreview(record);
+      return;
+    }
+
+    downloadPayslipPdf(record);
+  };
+
+  const handleHrPayslipAction = async (action) => {
+    if (isFuturePreviewPeriod) {
+      setMessage('Payroll data is not available for future periods.');
+      return;
+    }
+
+    let record = hrActualRecord;
+
+    if (!record) {
+      try {
+        record = await loadPayrollPayslip({
+          employeeId,
+          month: previewMonth,
+          year: previewYear,
+        });
+        const normalizedRecord = normalizePayrollRecords([record])[0] || null;
+        setPayrollData(normalizedRecord);
+        record = normalizedRecord;
+      } catch (error) {
+        setMessage(getPayrollRecordErrorMessage(error));
+        return;
+      }
+    }
+
+    if (!isPaidStatus(record.status)) {
+      setMessage('The salary for the selected month and year has not been marked as paid yet.');
+      return;
+    }
+
+    setMessage('');
+
+    if (action === 'view') {
+      openPayslipPreview(record);
+      return;
+    }
+
+    downloadPayslipPdf(record);
+  };
 
   return (
     <>
@@ -1252,12 +1379,12 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
                 setMessage('');
                 downloadPayslipPdf(previewRecord);
               }}
-              disabled={(!isHrPayroll && periodLoading) || (isHrPayroll && payrollLoading)}
+              disabled={periodLoading}
             >
               <i className="ri-download-cloud-2-line" aria-hidden="true" />
-              {(isHrPayroll && payrollLoading) || (!isHrPayroll && periodLoading) ? 'Loading...' : 'Download Payslip'}
+              {periodLoading ? 'Loading...' : 'Download Payslip'}
             </button>
-          ) : isHrPayroll && isFuturePreviewPeriod ? (
+          ) : isFuturePreviewPeriod ? (
             <div className="payroll-alert" role="status">
               <i className="ri-information-line" aria-hidden="true" />
               <span>Payroll data is not available for future periods.</span>
@@ -1521,6 +1648,169 @@ function printPayslip(record) {
   }, 350);
 }
 
+function openPayslipPreview(record) {
+  const pdfBlob = buildPayslipPdfBlob(record);
+  const previewUrl = URL.createObjectURL(pdfBlob);
+  const previewWindow = window.open(previewUrl, '_blank');
+  if (!previewWindow) {
+    URL.revokeObjectURL(previewUrl);
+    return;
+  }
+
+  previewWindow.addEventListener('beforeunload', () => {
+    URL.revokeObjectURL(previewUrl);
+  }, { once: true });
+}
+
+function downloadPayslipPdf(record) {
+  const pdfBlob = buildPayslipPdfBlob(record);
+  const downloadUrl = URL.createObjectURL(pdfBlob);
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = getPayslipFileName(record);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+}
+
+function buildPayslipPdfBlob(record) {
+  const lines = getPayslipPdfLines(record);
+  const pdf = buildSimplePdf(lines);
+  return new Blob([pdf], { type: 'application/pdf' });
+}
+
+function getPayslipPdfLines(record) {
+  const safeRecord = normalizePayrollRecords([record])[0] || getEmptyPayslip(record?.role || 'employee', record?.month || months[0], record?.year || years[0]);
+  const companyName = 'Kavya Infoweb Pvt. Ltd.';
+  const generationDate = new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date());
+
+  return [
+    companyName,
+    'Payslip',
+    '',
+    `Employee ID: ${safeText(safeRecord.employeeId)}`,
+    `Employee Name: ${safeText(safeRecord.employeeName)}`,
+    `Department: ${safeText(safeRecord.department)}`,
+    `Designation: ${safeText(safeRecord.role)}`,
+    `Payroll Month: ${safeText(safeRecord.month)}`,
+    `Payroll Year: ${safeText(safeRecord.year)}`,
+    `Basic Salary: ${formatCurrencySafe(safeRecord.basic)}`,
+    `Earnings: ${formatCurrencySafe(getEarnings(safeRecord))}`,
+    `Allowances: ${formatCurrencySafe(safeRecord.allowance)}`,
+    `Deductions: ${formatCurrencySafe(getDeductions(safeRecord))}`,
+    `Net Salary: ${formatCurrencySafe(getNetSalary(safeRecord))}`,
+    `Payment Status: ${safeText(safeRecord.status)}`,
+    `Payment Date: ${safeText(formatPayrollPaymentDate(safeRecord.paidDate))}`,
+    `Payslip Generation Date: ${generationDate}`,
+  ];
+}
+
+function buildSimplePdf(lines) {
+  const pageWidth = 595.28;
+  const pageHeight = 841.89;
+  const leftMargin = 50;
+  const topMargin = 60;
+  const pdfLines = [];
+  const wrappedLines = [];
+
+  lines.forEach((line) => {
+    const segments = wrapPdfText(String(line || ''), 86);
+    wrappedLines.push(...(segments.length > 0 ? segments : ['']));
+  });
+
+  let cursorY = pageHeight - topMargin;
+  pdfLines.push('BT');
+  pdfLines.push('/F1 12 Tf');
+  pdfLines.push('16 TL');
+  pdfLines.push(`${leftMargin} ${cursorY} Td`);
+
+  wrappedLines.forEach((line, index) => {
+    if (index === 0) {
+      pdfLines.push(`(${escapePdfText(line)}) Tj`);
+    } else {
+      pdfLines.push(`T* (${escapePdfText(line)}) Tj`);
+    }
+  });
+  pdfLines.push('ET');
+
+  const contentStream = pdfLines.join('\n');
+  const contentLength = contentStream.length;
+
+  const objects = [
+    '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+    '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+    `3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj`,
+    '4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
+    `5 0 obj << /Length ${contentLength} >> stream\n${contentStream}\nendstream endobj`,
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = ['0000000000 65535 f '];
+  objects.forEach((object, index) => {
+    offsets.push(String(pdf.length).padStart(10, '0') + ' 00000 n ');
+    pdf += `${object}\n`;
+  });
+
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += `${offsets.join('\n')}\n`;
+  pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\n`;
+  pdf += `startxref\n${xrefOffset}\n%%EOF`;
+
+  return pdf;
+}
+
+function wrapPdfText(text, maxLength) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return [''];
+  }
+
+  const lines = [];
+  let currentLine = '';
+
+  words.forEach((word) => {
+    const nextLine = currentLine ? `${currentLine} ${word}` : word;
+    if (nextLine.length > maxLength && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+      return;
+    }
+
+    currentLine = nextLine;
+  });
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines;
+}
+
+function safeText(value) {
+  const raw = String(value ?? '').trim();
+  return raw && raw !== 'undefined' && raw !== 'null' ? raw : '-';
+}
+
+function formatCurrencySafe(value) {
+  const numericValue = Number(value);
+  return formatCurrency(Number.isFinite(numericValue) ? numericValue : 0);
+}
+
+function escapePdfText(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+}
+
 function getPayslipPrintHtml(record) {
   const filename = getPayslipFileName(record);
   const earningsRows = getPayslipEarnings(record);
@@ -1769,17 +2059,17 @@ function SalaryBreakdown({ title, items, total, tone }) {
 }
 
 function getEarnings(record) {
-  return record.basic + record.hra + record.allowance + record.bonus;
+  return getSafeMoney(record.basic) + getSafeMoney(record.hra) + getSafeMoney(record.allowance) + getSafeMoney(record.bonus);
 }
 
 function getDeductions(record) {
-  return record.tax
-    + record.providentFund
-    + record.gratuity
-    + record.professionalTax
-    + record.otherDeduction
-    + record.absentDeduction
-    + record.halfDayDeduction;
+  return getSafeMoney(record.tax)
+    + getSafeMoney(record.providentFund)
+    + getSafeMoney(record.gratuity)
+    + getSafeMoney(record.professionalTax)
+    + getSafeMoney(record.otherDeduction)
+    + getSafeMoney(record.absentDeduction)
+    + getSafeMoney(record.halfDayDeduction);
 }
 
 function getNetSalary(record) {
@@ -1793,7 +2083,7 @@ function formatCurrency(value) {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(getSafeMoney(value));
 }
 
 function getInitials(name) {
@@ -1938,6 +2228,7 @@ function normalizePayrollRecords(rows = []) {
     panNo: record.panNo || record.panCardNo || '-',
     location: record.location || '-',
     status: record.status || 'Unpaid',
+    paidDate: record.paidDate || record.paymentDate || '',
     statusManuallySet: Boolean(record.statusManuallySet),
     attendanceSummary: record.attendanceSummary || '',
     deductionSummary: record.deductionSummary || '',
@@ -1964,6 +2255,7 @@ function buildPayrollRecords(employees, attendance, leaveRequests, statusOverrid
     const netSalary = hasAttendance ? roundMoney(monthlyGross - (absentDeduction + halfDayDeduction + providentFund + gratuity + professionalTax + otherDeduction)) : 0;
     const id = getPayrollRecordId(employeeId, months[period.monthIndex], period.year);
     const savedRecord = savedPayrollRecords.find((record) => record.id === id);
+    const savedStatus = String(savedRecord?.status || '').trim();
 
     return {
       id,
@@ -1994,7 +2286,8 @@ function buildPayrollRecords(employees, attendance, leaveRequests, statusOverrid
       aadhaarNo: employee.aadhaarCardNo || '-',
       panNo: employee.panCardNo || '-',
       location: employee.workingLocation || employee.presentCityDistrict || employee.permanentCityDistrict || '-',
-      status: netSalary > 0 && (isPaidStatus(savedRecord?.status) || isPaidStatus(statusOverrides[id])) ? 'Paid' : 'Unpaid',
+      status: netSalary > 0 && (isPaidStatus(savedStatus) || (!savedStatus && isPaidStatus(statusOverrides[id]))) ? 'Paid' : 'Unpaid',
+      paidDate: savedRecord?.paidDate || savedRecord?.paymentDate || '',
       attendanceSummary: hasAttendance
         ? String(attendanceSummary.presentDays) + ' present, ' + String(approvedLeaveDays) + ' approved leave, ' + String(attendanceSummary.halfDays) + ' half day, ' + String(attendanceSummary.absentDays) + ' absent'
         : '0 present, 0 approved leave, 0 half day, 0 absent',
@@ -2248,11 +2541,176 @@ function getPayslipDeductions(record) {
 }
 
 function getFilteredPayrollRecords(summaryId, records) {
-  if (summaryId === 'average') {
-    return [...records].sort((first, second) => getNetSalary(second) - getNetSalary(first));
+  const safeRecords = Array.isArray(records) ? records : [];
+
+  if (summaryId === 'paid') {
+    return safeRecords.filter((record) => isPaidStatus(record.status));
   }
 
-  return records;
+  if (summaryId === 'unpaid') {
+    return safeRecords.filter((record) => isUnpaidStatus(record.status) || !isPaidStatus(record.status));
+  }
+
+  if (summaryId === 'average') {
+    return [...safeRecords].sort((first, second) => getNetSalary(second) - getNetSalary(first));
+  }
+
+  return safeRecords;
+}
+
+function mergePayrollRecordsForDisplay(records = [], savedPayrollRecords = []) {
+  const safeRecords = normalizePayrollRecords(records);
+  const savedById = new Map(normalizePayrollRecords(savedPayrollRecords).map((record) => [record.id, record]));
+
+  return safeRecords.map((record) => {
+    const savedRecord = savedById.get(record.id)
+      || savedById.get(getPayrollRecordId(record.employeeId, record.month, record.year));
+
+    if (!savedRecord) {
+      return record;
+    }
+
+    return {
+      ...record,
+      status: savedRecord.status || record.status,
+      paidDate: savedRecord.paidDate || savedRecord.paymentDate || record.paidDate || '',
+      netSalary: Number.isFinite(savedRecord.netSalary) ? savedRecord.netSalary : record.netSalary,
+    };
+  });
+}
+
+function matchesPayrollSearch(record, query) {
+  return [
+    record.employeeName,
+    record.employeeId,
+    record.department,
+    record.role,
+    record.month,
+    record.year,
+    record.status,
+    record.paidDate,
+    formatCurrency(getNetSalary(record)),
+    formatCurrency(getEarnings(record)),
+    formatCurrency(getDeductions(record)),
+  ].some((value) => String(value || '').toLowerCase().includes(query));
+}
+
+function formatPayrollPaymentDate(value) {
+  if (!value) {
+    return '';
+  }
+
+  const parsedDate = new Date(value);
+  if (!Number.isNaN(parsedDate.getTime())) {
+    return new Intl.DateTimeFormat('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(parsedDate);
+  }
+
+  return String(value).trim();
+}
+
+function downloadPayrollExportReport({ month, year, searchTerm = '', activeSummary = '', records = [], title, copy }) {
+  const exportRows = Array.isArray(records) ? records : [];
+  const safeMonth = String(month || '').trim();
+  const safeYear = String(year || '').trim();
+  const activeFilterLabel = activeSummary === 'paid'
+    ? 'Paid Salaries'
+    : activeSummary === 'unpaid'
+      ? 'Unpaid Salaries'
+      : 'All Salaries';
+  const searchLabel = String(searchTerm || '').trim() || 'All records';
+  const columns = [
+    'Employee ID',
+    'Employee Name',
+    'Department',
+    'Designation',
+    'Month',
+    'Year',
+    'Gross Earnings',
+    'Basic Salary',
+    'Allowances',
+    'Bonuses',
+    'Total Deductions',
+    'Net Salary',
+    'Payment Status',
+    'Payment Date',
+  ];
+  const rows = exportRows.map((record) => ([
+    record.employeeId || '',
+    record.employeeName || '',
+    record.department || '',
+    record.role || '',
+    record.month || safeMonth,
+    record.year || safeYear,
+    formatCurrency(getEarnings(record)),
+    formatCurrency(record.basic || 0),
+    formatCurrency(record.allowance || 0),
+    formatCurrency(record.bonus || 0),
+    formatCurrency(getDeductions(record)),
+    formatCurrency(getNetSalary(record)),
+    isPaidStatus(record.status) ? 'Paid' : 'Unpaid',
+    formatPayrollPaymentDate(record.paidDate),
+  ]));
+
+  const tableRows = rows.length
+    ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')
+    : `<tr><td colspan="${columns.length}" class="empty-row">No payroll records found.</td></tr>`;
+
+  const excelHtml = `
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <style>
+          body { margin: 0; font-family: Aptos, Calibri, Arial, sans-serif; color: #17212f; background: #f5fbfa; }
+          table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+          td, th { padding: 10px 12px; border: 1px solid #d8e8e7; vertical-align: middle; font-size: 12px; }
+          .brand { color: #ffffff; background: #0f9f9a; font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+          .title { color: #17212f; background: #eaf7f6; font-size: 24px; font-weight: 800; }
+          .subtitle { color: #4b5c6f; background: #f8fcfb; font-size: 13px; line-height: 1.5; }
+          .meta { color: #637488; background: #ffffff; font-weight: 700; }
+          .section-gap { height: 14px; background: #f5fbfa; border: 0; }
+          th { color: #0f1724; background: #dff2f0; font-weight: 900; text-transform: uppercase; }
+          tr:nth-child(even) td { background: #fbfefe; }
+          .empty-row { color: #637488; font-style: italic; background: #ffffff; }
+          .footer { color: #637488; background: #eef7f6; font-size: 11px; font-weight: 700; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tr><td colspan="${columns.length}" class="brand">Kavya HRMS Payroll Report</td></tr>
+          <tr><td colspan="${columns.length}" class="title">${escapeHtml(title || 'Payroll Management')}</td></tr>
+          <tr><td colspan="${columns.length}" class="subtitle">${escapeHtml(copy || '')}</td></tr>
+          <tr><td colspan="3" class="meta">Month</td><td colspan="${columns.length - 3}" class="meta">${escapeHtml(safeMonth)}</td></tr>
+          <tr><td colspan="3" class="meta">Year</td><td colspan="${columns.length - 3}" class="meta">${escapeHtml(safeYear)}</td></tr>
+          <tr><td colspan="3" class="meta">Status Filter</td><td colspan="${columns.length - 3}" class="meta">${escapeHtml(activeFilterLabel)}</td></tr>
+          <tr><td colspan="3" class="meta">Search</td><td colspan="${columns.length - 3}" class="meta">${escapeHtml(searchLabel)}</td></tr>
+          <tr><td colspan="${columns.length}" class="section-gap"></td></tr>
+          <tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('')}</tr>
+          ${tableRows}
+          <tr><td colspan="${columns.length}" class="section-gap"></td></tr>
+          <tr><td colspan="${columns.length}" class="footer">Generated from Kavya HRMS payroll snapshot.</td></tr>
+        </table>
+      </body>
+    </html>
+  `;
+
+  const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const fileNameMonth = safeMonth.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'payroll';
+  const fileNameYear = safeYear || 'report';
+  const fileNameStatus = activeSummary || 'all';
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${fileNameMonth}-${fileNameYear}-${fileNameStatus}-payroll-report.xls`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 function getProvidentFund(monthlyGross, employee) {
@@ -2274,6 +2732,11 @@ function getProfessionalTax(monthlyGross) {
 
 function roundMoney(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function getSafeMoney(value) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : 0;
 }
 
 function formatPayslipAmount(value) {

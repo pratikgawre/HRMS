@@ -14,6 +14,7 @@ import {
 } from '../utils/attendanceStorage.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
+import { safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 
 function EmployeeAttendance({ viewMode = 'auto' }) {
@@ -22,6 +23,7 @@ function EmployeeAttendance({ viewMode = 'auto' }) {
   const attendanceEmployee = getAttendanceEmployee();
   const [attendance, setAttendance] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(() => getMonthInputValue(new Date()));
   const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(new Date()));
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -66,13 +68,27 @@ function EmployeeAttendance({ viewMode = 'auto' }) {
         setDataState({ loading: false, error: 'Unable to load attendance or leave data right now.' });
       }
     };
+    const refreshEmployees = async () => {
+      try {
+        const rows = await safeApiRequest('/employees', []);
+        if (mounted) {
+          setEmployees(Array.isArray(rows) ? rows : []);
+        }
+      } catch {
+        if (mounted) {
+          setEmployees([]);
+        }
+      }
+    };
 
     refreshAll();
+    refreshEmployees();
 
     const intervalId = window.setInterval(refreshAll, 60 * 1000);
     window.addEventListener('storage', refreshAll);
     window.addEventListener('kavyaAttendanceRowsChanged', refreshAll);
     window.addEventListener('kavyaLeaveRequestsChanged', refreshAll);
+    window.addEventListener('kavyaEmployeesChanged', refreshEmployees);
 
     return () => {
       mounted = false;
@@ -80,6 +96,7 @@ function EmployeeAttendance({ viewMode = 'auto' }) {
       window.removeEventListener('storage', refreshAll);
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAll);
       window.removeEventListener('kavyaLeaveRequestsChanged', refreshAll);
+      window.removeEventListener('kavyaEmployeesChanged', refreshEmployees);
     };
   }, []);
 
@@ -117,12 +134,25 @@ function EmployeeAttendance({ viewMode = 'auto' }) {
 
   const selectedDay = monthCalendar.days.find((day) => day.dateKey === selectedDate) || monthCalendar.todayDay || monthCalendar.days.find((day) => !day.blank) || null;
   const myRows = useMemo(() => attendance.filter((row) => matchesEmployee(row, attendanceEmployee.employeeId, attendanceEmployee.employee)), [attendance, attendanceEmployee.employee, attendanceEmployee.employeeId]);
+  const currentEmployeeProfile = useMemo(
+    () => resolveEmployeeProfile(employees, attendanceEmployee.employeeId, employeeIdentity),
+    [attendanceEmployee.employeeId, employeeIdentity, employees],
+  );
+  const selectedMonthRows = useMemo(() => getMonthlyAttendanceRows(myRows, selectedMonth), [myRows, selectedMonth]);
   const todayRecord = myRows.find((row) => getAttendanceDateKey(row) === getDateInputValue(today));
   const todayLeave = findApprovedLeaveForDate(leaveRequests, employeeIdentity, today);
   const canCheckIn = canUseSelfAttendance && !todayRecord && !todayLeave;
   const canCheckOut = canUseSelfAttendance && Boolean(todayRecord && hasRecordedCheckIn(todayRecord) && !hasRecordedCheckOut(todayRecord) && !todayLeave);
   const todayStatusLabel = getTodayAttendanceLabel({ todayRecord, todayLeave, currentDate: today });
   const todayStatusCopy = getTodayAttendanceCopy({ todayRecord, todayLeave, currentDate: today });
+  const handleExportReport = useMemo(() => () => {
+    downloadAttendanceReport({
+      attendanceRows: selectedMonthRows,
+      monthValue: selectedMonth,
+      employee: currentEmployeeProfile,
+      generatedAt: new Date(),
+    });
+  }, [currentEmployeeProfile, selectedMonth, selectedMonthRows]);
 
   const updateAttendance = (updater, successMessage) => {
     setAttendance((current) => {
@@ -160,6 +190,7 @@ function EmployeeAttendance({ viewMode = 'auto' }) {
       <Hero
         title="Attendance"
         copy="Track your live check-in and check-out on a calendar, with approved leave, absent days, and half-day status pulled from the database."
+        onExportReport={handleExportReport}
       />
 
       {message && (
@@ -783,6 +814,166 @@ function isPastCheckInCutoff(date) {
   const minuteOfDay = (date.getHours() * 60) + date.getMinutes();
   const cutoffMinute = (ATTENDANCE_POLICY.fullDayCheckInCutoffHour * 60) + ATTENDANCE_POLICY.fullDayCheckInCutoffMinute;
   return minuteOfDay >= cutoffMinute;
+}
+
+function resolveEmployeeProfile(employees, employeeId, fallbackIdentity) {
+  const targetEmployeeId = String(employeeId || fallbackIdentity?.employeeId || '').trim().toLowerCase();
+  const targetEmployeeName = String(fallbackIdentity?.employee || '').trim().toLowerCase();
+  const sourceEmployee = (Array.isArray(employees) ? employees : []).find((employee) => {
+    const employeeKeys = [
+      employee?.employeeId,
+      employee?.employeeCode,
+      employee?.id,
+    ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+    const employeeNames = [
+      employee?.displayName,
+      employee?.name,
+      employee?.employeeName,
+    ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+
+    return (targetEmployeeId && employeeKeys.includes(targetEmployeeId))
+      || (targetEmployeeName && employeeNames.includes(targetEmployeeName));
+  }) || {};
+
+  return {
+    employeeId: sourceEmployee.employeeId || sourceEmployee.employeeCode || fallbackIdentity?.employeeId || '',
+    employeeName: sourceEmployee.displayName || sourceEmployee.name || sourceEmployee.employeeName || fallbackIdentity?.employee || 'Employee',
+    department: sourceEmployee.department || sourceEmployee.departmentName || sourceEmployee.team || '',
+    designation: sourceEmployee.jobTitle || sourceEmployee.designation || sourceEmployee.role || '',
+  };
+}
+
+function getMonthlyAttendanceRows(rows, monthValue) {
+  const monthDate = getMonthFromInputValue(monthValue);
+  const targetMonth = monthDate.getMonth();
+  const targetYear = monthDate.getFullYear();
+
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => ({ row, date: parseDateValue(row.date || row.dateLabel) }))
+    .filter(({ date }) => date && date.getMonth() === targetMonth && date.getFullYear() === targetYear)
+    .sort((first, second) => first.date.getTime() - second.date.getTime())
+    .map(({ row, date }) => ({
+      ...row,
+      dateKey: getDateInputValue(date),
+      dateLabel: row.date || row.dateLabel || formatLongDate(date),
+    }));
+}
+
+function downloadAttendanceReport({ attendanceRows, monthValue, employee, generatedAt = new Date() }) {
+  const rows = Array.isArray(attendanceRows) ? attendanceRows : [];
+  const selectedMonthDate = getMonthFromInputValue(monthValue);
+  const selectedMonthLabel = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' }).format(selectedMonthDate);
+  const columns = [
+    'Employee ID',
+    'Employee Name',
+    'Department',
+    'Designation',
+    'Date',
+    'Day',
+    'Check-In Time',
+    'Check-Out Time',
+    'Total Working Hours',
+    'Attendance Status',
+    'Remarks',
+  ];
+  const escapeHtml = (value) => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+  const tableRows = rows.length > 0
+    ? rows.map((row) => {
+      const recordDate = parseDateValue(row.date || row.dateLabel);
+      const dayLabel = recordDate
+        ? new Intl.DateTimeFormat('en-IN', { weekday: 'short' }).format(recordDate)
+        : '';
+
+      return [
+        employee.employeeId || '',
+        employee.employeeName || 'Employee',
+        employee.department || '',
+        employee.designation || '',
+        row.dateLabel || row.date || '',
+        dayLabel,
+        formatAttendanceTime(row.checkIn, row.checkInAt),
+        formatAttendanceTime(row.checkOut, row.checkOutAt),
+        row.hours || row.workedHours || row.totalHours || '',
+        normalizeAttendanceStatus(row.status),
+        row.remarks || '',
+      ];
+    })
+      .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`)
+      .join('')
+    : `<tr><td colspan="${columns.length}" class="empty-row">No attendance records found for the selected month.</td></tr>`;
+
+  const exportHtml = `
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <style>
+          body { margin: 0; font-family: Aptos, Calibri, Arial, sans-serif; color: #173042; background: #ffffff; }
+          table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+          td, th { border: 1px solid #5fb35f; padding: 7px 6px; font-size: 11px; vertical-align: top; }
+          .sheet-brand { background: #eef9ef; color: #0d7a28; font-size: 12px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; text-align: center; }
+          .sheet-title { background: #ffffff; color: #048c1b; font-size: 22px; font-weight: 900; text-align: center; }
+          .sheet-subtitle { background: #f8fff8; color: #4e6b58; font-size: 12px; font-weight: 700; text-align: center; }
+          .sheet-meta-bar { background: #fcfffc; color: #1d7434; font-size: 12px; font-weight: 800; }
+          .sheet-meta-left { text-align: left; }
+          .sheet-meta-right { text-align: right; }
+          .header-row th { background: #f7fbf8; color: #173042; font-weight: 900; text-align: center; vertical-align: middle; }
+          tr:nth-child(even) td { background: #fbfefe; }
+          .empty-row { background: #ffffff; color: #71808d; font-style: italic; text-align: center; }
+          .footer { background: #f7fbf8; color: #5d6d79; font-size: 10px; font-weight: 700; text-align: left; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tr><td colspan="${columns.length}" class="sheet-brand">Kavya HRMS Attendance Export</td></tr>
+          <tr><td colspan="${columns.length}" class="sheet-title">Attendance</td></tr>
+          <tr><td colspan="${columns.length}" class="sheet-subtitle">${escapeHtml(`My Attendance | ${selectedMonthLabel}`)}</td></tr>
+          <tr>
+            <td colspan="5" class="sheet-meta-bar sheet-meta-left">Employee: ${escapeHtml(employee.employeeName || 'Employee')}</td>
+            <td colspan="${columns.length - 5}" class="sheet-meta-bar sheet-meta-right">Exported: ${escapeHtml(new Intl.DateTimeFormat('en-IN').format(generatedAt))}</td>
+          </tr>
+          <tr><th colspan="${columns.length}" class="sheet-meta-bar sheet-meta-left">Month Filter: ${escapeHtml(selectedMonthLabel)}</th></tr>
+          <tr class="header-row">${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('')}</tr>
+          ${tableRows}
+          <tr><td colspan="${columns.length}" class="footer">Generated from Kavya HRMS attendance records pulled from the database.</td></tr>
+        </table>
+      </body>
+    </html>
+  `;
+
+  const blob = new Blob([exportHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const fileName = `attendance-report-${String(monthValue || 'attendance').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.xls`;
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function formatAttendanceTime(value, fallbackIso = '') {
+  const text = String(value || '').trim();
+  if (text && text !== '-') {
+    return text;
+  }
+
+  if (!fallbackIso) {
+    return '';
+  }
+
+  const parsed = new Date(fallbackIso);
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed);
 }
 
 export default EmployeeAttendance;

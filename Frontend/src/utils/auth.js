@@ -2,8 +2,9 @@ import { getAppRole, getDashboardPath, getPermissions, normalizeAccessRole } fro
 import { apiRequest } from './api.js';
 import { getUsers, saveUsers } from './user-management.js';
 import { getStoredEmployees } from './employeeStorage.js';
-import { clearSessionValues, getSessionValue, setSessionValue } from './appSession.js';
-import { API_BASE, normalizeBackendAssetUrl } from './runtime-config.js';
+import { clearSessionValues, getSessionValue, markSessionActivity, setSessionValue, touchSessionOnBackend } from './appSession.js';
+
+const API_BASE = '/api';
 
 const legacyUsers = {
   'admin@gmail.com': { password: 'admin123', role: 'Super Admin', employeeId: 'ADMIN-001', employeeName: 'Admin Kavya', avatar: 'AK', department: 'Platform', designation: 'System Admin' },
@@ -63,13 +64,14 @@ export async function authenticateUser(email, password) {
   const normalizedEmail = String(email).trim().toLowerCase();
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: normalizedEmail, password }),
   }).catch(() => null);
+  let isUnauthorized = false;
 
   if (response) {
-    const isServerError = response.status >= 500;
-    const isUnauthorized = response.status === 401;
+    isUnauthorized = response.status === 401;
     const text = await response.text();
     let result = null;
     try {
@@ -88,30 +90,15 @@ export async function authenticateUser(email, password) {
         role: accessRole,
         status: result.status || 'Active',
         permissions: getPermissions(accessRole),
-        token: result.token || '',
         password,
         mustChangePassword: Boolean(result.mustChangePassword),
         lastLogin: result.lastLogin || '',
+        lastSeenAt: result.lastSeenAt || result.lastLogin || '',
+        sessionExpiresAt: result.sessionExpiresAt || '',
         avatar: result.avatar || (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
         profilePicture: normalizeBackendAssetUrl(result.profilePicture || ''),
       };
       return { ok: true, user };
-    }
-
-    if (isUnauthorized) {
-      const localUser = findLocalUser(normalizedEmail, password);
-      if (localUser) {
-        return { ok: true, user: localUser };
-      }
-    }
-
-    if (isServerError) {
-      const localUser = findLocalUser(normalizedEmail, password);
-      if (localUser) {
-        return { ok: true, user: localUser };
-      }
-
-      return { ok: false, message: result?.message || 'Login service is temporarily unavailable. Please try again.' };
     }
 
     if (result?.message) {
@@ -120,10 +107,11 @@ export async function authenticateUser(email, password) {
   }
 
   if (!response) {
-    const localUser = findLocalUser(normalizedEmail, password);
-    if (localUser) {
-      return { ok: true, user: localUser };
-    }
+    return { ok: false, message: 'Unable to connect to the authentication service.' };
+  }
+
+  if (isUnauthorized) {
+    return { ok: false, message: 'Invalid credentials' };
   }
 
   return { ok: false, message: 'Please enter a valid email and password.' };
@@ -176,29 +164,33 @@ export function startSession(user) {
   setSessionValue('kavyaEmployeePhoto', user.profilePicture || '');
   setSessionValue('kavyaUserId', user.userId || '');
   setSessionValue('kavyaLastLogin', user.lastLogin || '');
-  setSessionValue('kavyaAuthToken', user.token || '');
   setSessionValue('kavyaMustChangePassword', mustChangePassword);
+  const lastActivityAt = Date.parse(String(user.lastSeenAt || user.lastLogin || ''));
+  if (Number.isFinite(lastActivityAt) && lastActivityAt > 0) {
+    setSessionValue('kavyaSessionLastActivityAt', String(lastActivityAt));
+  }
+  const expiresAt = Date.parse(String(user.sessionExpiresAt || ''));
+  if (Number.isFinite(expiresAt) && expiresAt > 0) {
+    setSessionValue('kavyaSessionExpiresAt', String(expiresAt));
+  }
   setSessionValue('kavyaLoginSuccess', 'true');
+  markSessionActivity(Number.isFinite(lastActivityAt) && lastActivityAt > 0 ? lastActivityAt : Date.now());
 
   return mustChangePassword ? '/change-password' : getDashboardPath(user.role);
 }
 
 export function clearSession() {
-  const token = String(getSessionValue('kavyaAuthToken') || '').trim();
-  if (token) {
-    fetch(`${API_BASE}/auth/session`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => {});
-  }
+  fetch(`${API_BASE}/auth/session`, {
+    method: 'DELETE',
+    credentials: 'include',
+  }).catch(() => {});
 
-  clearSessionValues(['kavyaRole', 'kavyaAccessRole', 'kavyaUserEmail', 'kavyaUserStatus', 'kavyaEmployeeId', 'kavyaEmployeeName', 'kavyaEmployeeAvatar', 'kavyaEmployeePhoto', 'kavyaUserId', 'kavyaLastLogin', 'kavyaAuthToken', 'kavyaMustChangePassword', 'kavyaLoginSuccess']);
+  clearSessionValues();
 }
 
 export function syncSessionFromAccessUser() {
-  const token = String(getSessionValue('kavyaAuthToken') || '').trim();
   const role = String(getSessionValue('kavyaRole') || '').trim();
-  if (!token || !role) {
+  if (!role) {
     return { ok: false, role: '' };
   }
 
@@ -215,7 +207,8 @@ export function syncSessionFromAccessUser() {
       role: getSessionValue('kavyaAccessRole') || 'Employee',
       status: getSessionValue('kavyaUserStatus') || 'Active',
       mustChangePassword: Boolean(getSessionValue('kavyaMustChangePassword')),
-      token,
+      sessionExpiresAt: getSessionValue('kavyaSessionExpiresAt') || '',
+      lastSeenAt: getSessionValue('kavyaSessionLastActivityAt') || '',
     },
   };
 }
@@ -317,4 +310,3 @@ export async function changePassword(currentPassword, newPassword, confirmPasswo
     };
   }
 }
-

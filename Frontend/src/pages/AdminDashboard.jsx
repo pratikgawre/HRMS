@@ -426,11 +426,37 @@ export function Hero({ title, copy, actions }) {
   };
 
   const exportReport = () => {
-    const { metrics, tables, controls, cards } = getPageSnapshot();
+    if (typeof onExportReport === 'function') {
+      onExportReport();
+      return;
+    }
+
+    const { metrics, tables, controls } = getPageSnapshot();
+    const role = getSessionValue('kavyaRole') || 'employee';
+    const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
+    const exportControls = shouldHideFormFields ? [] : controls;
     const escapeCell = (cell) => String(cell || '-')
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;');
+    const leaveExportHeadersToOmit = new Set(['leave details', 'action', 'actions']);
+    const normalizeHeader = (value) => String(value || '').trim().toLowerCase();
+    const filterLeaveExportTable = (table) => {
+      const omitIndexes = table.headers
+        .map((header, index) => (leaveExportHeadersToOmit.has(normalizeHeader(header)) ? index : -1))
+        .filter((index) => index >= 0);
+
+      if (omitIndexes.length === 0) {
+        return table;
+      }
+
+      const omitIndexSet = new Set(omitIndexes);
+      return {
+        ...table,
+        headers: table.headers.filter((_, index) => !omitIndexSet.has(index)),
+        bodyRows: table.bodyRows.map((row) => row.filter((_, index) => !omitIndexSet.has(index))),
+      };
+    };
     const metricCells = metrics.slice(0, 4).map((item) => `
       <td class="metric-card" colspan="2">
         <span>${escapeCell(item.label)}</span>
@@ -439,15 +465,16 @@ export function Hero({ title, copy, actions }) {
       </td>
     `).join('');
     const tableSections = tables.map((table) => {
-      const headers = table.headers.map((head) => `<th>${escapeCell(head)}</th>`).join('');
-      const bodyRows = table.bodyRows.length
-        ? table.bodyRows.map((tableRow) => `<tr>${tableRow.map((cell) => `<td>${escapeCell(cell)}</td>`).join('')}</tr>`).join('')
-        : `<tr><td colspan="${Math.max(table.headers.length, 1)}" class="empty-row">No records available.</td></tr>`;
+      const exportTable = filterLeaveExportTable(table);
+      const columnCount = Math.max(exportTable.headers.length, 1);
+      const bodyRows = exportTable.bodyRows.length
+        ? exportTable.bodyRows.map((tableRow) => `<tr>${tableRow.map((cell) => `<td>${escapeCell(cell)}</td>`).join('')}</tr>`).join('')
+        : `<tr><td colspan="${columnCount}" class="empty-row">No records available.</td></tr>`;
 
       return `
         <tr><td colspan="8" class="section-gap"></td></tr>
         <tr><td colspan="8" class="section-title">${escapeCell(table.sectionTitle)}</td></tr>
-        <tr>${headers}</tr>
+        <tr>${exportTable.headers.map((head) => `<th>${escapeCell(head)}</th>`).join('')}</tr>
         ${bodyRows}
       `;
     }).join('');

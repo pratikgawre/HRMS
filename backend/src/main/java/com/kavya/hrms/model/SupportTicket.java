@@ -12,6 +12,8 @@ public class SupportTicket {
   private String raisedBy;
   private String employeeName;
   private String employeeEmail;
+  private String employeeRole;
+  private String employeeDepartment;
   private String title;
   private String category;
   private String priority;
@@ -19,7 +21,13 @@ public class SupportTicket {
   private String description;
   private String screenshotDataUrl;
   private String screenshot;
+  private String screenshotFileName;
+  private String screenshotPath;
+  private String screenshotUrl;
+  private String screenshotContentType;
+  private Long screenshotSize;
   private String createdDate;
+  private String updatedDate;
   private String assignedTo;
   private String resolution;
 
@@ -35,6 +43,10 @@ public class SupportTicket {
   public void setEmployeeName(String employeeName) { this.employeeName = employeeName; }
   public String getEmployeeEmail() { return employeeEmail; }
   public void setEmployeeEmail(String employeeEmail) { this.employeeEmail = employeeEmail; }
+  public String getEmployeeRole() { return employeeRole; }
+  public void setEmployeeRole(String employeeRole) { this.employeeRole = employeeRole; }
+  public String getEmployeeDepartment() { return employeeDepartment; }
+  public void setEmployeeDepartment(String employeeDepartment) { this.employeeDepartment = employeeDepartment; }
   public String getTitle() { return title; }
   public void setTitle(String title) { this.title = title; }
   public String getCategory() { return category; }
@@ -49,8 +61,20 @@ public class SupportTicket {
   public void setScreenshotDataUrl(String screenshotDataUrl) { this.screenshotDataUrl = screenshotDataUrl; }
   public String getScreenshot() { return screenshot; }
   public void setScreenshot(String screenshot) { this.screenshot = screenshot; }
+  public String getScreenshotFileName() { return screenshotFileName; }
+  public void setScreenshotFileName(String screenshotFileName) { this.screenshotFileName = screenshotFileName; }
+  public String getScreenshotPath() { return screenshotPath; }
+  public void setScreenshotPath(String screenshotPath) { this.screenshotPath = screenshotPath; }
+  public String getScreenshotUrl() { return screenshotUrl; }
+  public void setScreenshotUrl(String screenshotUrl) { this.screenshotUrl = screenshotUrl; }
+  public String getScreenshotContentType() { return screenshotContentType; }
+  public void setScreenshotContentType(String screenshotContentType) { this.screenshotContentType = screenshotContentType; }
+  public Long getScreenshotSize() { return screenshotSize; }
+  public void setScreenshotSize(Long screenshotSize) { this.screenshotSize = screenshotSize; }
   public String getCreatedDate() { return createdDate; }
   public void setCreatedDate(String createdDate) { this.createdDate = createdDate; }
+  public String getUpdatedDate() { return updatedDate; }
+  public void setUpdatedDate(String updatedDate) { this.updatedDate = updatedDate; }
   public String getAssignedTo() { return assignedTo; }
   public void setAssignedTo(String assignedTo) { this.assignedTo = assignedTo; }
   public String getResolution() { return resolution; }

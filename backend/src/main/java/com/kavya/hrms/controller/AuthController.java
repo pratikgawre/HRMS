@@ -1,27 +1,8 @@
 package com.kavya.hrms.controller;
 
-import java.security.SecureRandom;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.UUID;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
+import com.kavya.hrms.dto.ChangePasswordRequest;
 import com.kavya.hrms.dto.LoginRequest;
 import com.kavya.hrms.dto.LoginResponse;
-import com.kavya.hrms.dto.ChangePasswordRequest;
 import com.kavya.hrms.dto.PasswordResetConfirmationRequest;
 import com.kavya.hrms.dto.PasswordResetRequest;
 import com.kavya.hrms.dto.PasswordResetResponse;
@@ -31,11 +12,37 @@ import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.AuthSessionRepository;
 import com.kavya.hrms.service.PasswordResetEmailService;
 import com.kavya.hrms.service.PasswordResetEmailService.DeliveryResult;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import org.jspecify.annotations.Nullable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
   private static final Duration RESET_TOKEN_TTL = Duration.ofMinutes(15);
+  private static final Duration SESSION_TTL = Duration.ofHours(1);
+  private static final String SESSION_COOKIE_NAME = "kavyaAuthToken";
+
   private final SecureRandom secureRandom = new SecureRandom();
   private final AppUserRepository appUserRepository;
   private final AuthSessionRepository authSessionRepository;
@@ -74,7 +81,7 @@ public class AuthController {
           String token = UUID.randomUUID().toString();
           AuthSession session = buildSession(user, token, now);
           authSessionRepository.save(Objects.requireNonNull(session, "session"));
-          return ResponseEntity.ok(okResponse(user, token, now));
+          return okResponseWithCookie(user, token, now);
         })
         .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Invalid credentials")));
   }
@@ -154,7 +161,7 @@ public class AuthController {
       @RequestBody ChangePasswordRequest request) {
     String token = extractToken(authorization);
     if (token.isBlank()) {
-      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found"));
+      return unauthorizedLoginResponse("Session not found");
     }
 
     String currentPassword = request == null || request.getCurrentPassword() == null ? "" : request.getCurrentPassword().trim();
@@ -172,7 +179,7 @@ public class AuthController {
       return ResponseEntity.badRequest().body(failed("Password must be at least 8 characters long"));
     }
 
-    return authSessionRepository.findById(token)
+    return validateSession(token)
         .map(session -> appUserRepository.findAllByEmailIgnoreCase(normalizeEmail(session.getEmail())).stream()
             .findFirst()
             .map(user -> {
@@ -188,8 +195,7 @@ public class AuthController {
               appUserRepository.save(user);
 
               session.setMustChangePassword(false);
-              session.setLastSeenAt(Instant.now().toString());
-              authSessionRepository.save(session);
+              touchSession(session);
 
               LoginResponse response = okResponse(session);
               response.setMustChangePassword(false);
@@ -198,24 +204,39 @@ public class AuthController {
             })
             .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(failed("No account found for this session"))))
-        .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found")));
+        .orElseGet(() -> unauthorizedLoginResponse("Session not found"));
   }
+
   @GetMapping("/session")
   public ResponseEntity<LoginResponse> currentSession(
       @RequestHeader(value = "Authorization", required = false) String authorization) {
     String token = extractToken(authorization);
     if (token.isBlank()) {
-      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found"));
+      return unauthorizedLoginResponse("Session not found");
     }
 
-    return authSessionRepository.findById(token)
+    return validateSession(token)
         .map(session -> {
-          syncSessionFromUser(session);
-          session.setLastSeenAt(Instant.now().toString());
-          authSessionRepository.save(session);
+          touchSession(session);
           return ResponseEntity.ok(okResponse(session));
         })
-        .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(failed("Session not found")));
+        .orElseGet(() -> unauthorizedLoginResponse("Session not found"));
+  }
+
+  @PostMapping("/session/touch")
+  public ResponseEntity<LoginResponse> touchSessionEndpoint(
+      @RequestHeader(value = "Authorization", required = false) String authorization) {
+    String token = extractToken(authorization);
+    if (token.isBlank()) {
+      return unauthorizedLoginResponse("Session not found");
+    }
+
+    return validateSession(token)
+        .map(session -> {
+          touchSession(session);
+          return ResponseEntity.ok(okResponse(session));
+        })
+        .orElseGet(() -> unauthorizedLoginResponse("Session not found"));
   }
 
   @DeleteMapping("/session")
@@ -226,7 +247,9 @@ public class AuthController {
       authSessionRepository.deleteById(token);
     }
 
-    return ResponseEntity.noContent().build();
+    return ResponseEntity.noContent()
+        .header(HttpHeaders.SET_COOKIE, clearSessionCookie().toString())
+        .build();
   }
 
   private void syncSessionFromUser(AuthSession session) {
@@ -242,6 +265,7 @@ public class AuthController {
           session.setMustChangePassword(Boolean.TRUE.equals(user.getMustChangePassword()));
         });
   }
+
   private LoginResponse okResponse(AppUser user, String token, String lastLogin) {
     LoginResponse response = new LoginResponse();
     response.setOk(true);
@@ -255,6 +279,8 @@ public class AuthController {
     response.setAvatar(user.getAvatar());
     response.setProfilePicture(user.getProfilePicture());
     response.setToken(token);
+    response.setLastSeenAt(lastLogin);
+    response.setSessionExpiresAt(calculateSessionExpiresAt(lastLogin));
     response.setMustChangePassword(Boolean.TRUE.equals(user.getMustChangePassword()));
     response.setMessage(Boolean.TRUE.equals(user.getMustChangePassword()) ? "Password change required" : "Login successful");
     return response;
@@ -262,6 +288,10 @@ public class AuthController {
 
   private LoginResponse okResponse(AuthSession session) {
     AppUser user = resolveSessionUser(session);
+    if (user == null) {
+      user = fallbackUserFromSession(session);
+    }
+
     LoginResponse response = new LoginResponse();
     response.setOk(true);
     response.setUserId(session.getUserId());
@@ -274,12 +304,26 @@ public class AuthController {
     response.setAvatar(user.getAvatar());
     response.setProfilePicture(user.getProfilePicture());
     response.setToken(session.getToken());
+    response.setLastSeenAt(session.getLastSeenAt());
+    response.setSessionExpiresAt(calculateSessionExpiresAt(session.getLastSeenAt(), session.getCreatedAt()));
     response.setMustChangePassword(Boolean.TRUE.equals(session.getMustChangePassword()));
     response.setMessage(Boolean.TRUE.equals(session.getMustChangePassword()) ? "Password change required" : "Session active");
     return response;
   }
 
-  private AppUser resolveSessionUser(AuthSession session) {
+  private ResponseEntity<LoginResponse> okResponseWithCookie(AppUser user, String token, String lastLogin) {
+    return ResponseEntity.ok()
+        .header(HttpHeaders.SET_COOKIE, buildSessionCookie(token).toString())
+        .body(okResponse(user, token, lastLogin));
+  }
+
+  private ResponseEntity<LoginResponse> unauthorizedLoginResponse(String message) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .header(HttpHeaders.SET_COOKIE, clearSessionCookie().toString())
+        .body(failed(message));
+  }
+
+  private AppUser resolveSessionUser(@Nullable AuthSession session) {
     if (session == null) {
       return null;
     }
@@ -309,6 +353,22 @@ public class AuthController {
     }
 
     return null;
+  }
+
+  private AppUser fallbackUserFromSession(@Nullable AuthSession session) {
+    AppUser user = new AppUser();
+    if (session == null) {
+      return user;
+    }
+
+    user.setUserId(session.getUserId());
+    user.setEmail(session.getEmail());
+    user.setRole(session.getRole());
+    user.setEmployeeId(session.getEmployeeId());
+    user.setEmployeeName(session.getEmployeeName());
+    user.setStatus(session.getStatus());
+    user.setMustChangePassword(Boolean.TRUE.equals(session.getMustChangePassword()));
+    return user;
   }
 
   private PasswordResetResponse resetResponse(boolean ok, boolean emailSent, String email, String resetToken, String expiresAt, String message) {
@@ -442,7 +502,6 @@ public class AuthController {
     return Optional.of(user);
   }
 
-
   private AuthSession buildSession(AppUser user, String token, String now) {
     AuthSession session = new AuthSession();
     session.setToken(token);
@@ -459,7 +518,94 @@ public class AuthController {
     return session;
   }
 
-  private String normalizeEmail(String email) {
+  private Optional<AuthSession> validateSession(String token) {
+    String normalizedToken = normalizeValue(token);
+    if (normalizedToken.isBlank()) {
+      return Optional.empty();
+    }
+
+    AuthSession session = authSessionRepository.findById(normalizedToken).orElse(null);
+    if (session == null) {
+      return Optional.empty();
+    }
+
+    if (isSessionExpired(session, Instant.now())) {
+      authSessionRepository.deleteById(normalizedToken);
+      return Optional.empty();
+    }
+
+    syncSessionFromUser(session);
+    touchSession(session);
+    return Optional.of(session);
+  }
+
+  private void touchSession(AuthSession session) {
+    if (session == null) {
+      return;
+    }
+
+    session.setLastSeenAt(Instant.now().toString());
+    authSessionRepository.save(session);
+  }
+
+  private boolean isSessionExpired(@Nullable AuthSession session, Instant now) {
+    if (session == null || now == null) {
+      return true;
+    }
+
+    String lastSeenAt = normalizeValue(session.getLastSeenAt());
+    String lastLogin = normalizeValue(session.getLastLogin());
+    String createdAt = normalizeValue(session.getCreatedAt());
+    String referenceTime = lastSeenAt.isBlank() ? (lastLogin.isBlank() ? createdAt : lastLogin) : lastSeenAt;
+    if (referenceTime.isBlank()) {
+      return true;
+    }
+
+    try {
+      Instant touchedAt = Instant.parse(referenceTime);
+      return touchedAt.plus(SESSION_TTL).isBefore(now);
+    } catch (Exception ex) {
+      return true;
+    }
+  }
+
+  private ResponseCookie buildSessionCookie(String token) {
+    return ResponseCookie.from(SESSION_COOKIE_NAME, token)
+        .httpOnly(true)
+        .secure(isSecureRequest())
+        .path("/")
+        .sameSite("Lax")
+        .maxAge(SESSION_TTL)
+        .build();
+  }
+
+  private ResponseCookie clearSessionCookie() {
+    return ResponseCookie.from(SESSION_COOKIE_NAME, "")
+        .httpOnly(true)
+        .secure(isSecureRequest())
+        .path("/")
+        .sameSite("Lax")
+        .maxAge(Duration.ZERO)
+        .build();
+  }
+
+  private boolean isSecureRequest() {
+    ServletRequestAttributes requestAttributes = currentRequestAttributes();
+    return requestAttributes != null
+        && requestAttributes.getRequest() != null
+        && requestAttributes.getRequest().isSecure();
+  }
+
+  private ServletRequestAttributes currentRequestAttributes() {
+    RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+    if (attributes instanceof ServletRequestAttributes servletRequestAttributes) {
+      return servletRequestAttributes;
+    }
+
+    return null;
+  }
+
+  private String normalizeEmail(@Nullable String email) {
     if (email == null) {
       return "";
     }
@@ -468,6 +614,27 @@ public class AuthController {
 
   private String normalizeValue(String value) {
     return value == null ? "" : value.trim();
+  }
+
+  private String calculateSessionExpiresAt(String loginTime) {
+    return calculateSessionExpiresAt(loginTime, loginTime);
+  }
+
+  private String calculateSessionExpiresAt(String loginTime, String fallbackTime) {
+    String referenceTime = normalizeValue(loginTime);
+    if (referenceTime.isBlank()) {
+      referenceTime = normalizeValue(fallbackTime);
+    }
+
+    if (referenceTime.isBlank()) {
+      return "";
+    }
+
+    try {
+      return Instant.parse(referenceTime).plus(SESSION_TTL).toString();
+    } catch (Exception ex) {
+      return "";
+    }
   }
 
   private String extractToken(String authorization) {
@@ -482,7 +649,4 @@ public class AuthController {
 
     return trimmed;
   }
-
-
 }
-

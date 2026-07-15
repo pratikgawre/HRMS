@@ -11,7 +11,9 @@ public class LoginResponse {
   private String userId;
   private String status;
   private String lastLogin;
+  private String lastSeenAt;
   private String token;
+  private String sessionExpiresAt;
   private boolean mustChangePassword;
   private String message;
 
@@ -35,8 +37,12 @@ public class LoginResponse {
   public void setStatus(String status) { this.status = status; }
   public String getLastLogin() { return lastLogin; }
   public void setLastLogin(String lastLogin) { this.lastLogin = lastLogin; }
+  public String getLastSeenAt() { return lastSeenAt; }
+  public void setLastSeenAt(String lastSeenAt) { this.lastSeenAt = lastSeenAt; }
   public String getToken() { return token; }
   public void setToken(String token) { this.token = token; }
+  public String getSessionExpiresAt() { return sessionExpiresAt; }
+  public void setSessionExpiresAt(String sessionExpiresAt) { this.sessionExpiresAt = sessionExpiresAt; }
   public boolean isMustChangePassword() { return mustChangePassword; }
   public void setMustChangePassword(boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
   public String getMessage() { return message; }
