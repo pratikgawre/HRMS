@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authenticateUser, startSession } from '../utils/auth.js';
 
@@ -92,8 +92,13 @@ function Login() {
                 value={form.password}
                 onChange={(event) => updateField('password', event.target.value)}
               />
-              <button type="button" onClick={() => setShowPassword((current) => !current)}>
-                {showPassword ? 'Hide' : 'Show'}
+              <button
+                type="button"
+                className="password-visibility-toggle"
+                onClick={() => setShowPassword((current) => !current)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                <i className={showPassword ? 'ri-eye-off-line' : 'ri-eye-line'} aria-hidden="true" />
               </button>
             </label>
             {error && <p className="login-error" role="alert">{error}</p>}

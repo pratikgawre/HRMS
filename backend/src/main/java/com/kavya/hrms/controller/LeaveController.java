@@ -80,10 +80,16 @@ public class LeaveController {
       @PathVariable String id,
       @RequestBody LeaveRequest request,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
+      @RequestHeader(value = "X-Kavya-Employee-Id", required = false) String employeeId,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     String safeId = Objects.requireNonNull(id, "leave id must not be null");
     LeaveRequest safeRequest = request == null ? new LeaveRequest() : request;
     LeaveRequest previous = leaveRequestRepository.findById(safeId).orElseGet(LeaveRequest::new);
+    if (isHrSelfApproval(accessRole, employeeId, previous) && isFinalStatusChange(safeRequest, previous)) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.FORBIDDEN,
+          "HR cannot approve or reject their own leave request.");
+    }
     safeRequest.setId(safeId);
     LeaveRequest saved = leaveRequestRepository.save(safeRequest);
     notifyLeaveUpdated(saved, previous, accessRole, userId);
@@ -200,5 +206,19 @@ public class LeaveController {
       return "Rejected";
     }
     return status == null || status.isBlank() ? "Updated" : status.trim();
+  }
+
+  private boolean isHrSelfApproval(String accessRole, String employeeId, LeaveRequest previous) {
+    return isHrRole(accessRole)
+        && !normalizeIdentity(employeeId).isBlank()
+        && normalizeIdentity(employeeId).equals(normalizeIdentity(previous == null ? null : previous.getEmployeeId()));
+  }
+
+  private boolean isHrRole(String role) {
+    return "hr".equals(normalizeIdentity(role));
+  }
+
+  private String normalizeIdentity(String value) {
+    return value == null ? "" : value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
   }
 }

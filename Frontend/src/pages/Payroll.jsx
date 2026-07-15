@@ -563,35 +563,114 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
             disabled={!payslipReady}
           >
             <i className="ri-download-cloud-2-line" aria-hidden="true" />
-            Download Payslip
+            View Payslip
           </button>
+          {selectedPayslipActualRecord ? (
+            <button
+              className="payroll-secondary"
+              type="button"
+              onClick={() => {
+                if (hrPayslipFuturePeriod) {
+                  setMessage('Payroll data is not available for future periods.');
+                  return;
+                }
+
+                if (!selectedPayslipActualRecord) {
+                  setMessage('Salary record not found for the selected month and year.');
+                  return;
+                }
+
+                if (!isPaidStatus(selectedPayslipActualRecord.status)) {
+                  setMessage('Payslip is available only after the salary has been marked as Paid.');
+                  return;
+                }
+
+                setMessage('');
+                downloadPayslipPdf(selectedPayslipActualRecord);
+              }}
+              disabled={!payslipReady}
+            >
+              <i className="ri-file-download-line" aria-hidden="true" />
+              Download Payslip
+            </button>
+          ) : null}
         </div>
       </Section>
 
-      {payslipReady && selectedPayslipRecord && (
+      {payslipReady && selectedPayslipActualRecord && (
         <div className="card-grid">
           <DashboardCard
             label="Payment Status"
-            value={isPaidStatus(selectedPayslipRecord.status) ? 'Paid' : 'Unpaid'}
-            delta={`${selectedPayslipRecord.employeeName} · ${selectedPayslipRecord.month} ${selectedPayslipRecord.year}`}
-            tone={isPaidStatus(selectedPayslipRecord.status) ? 'green' : 'orange'}
-            icon={isPaidStatus(selectedPayslipRecord.status) ? 'ri-checkbox-circle-line' : 'ri-time-line'}
+            value={isPaidStatus(selectedPayslipActualRecord.status) ? 'Paid' : 'Unpaid'}
+            delta={`${selectedPayslipActualRecord.employeeName} · ${selectedPayslipActualRecord.month} ${selectedPayslipActualRecord.year}`}
+            tone={isPaidStatus(selectedPayslipActualRecord.status) ? 'green' : 'orange'}
+            icon={isPaidStatus(selectedPayslipActualRecord.status) ? 'ri-checkbox-circle-line' : 'ri-time-line'}
           />
           <DashboardCard
             label="Total Earnings"
-            value={formatCurrency(getEarnings(selectedPayslipRecord))}
+            value={formatCurrency(getEarnings(selectedPayslipActualRecord))}
             delta="Gross earnings"
             tone="blue"
             icon="ri-wallet-3-line"
           />
           <DashboardCard
             label="Total Deductions"
-            value={formatCurrency(getDeductions(selectedPayslipRecord))}
+            value={formatCurrency(getDeductions(selectedPayslipActualRecord))}
             delta="Salary deductions"
             tone="pink"
             icon="ri-scissors-cut-line"
           />
         </div>
+      )}
+
+      {payslipReady && selectedPayslipActualRecord && isPaidStatus(selectedPayslipActualRecord.status) && (
+        <div className="payslip-layout">
+          <section className="payslip-card">
+            <div className="payslip-head">
+              <div>
+                <p className="eyebrow">Salary Slip</p>
+                <h3>{selectedPayslipActualRecord.employeeName}</h3>
+                <span>{selectedPayslipActualRecord.employeeId} - {selectedPayslipActualRecord.role}</span>
+              </div>
+              <span className={`status status-${selectedPayslipActualRecord.status.toLowerCase()}`}>{selectedPayslipActualRecord.status}</span>
+            </div>
+
+            <div className="payslip-info-grid">
+              <div><span>Department</span><strong>{selectedPayslipActualRecord.department}</strong></div>
+              <div><span>Pay Period</span><strong>{selectedPayslipActualRecord.month} {selectedPayslipActualRecord.year}</strong></div>
+              <div><span>Gross Earnings</span><strong>{formatCurrency(getEarnings(selectedPayslipActualRecord))}</strong></div>
+              <div><span>Total Deductions</span><strong>{formatCurrency(getDeductions(selectedPayslipActualRecord))}</strong></div>
+            </div>
+
+            <div className="net-salary-box">
+              <span>Net Salary</span>
+              <strong>{formatCurrency(getNetSalary(selectedPayslipActualRecord))}</strong>
+            </div>
+          </section>
+
+          <SalaryBreakdown title="Earnings" items={[
+            ['Monthly Package', selectedPayslipActualRecord.basic],
+            ['HRA', selectedPayslipActualRecord.hra],
+            ['Allowance', selectedPayslipActualRecord.allowance],
+            ['Bonus', selectedPayslipActualRecord.bonus],
+          ]} total={getEarnings(selectedPayslipActualRecord)} tone="earnings" />
+
+          <SalaryBreakdown title="Deductions" items={[
+            ['PF', selectedPayslipActualRecord.providentFund],
+            ['GRATUITY', selectedPayslipActualRecord.gratuity],
+            ['PROF TAX', selectedPayslipActualRecord.professionalTax],
+            ['Other Deduction', selectedPayslipActualRecord.otherDeduction],
+          ]} total={getDeductions(selectedPayslipActualRecord)} tone="deductions" />
+        </div>
+      )}
+
+      {payslipReady && selectedPayslipActualRecord && !isPaidStatus(selectedPayslipActualRecord.status) && (
+        <Section title="Payslip Locked">
+          <div className="payroll-alert" role="status">
+            <i className="ri-lock-line" aria-hidden="true" />
+            <span>Payslip is available only after the salary has been marked as Paid.</span>
+          </div>
+        </Section>
       )}
         </>
       )}
@@ -913,7 +992,7 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
   const [payrollLoading, setPayrollLoading] = useState(false);
   const [payslipMonth, setPayslipMonth] = useState(month);
   const [payslipYear, setPayslipYear] = useState(year);
-  const employeeId = getSessionValue('kavyaEmployeeId');
+  const employeeId = getSessionValue('kavyaEmployeeId') || roleEmployeeFallback[role] || '';
   const safeRecords = Array.isArray(records) ? records : [];
   const safeSavedPayrollRecords = Array.isArray(savedPayrollRecords) ? savedPayrollRecords : [];
   const isHrPayroll = role === 'hr';
@@ -1061,9 +1140,11 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
   const displayRecord = isFuturePreviewPeriod
     ? null
     : (previewRecord || getEmptyPayslip(role, normalizedPreviewMonth, normalizedPreviewYear));
+  const isSelectedPayslipPaid = isPaidStatus(previewRecord?.status);
   const canDownloadPayslip = isHrPayroll
-    ? Boolean(hrActualRecord) && !isFuturePreviewPeriod
-    : isPayrollPeriodAvailable(previewMonth, previewYear);
+    ? Boolean(hrActualRecord) && isPaidStatus(hrActualRecord.status) && !isFuturePreviewPeriod
+    : Boolean(previewRecord) && isPaidStatus(previewRecord.status) && isPayrollPeriodAvailable(previewMonth, previewYear);
+  const activePayslipRecord = isHrPayroll ? hrActualRecord : previewRecord;
 
   return (
     <>
@@ -1110,6 +1191,28 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
               {years.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
+          <button
+            className="payroll-secondary"
+            type="button"
+            onClick={() => {
+              if (!activePayslipRecord) {
+                setMessage(payslipUnavailableMessage);
+                return;
+              }
+
+              if (!isSelectedPayslipPaid && !(isHrPayroll ? isPaidStatus(hrActualRecord?.status) : isPaidStatus(previewRecord?.status))) {
+                setMessage('Payslip is available only after the salary has been marked as Paid.');
+                return;
+              }
+
+              setMessage('');
+              setSelectedPayslip(activePayslipRecord);
+            }}
+            disabled={(!isHrPayroll && periodLoading) || (isHrPayroll && payrollLoading) || !canDownloadPayslip}
+          >
+            <i className="ri-eye-line" aria-hidden="true" />
+            {(isHrPayroll && payrollLoading) || (!isHrPayroll && periodLoading) ? 'Loading...' : 'View Payslip'}
+          </button>
           {canDownloadPayslip ? (
             <button
               className="payroll-primary"
@@ -1126,8 +1229,13 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
                     return;
                   }
 
+                  if (!isPaidStatus(hrActualRecord.status)) {
+                    setMessage('Payslip is available only after the salary has been marked as Paid.');
+                    return;
+                  }
+
                   setMessage('');
-                  printPayslip(hrActualRecord);
+                  downloadPayslipPdf(hrActualRecord);
                   return;
                 }
 
@@ -1136,7 +1244,13 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
                   return;
                 }
 
-                setSelectedPayslip(previewRecord);
+                if (!isPaidStatus(previewRecord.status)) {
+                  setMessage('Payslip is available only after the salary has been marked as Paid.');
+                  return;
+                }
+
+                setMessage('');
+                downloadPayslipPdf(previewRecord);
               }}
               disabled={(!isHrPayroll && periodLoading) || (isHrPayroll && payrollLoading)}
             >
@@ -1198,8 +1312,12 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
             ]} total={getDeductions(displayRecord)} tone="deductions" />
           </div>
 
-          {selectedPayslip && !isHrPayroll && (
-            <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
+          {selectedPayslip && (
+            <PayslipModal
+              record={selectedPayslip}
+              onClose={() => setSelectedPayslip(null)}
+              onDownload={() => downloadPayslipPdf(selectedPayslip)}
+            />
           )}
         </>
       ) : (
@@ -1259,7 +1377,7 @@ function getEmptyPayslip(role, month, year) {
   };
 }
 
-function PayslipModal({ record, onClose }) {
+function PayslipModal({ record, onClose, onDownload }) {
   const earningsRows = getPayslipEarnings(record);
   const deductionRows = getPayslipDeductions(record);
   const totalEarnings = getEarnings(record);
@@ -1272,6 +1390,7 @@ function PayslipModal({ record, onClose }) {
         <div className="payroll-modal-head payslip-modal-actions">
           <h3>Payslip Preview</h3>
           <div>
+            <button type="button" onClick={() => onDownload?.()} aria-label="Download payslip"><i className="ri-download-2-line" aria-hidden="true" /></button>
             <button type="button" onClick={() => printPayslip(record)} aria-label="Print payslip"><i className="ri-printer-line" aria-hidden="true" /></button>
             <button type="button" onClick={onClose} aria-label="Close payslip"><i className="ri-close-line" aria-hidden="true" /></button>
           </div>
@@ -1534,6 +1653,91 @@ function getPayslipFileName(record) {
   const month = String(record.month || 'Month').replace(/[^a-zA-Z0-9]+/g, '_');
   const year = String(record.year || 'Year').replace(/[^a-zA-Z0-9]+/g, '_');
   return `Payslip_${employeeCode}_${month}_${year}.pdf`;
+}
+
+function downloadPayslipPdf(record) {
+  const blob = createPayslipPdfBlob(record);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = getPayslipFileName(record);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function createPayslipPdfBlob(record) {
+  const lines = buildPayslipPdfLines(record);
+  const pageWidth = 842;
+  const pageHeight = 595;
+  const left = 40;
+  const top = 40;
+  const lineHeight = 18;
+  const content = lines.map((line, index) => {
+    const y = pageHeight - top - (index * lineHeight);
+    return `BT /F1 10 Tf ${left} ${y} Td (${escapePdfText(line)}) Tj ET`;
+  }).join('\n');
+
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = ['0000000000 65535 f \n'];
+  objects.forEach((object, index) => {
+    offsets.push(`${String(pdf.length).padStart(10, '0')} 00000 n \n`);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefStart = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n${offsets.join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  return new Blob([pdf], { type: 'application/pdf' });
+}
+
+function buildPayslipPdfLines(record) {
+  const earningsRows = getPayslipEarnings(record);
+  const deductionRows = getPayslipDeductions(record);
+  const lines = [
+    'KAVYA INFOWEB PVT. LTD.',
+    'Payslip',
+    `Employee: ${record.employeeName || '-'}`,
+    `Employee ID: ${record.employeeId || '-'}`,
+    `Designation: ${record.role || '-'}`,
+    `Department: ${record.department || '-'}`,
+    `Month: ${record.month || '-'}`,
+    `Year: ${record.year || '-'}`,
+    `Payment Status: ${record.status || '-'}`,
+    `Payment Date: ${record.paidDate || '-'}`,
+    ' ',
+    'Earnings',
+  ];
+
+  earningsRows.forEach((item) => {
+    lines.push(`${item.label}: Full ${formatPayslipAmount(item.full)} | Actual ${formatPayslipAmount(item.actual)}`);
+  });
+
+  lines.push(`Total Earnings: ${formatPayslipAmount(getEarnings(record))}`);
+  lines.push(' ');
+  lines.push('Deductions');
+  deductionRows.forEach((item) => {
+    lines.push(`${item.label}: ${formatPayslipAmount(item.actual)}`);
+  });
+  lines.push(`Total Deductions: ${formatPayslipAmount(getDeductions(record))}`);
+  lines.push(`Net Salary: ${formatPayslipAmount(getNetSalary(record))}`);
+  lines.push(`Generated Date: ${new Date().toLocaleString('en-IN')}`);
+  return lines;
+}
+
+function escapePdfText(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/[^\x20-\x7E]/g, ' ');
 }
 
 function escapeHtml(value) {
@@ -2121,10 +2325,3 @@ function numberToWords(value) {
 }
 
 export default Payroll;
-
-
-
-
-
-
-

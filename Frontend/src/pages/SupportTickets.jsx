@@ -133,6 +133,7 @@ function SupportTickets() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const formElement = event.currentTarget;
 
     const nextErrors = {};
     if (!form.title.trim()) {
@@ -177,7 +178,7 @@ function SupportTickets() {
         screenshot: null,
       });
       setErrors({});
-      event.currentTarget.reset();
+      formElement.reset();
     } catch (err) {
       setErrorMessage(`Failed to save support ticket: ${err.message}`);
     }

@@ -56,6 +56,13 @@ function LeaveRequests() {
   }, [leaveTypeOptions]);
 
   const visibleRequests = useMemo(() => requests.filter((request) => {
+    const isSelfOwnedHrRequest = role === 'hr'
+      && String(request.employeeId || '').trim() === String(currentEmployee.employeeId || '').trim();
+
+    if (isSelfOwnedHrRequest) {
+      return false;
+    }
+
     if (role === 'teamLead' || role === 'projectManager') {
       return teamLeadMemberIds.includes(request.employeeId);
     }
@@ -187,19 +194,23 @@ function LeaveRequests() {
         const isRejectComplete = String(row.status || '').trim().toLowerCase() === 'rejected';
         const disableApprove = isReviewing || isActionComplete;
         const disableReject = isReviewing || isRejectComplete;
-        const showRejectAction = isAdminOrHr && !isActionComplete;
+        const isOwnHrRequest = role === 'hr'
+          && String(row.employeeId || '').trim() === String(currentEmployee.employeeId || '').trim();
+        const showRejectAction = isAdminOrHr && !isActionComplete && !isOwnHrRequest;
 
         return (
           <div className="table-actions table-actions-inline leave-review-actions">
-            <button
-              type="button"
-              className="leave-approve-action"
-              disabled={disableApprove}
-              onClick={() => updateLeaveStatus(row.id, targetStatus)}
-            >
-              <img src={approveActionIcon} alt="" aria-hidden="true" />
-              {isAdminOrHr ? 'Approve' : 'Recommend'}
-            </button>
+            {!isOwnHrRequest && (
+              <button
+                type="button"
+                className="leave-approve-action"
+                disabled={disableApprove}
+                onClick={() => updateLeaveStatus(row.id, targetStatus)}
+              >
+                <img src={approveActionIcon} alt="" aria-hidden="true" />
+                {isAdminOrHr ? 'Approve' : 'Recommend'}
+              </button>
+            )}
             {showRejectAction && (
               <button
                 type="button"
@@ -994,6 +1005,3 @@ function getLeaveBalanceTone(name) {
 }
 
 export default LeaveRequests;
-
-
-

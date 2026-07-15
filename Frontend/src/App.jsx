@@ -25,6 +25,7 @@ import Projects from './pages/Projects.jsx';
 import MyTeam from './pages/MyTeam.jsx';
 import Departments from './pages/Departments.jsx';
 import AnnouncementTextView from './pages/AnnouncementTextView.jsx';
+import ScheduledInterviews from './pages/ScheduledInterviews.jsx';
 import { getSessionValue } from './utils/appSession.js';
 
 const roleDashboards = {
@@ -64,6 +65,7 @@ function App() {
             <Route path="/admin/support" element={<SupportTickets />} />
             <Route path="/admin/settings" element={<Settings />} />
             <Route path="/admin/profile" element={<Profile />} />
+            <Route path="/admin/scheduled-interviews" element={<ScheduledInterviews />} />
           </Route>
         </Route>
 
@@ -87,6 +89,7 @@ function App() {
             <Route path="/hr/profile/edit" element={<Profile />} />
             <Route path="/hr/profile/view" element={<Profile />} />
             <Route path="/hr/profile" element={<Profile />} />
+            <Route path="/hr/scheduled-interviews" element={<ScheduledInterviews />} />
           </Route>
         </Route>
 
@@ -158,7 +161,6 @@ function RoleRedirect({ dashboards, fallback }) {
 }
 
 export default App;
-
 
 
 

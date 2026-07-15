@@ -312,7 +312,7 @@ export const checkedInColumns = [
   { key: 'status', label: 'Status' },
 ];
 
-export function Hero({ title, copy }) {
+export function Hero({ title, copy, actions }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
 
@@ -338,11 +338,24 @@ export function Hero({ title, copy }) {
       rows.push(['']);
     }
 
+    const isActionColumn = (label) => /^(actions?|action)$/i.test(String(label || '').trim());
+
     const tables = [...root.querySelectorAll('table')].map((table, index) => {
       const sectionTitle = table.closest('.section-card')?.querySelector('h3')?.textContent?.trim() || `Table ${index + 1}`;
-      const headers = [...table.querySelectorAll('thead th')].map((head) => head.textContent?.trim() || '');
+      const headerCells = [...table.querySelectorAll('thead th')];
+      const headers = headerCells
+        .map((head, index) => ({ text: head.textContent?.trim() || '', index }))
+        .filter((head) => !isActionColumn(head.text))
+        .map((head) => head.text);
+      const actionColumnIndexes = headerCells
+        .map((head, index) => ({ text: head.textContent?.trim() || '', index }))
+        .filter((head) => isActionColumn(head.text))
+        .map((head) => head.index);
       const bodyRows = [...table.querySelectorAll('tbody tr')]
-        .map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent?.replace(/\s+/g, ' ').trim() || ''))
+        .map((tr) => [...tr.querySelectorAll('td')]
+          .map((td, index) => ({ text: td.textContent?.replace(/\s+/g, ' ').trim() || '', index }))
+          .filter((cell) => !actionColumnIndexes.includes(cell.index))
+          .map((cell) => cell.text))
         .filter((tableRow) => tableRow.some(Boolean));
       return { sectionTitle, headers, bodyRows };
     });
@@ -353,6 +366,28 @@ export function Hero({ title, copy }) {
       table.bodyRows.forEach((tableRow) => rows.push(tableRow));
       rows.push(['']);
     });
+
+    const cards = [...root.querySelectorAll('.content-panel .announcement-list article, .content-panel .record-card, .content-panel .data-card, .content-panel .dashboard-card')]
+      .filter((card) => !card.closest('.smart-summary-modal') && !card.closest('.announcement-delete-modal'))
+      .map((card) => {
+        const heading = card.querySelector('strong, h3, h4')?.textContent?.trim() || 'Record';
+        const bodyText = [...card.querySelectorAll('p, span, small')]
+          .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() || '')
+          .filter(Boolean)
+          .join(' | ');
+        return {
+          heading,
+          bodyText,
+        };
+      })
+      .filter((card) => card.heading || card.bodyText);
+
+    if (cards.length) {
+      rows.push(['Record Cards']);
+      rows.push(['Title', 'Details']);
+      cards.forEach((card) => rows.push([card.heading, card.bodyText || '-']));
+      rows.push(['']);
+    }
 
     const controls = [...root.querySelectorAll('input, select, textarea')]
       .filter((control) => control.type !== 'hidden' && control.type !== 'file' && !control.disabled)
@@ -378,11 +413,11 @@ export function Hero({ title, copy }) {
       rows.push(['']);
     }
 
-    return { rows, metrics, tables, controls };
+    return { rows, metrics, tables, controls, cards };
   };
 
   const exportReport = () => {
-    const { metrics, tables, controls } = getPageSnapshot();
+    const { metrics, tables, controls, cards } = getPageSnapshot();
     const escapeCell = (cell) => String(cell || '-')
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
@@ -449,6 +484,12 @@ export function Hero({ title, copy }) {
             <tr><td colspan="2" class="meta">Exported At</td><td colspan="6" class="meta">${escapeCell(new Date().toLocaleString('en-IN'))}</td></tr>
             <tr><td colspan="8" class="section-gap"></td></tr>
             <tr>${metricCells || '<td colspan="8" class="empty-row">No dashboard metrics found.</td>'}</tr>
+            ${cards.length ? `
+              <tr><td colspan="8" class="section-gap"></td></tr>
+              <tr><td colspan="8" class="section-title">Record Cards</td></tr>
+              <tr><th>Title</th><th colspan="7">Details</th></tr>
+              ${cards.map((card) => `<tr><td>${escapeCell(card.heading)}</td><td colspan="7">${escapeCell(card.bodyText || '-')}</td></tr>`).join('')}
+            ` : ''}
             ${tableSections}
             ${controlsRows}
             <tr><td colspan="8" class="section-gap"></td></tr>
@@ -471,7 +512,7 @@ export function Hero({ title, copy }) {
   };
 
   const openSummary = () => {
-    const { metrics, tables, controls } = getPageSnapshot();
+    const { metrics, tables, controls, cards } = getPageSnapshot();
     const totalRows = tables.reduce((acc, table) => acc + table.bodyRows.length, 0);
     const sections = [...document.querySelectorAll('.content-panel .section-card h3')]
       .map((node) => node.textContent?.trim())
@@ -490,6 +531,7 @@ export function Hero({ title, copy }) {
       tableCount: tables.length,
       rowCount: totalRows,
       formCount: controls.length,
+      cardCount: cards.length,
       pendingCount,
       approvedCount,
     });
@@ -505,6 +547,7 @@ export function Hero({ title, copy }) {
           <p>{copy}</p>
         </div>
         <div className="hero-actions">
+          {actions}
           <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
           <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
         </div>
@@ -542,6 +585,7 @@ export function Hero({ title, copy }) {
             <div className="smart-summary-grid">
               <article><i className="ri-table-line" aria-hidden="true" /><strong>{summaryData.tableCount}</strong><span>Data Tables</span></article>
               <article><i className="ri-list-check-3" aria-hidden="true" /><strong>{summaryData.rowCount}</strong><span>Total Rows</span></article>
+              <article><i className="ri-layout-grid-line" aria-hidden="true" /><strong>{summaryData.cardCount}</strong><span>Record Cards</span></article>
               <article><i className="ri-error-warning-line" aria-hidden="true" /><strong>{summaryData.pendingCount}</strong><span>Need Attention</span></article>
               <article><i className="ri-shield-check-line" aria-hidden="true" /><strong>{summaryData.approvedCount}</strong><span>Healthy Items</span></article>
             </div>

@@ -28,11 +28,12 @@ public class EmployeeWelcomeEmailService {
   public EmployeeWelcomeEmailService(
       ObjectProvider<JavaMailSender> mailSenderProvider,
       @Value("${spring.mail.host:}") String host,
+      @Value("${spring.mail.from:}") String fromAddress,
       @Value("${spring.mail.username:}") String username) {
     this.mailSenderProvider = mailSenderProvider;
     this.host = host == null ? "" : host.trim();
+    this.fromAddress = fromAddress == null ? "" : fromAddress.trim();
     this.username = username == null ? "" : username.trim();
-    this.fromAddress = this.username;
   }
 
   public DeliveryResult sendWelcomeEmail(Employee employee) {
@@ -182,7 +183,7 @@ public class EmployeeWelcomeEmailService {
 
     String localPart = "";
     if (!firstName.isBlank() && !lastName.isBlank()) {
-      localPart = firstName + "." + lastName;
+      localPart = firstName + lastName;
     } else if (!firstName.isBlank()) {
       localPart = firstName;
     } else {

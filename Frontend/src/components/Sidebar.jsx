@@ -24,6 +24,7 @@ const menus = {
     { label: 'Asset Management', to: '/hr/assets', icon: 'ri-briefcase-4-line' },
     { label: 'Team Attendance', to: '/hr/team-attendance', icon: 'ri-team-line' },
     { label: 'Employees', to: '/hr/employees', icon: 'ri-team-line' },
+    { label: 'Scheduled Interviews', to: '/hr/scheduled-interviews', icon: 'ri-briefcase-2-line' },
     { label: 'My Attendance', to: '/hr/attendance', icon: 'ri-time-line' },
     { label: 'Leave Approval', to: '/hr/leave-approval', icon: 'ri-calendar-check-line' },
     { label: 'Payroll/Salary', to: '/hr/payroll', icon: 'ri-money-rupee-circle-line' },
