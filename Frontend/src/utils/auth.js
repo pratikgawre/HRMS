@@ -3,8 +3,7 @@ import { apiRequest } from './api.js';
 import { getUsers, saveUsers } from './user-management.js';
 import { getStoredEmployees } from './employeeStorage.js';
 import { clearSessionValues, getSessionValue, markSessionActivity, setSessionValue, touchSessionOnBackend } from './appSession.js';
-
-const API_BASE = '/api';
+import { API_BASE, normalizeBackendAssetUrl } from './runtime-config.js';
 
 const legacyUsers = {
   'admin@gmail.com': { password: 'admin123', role: 'Super Admin', employeeId: 'ADMIN-001', employeeName: 'Admin Kavya', avatar: 'AK', department: 'Platform', designation: 'System Admin' },
@@ -14,6 +13,47 @@ const legacyUsers = {
   'projectmanager@gmail.com': { password: 'manager123', role: 'Project Manager', employeeId: 'KV004', employeeName: 'Isha Patel', avatar: 'IP', department: 'Delivery', designation: 'Project Manager' },
   'employee@gmail.com': { password: 'employee123', role: 'Employee', employeeId: 'KV001', employeeName: 'Aarav Sharma', avatar: 'AS', department: 'Design', designation: 'Product Designer' },
 };
+
+function normalizeLoginIdentifier(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function matchesLoginIdentifier(user, identifier) {
+  const normalizedIdentifier = normalizeLoginIdentifier(identifier);
+  if (!normalizedIdentifier || !user) {
+    return false;
+  }
+
+  return [user.email, user.userId, user.employeeId]
+    .some((value) => normalizeLoginIdentifier(value) === normalizedIdentifier);
+}
+
+function resolveLegacyUser(identifier, password) {
+  const normalizedIdentifier = normalizeLoginIdentifier(identifier);
+  const matchedEntry = Object.entries(legacyUsers).find(([email, user]) => matchesLoginIdentifier({
+    email,
+    userId: `USR-${user.employeeId}`,
+    employeeId: user.employeeId,
+  }, normalizedIdentifier));
+
+  if (!matchedEntry) {
+    return null;
+  }
+
+  const [email, user] = matchedEntry;
+  if (user.password !== password) {
+    return null;
+  }
+
+  return {
+    email,
+    ...user,
+    userId: `USR-${user.employeeId}`,
+    status: 'Active',
+    permissions: getPermissions(user.role),
+    profilePicture: '',
+  };
+}
 
 export function ensureSeedUsers() {
   const savedUsers = getUsers();
@@ -60,13 +100,13 @@ export function ensureSeedUsers() {
   return getUsers();
 }
 
-export async function authenticateUser(email, password) {
-  const normalizedEmail = String(email).trim().toLowerCase();
+export async function authenticateUser(loginIdentifier, password) {
+  const normalizedLoginIdentifier = normalizeLoginIdentifier(loginIdentifier);
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: normalizedEmail, password }),
+    body: JSON.stringify({ email: normalizedLoginIdentifier, password }),
   }).catch(() => null);
   let isUnauthorized = false;
 
@@ -83,10 +123,11 @@ export async function authenticateUser(email, password) {
     if (response.ok && result?.ok) {
       const accessRole = normalizeAccessRole(result.role);
       const user = {
-        userId: result.userId || `USR-${result.employeeId || normalizedEmail}`,
+        userId: result.userId || `USR-${result.employeeId || normalizedLoginIdentifier}`,
         employeeId: result.employeeId,
         employeeName: result.employeeName,
-        email: result.email || normalizedEmail,
+        email: result.email || normalizedLoginIdentifier,
+        token: result.token || '',
         role: accessRole,
         status: result.status || 'Active',
         permissions: getPermissions(accessRole),
@@ -98,7 +139,7 @@ export async function authenticateUser(email, password) {
         avatar: result.avatar || (result.employeeName || 'User').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
         profilePicture: normalizeBackendAssetUrl(result.profilePicture || ''),
       };
-      return { ok: true, user };
+      return { ok: true, user: { ...user, authMode: 'backend' } };
     }
 
     if (result?.message) {
@@ -107,6 +148,11 @@ export async function authenticateUser(email, password) {
   }
 
   if (!response) {
+    const localUser = findLocalUser(normalizedLoginIdentifier, password);
+    if (localUser) {
+      return { ok: true, user: { ...localUser, authMode: 'local' } };
+    }
+
     return { ok: false, message: 'Unable to connect to the authentication service.' };
   }
 
@@ -117,19 +163,11 @@ export async function authenticateUser(email, password) {
   return { ok: false, message: 'Please enter a valid email and password.' };
 }
 
-function findLocalUser(email, password) {
+function findLocalUser(loginIdentifier, password) {
   ensureSeedUsers();
-  const savedUser = getUsers().find((user) => String(user.email || '').toLowerCase() === email && user.password === password);
-  const legacyUser = legacyUsers[email]?.password === password
-    ? {
-        email,
-        ...legacyUsers[email],
-        userId: `USR-${legacyUsers[email].employeeId}`,
-        status: 'Active',
-        permissions: getPermissions(legacyUsers[email].role),
-        profilePicture: '',
-      }
-    : null;
+  const normalizedLoginIdentifier = normalizeLoginIdentifier(loginIdentifier);
+  const savedUser = getUsers().find((user) => matchesLoginIdentifier(user, normalizedLoginIdentifier) && user.password === password);
+  const legacyUser = resolveLegacyUser(normalizedLoginIdentifier, password);
   const user = savedUser || legacyUser;
 
   if (!user) {
@@ -140,7 +178,7 @@ function findLocalUser(email, password) {
 
   return {
     ...user,
-    email,
+    email: user.email || normalizedLoginIdentifier,
     role: accessRole,
     status: user.status || 'Active',
     permissions: getPermissions(accessRole),
@@ -154,35 +192,42 @@ function findLocalUser(email, password) {
 export function startSession(user) {
   const appRole = getAppRole(user.role);
   const mustChangePassword = Boolean(user.mustChangePassword);
-  setSessionValue('kavyaRole', appRole);
-  setSessionValue('kavyaAccessRole', user.role);
-  setSessionValue('kavyaUserEmail', user.email);
-  setSessionValue('kavyaUserStatus', user.status || 'Active');
-  setSessionValue('kavyaEmployeeId', user.employeeId || '');
-  setSessionValue('kavyaEmployeeName', user.employeeName || '');
-  setSessionValue('kavyaEmployeeAvatar', user.avatar || '');
-  setSessionValue('kavyaEmployeePhoto', user.profilePicture || '');
-  setSessionValue('kavyaUserId', user.userId || '');
-  setSessionValue('kavyaLastLogin', user.lastLogin || '');
-  setSessionValue('kavyaMustChangePassword', mustChangePassword);
+  const setSessionField = (key, value) => setSessionValue(key, value, { dispatch: false });
+
+  setSessionField('kavyaRole', appRole);
+  setSessionField('kavyaAccessRole', user.role);
+  setSessionField('kavyaUserEmail', user.email);
+  setSessionField('kavyaUserStatus', user.status || 'Active');
+  setSessionField('kavyaEmployeeId', user.employeeId || '');
+  setSessionField('kavyaEmployeeName', user.employeeName || '');
+  setSessionField('kavyaEmployeeAvatar', user.avatar || '');
+  setSessionField('kavyaEmployeePhoto', user.profilePicture || '');
+  setSessionField('kavyaUserId', user.userId || '');
+  setSessionField('kavyaAuthToken', user.token || '');
+  setSessionField('kavyaLastLogin', user.lastLogin || '');
+  setSessionField('kavyaMustChangePassword', mustChangePassword);
   const lastActivityAt = Date.parse(String(user.lastSeenAt || user.lastLogin || ''));
   if (Number.isFinite(lastActivityAt) && lastActivityAt > 0) {
-    setSessionValue('kavyaSessionLastActivityAt', String(lastActivityAt));
+    setSessionField('kavyaSessionLastActivityAt', String(lastActivityAt));
   }
   const expiresAt = Date.parse(String(user.sessionExpiresAt || ''));
   if (Number.isFinite(expiresAt) && expiresAt > 0) {
-    setSessionValue('kavyaSessionExpiresAt', String(expiresAt));
+    setSessionField('kavyaSessionExpiresAt', String(expiresAt));
   }
-  setSessionValue('kavyaLoginSuccess', 'true');
+  setSessionField('kavyaAuthMode', user.authMode || 'backend');
+  setSessionField('kavyaLoginSuccess', 'true');
   markSessionActivity(Number.isFinite(lastActivityAt) && lastActivityAt > 0 ? lastActivityAt : Date.now());
 
   return mustChangePassword ? '/change-password' : getDashboardPath(user.role);
 }
 
 export function clearSession() {
+  const authToken = getSessionValue('kavyaAuthToken');
+
   fetch(`${API_BASE}/auth/session`, {
     method: 'DELETE',
     credentials: 'include',
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
   }).catch(() => {});
 
   clearSessionValues();

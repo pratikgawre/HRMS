@@ -1,6 +1,5 @@
 import { API_BASE, normalizeBackendAssetUrl } from './runtime-config.js';
 
-const TOKEN_STORAGE_KEY = 'kavyaAuthToken';
 const SESSION_STORAGE_KEY = 'kavyaSessionData';
 const SESSION_TTL_MS = 60 * 60 * 1000;
 const TOUCH_THROTTLE_MS = 5000;
@@ -97,8 +96,10 @@ function applySessionPayload(payload = {}) {
     kavyaEmployeeId: payload?.employeeId || '',
     kavyaEmployeeName: payload?.employeeName || '',
     kavyaEmployeeAvatar: payload?.avatar || buildInitials(payload?.employeeName || ''),
-    kavyaEmployeePhoto: payload?.profilePicture || '',
+    kavyaEmployeePhoto: normalizeBackendAssetUrl(payload?.profilePicture || ''),
     kavyaUserId: payload?.userId || '',
+    kavyaAuthToken: payload?.token || session.kavyaAuthToken || '',
+    kavyaAuthMode: 'backend',
     kavyaLastLogin: payload?.lastLogin || '',
     kavyaMustChangePassword: Boolean(payload?.mustChangePassword),
     kavyaSessionLastActivityAt: lastActivityAt > 0 ? String(lastActivityAt) : '',
@@ -229,6 +230,10 @@ export function recordSessionActivity(now = Date.now()) {
 }
 
 export async function touchSessionOnBackend() {
+  if (getSessionValue('kavyaAuthMode') === 'local') {
+    return null;
+  }
+
   if (!getSessionValue('kavyaRole')) {
     return null;
   }
@@ -242,11 +247,13 @@ export async function touchSessionOnBackend() {
   lastBackendTouchAt = now;
   markSessionActivity(now);
 
+  const authToken = getSessionValue('kavyaAuthToken');
   const response = await fetch(`${API_BASE}/auth/session/touch`, {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
   }).catch(() => null);
 
@@ -267,14 +274,19 @@ export async function touchSessionOnBackend() {
 
   return null;
 }
-
 export async function bootstrapSessionFromBackend() {
   syncMemorySession();
 
+  if (getSessionValue('kavyaAuthMode') === 'local') {
+    return getSessionSnapshot();
+  }
+
+  const authToken = getSessionValue('kavyaAuthToken');
   const response = await fetch(`${API_BASE}/auth/session`, {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
   }).catch(() => null);
 
@@ -287,25 +299,16 @@ export async function bootstrapSessionFromBackend() {
   }
 
   const payload = await response.json().catch(() => null);
-  session = {
-    kavyaAuthToken: token,
-    kavyaRole: normalizeRole(payload?.role),
-    kavyaAccessRole: normalizeAccessRole(payload?.role),
-    kavyaUserEmail: payload?.email || '',
-    kavyaUserStatus: payload?.status || 'Active',
-    kavyaEmployeeId: payload?.employeeId || '',
-    kavyaEmployeeName: payload?.employeeName || '',
-    kavyaEmployeeAvatar: payload?.avatar || buildInitials(payload?.employeeName || ''),
-    kavyaEmployeePhoto: normalizeBackendAssetUrl(payload?.profilePicture || ''),
-    kavyaUserId: payload?.userId || '',
-    kavyaLastLogin: payload?.lastLogin || '',
-    kavyaMustChangePassword: Boolean(payload?.mustChangePassword),
-  };
-  persistSessionSnapshot();
-  window.dispatchEvent(new Event('kavyaSessionChanged'));
-  return session;
-}
+  if (!payload || payload.ok === false) {
+    session = {};
+    lastBackendTouchAt = 0;
+    persistSessionSnapshot();
+    emitSessionChanged();
+    return session;
+  }
 
+  return applySessionPayload(payload);
+}
 function normalizeRole(value) {
   const normalized = String(value || '').trim().toLowerCase().replaceAll(' ', '');
 
@@ -335,3 +338,8 @@ function buildInitials(name) {
     .slice(0, 2)
     .toUpperCase();
 }
+
+
+
+
+

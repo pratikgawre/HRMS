@@ -60,15 +60,14 @@ public class AuthController {
 
   @PostMapping("/login")
   public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-    String email = normalizeEmail(request == null ? null : request.getEmail());
+    String loginIdentifier = normalizeIdentifier(request == null ? null : request.getEmail());
     String password = request == null || request.getPassword() == null ? "" : String.valueOf(request.getPassword());
 
-    Optional<AppUser> matchedUser = appUserRepository.findAllByEmailIgnoreCase(email).stream()
-        .findFirst()
-        .filter(user -> passwordMatches(password, user));
+    Optional<AppUser> existingUser = findUserByLoginIdentifier(loginIdentifier);
+    Optional<AppUser> matchedUser = existingUser.filter(user -> passwordMatches(password, user));
 
-    if (matchedUser.isEmpty()) {
-      matchedUser = buildLegacyAccount(email, password);
+    if (matchedUser.isEmpty() && existingUser.isEmpty()) {
+      matchedUser = buildLegacyAccount(loginIdentifier, password);
     }
 
     return matchedUser
@@ -371,6 +370,19 @@ public class AuthController {
     return user;
   }
 
+  private Optional<AppUser> findUserByLoginIdentifier(String loginIdentifier) {
+    String normalizedIdentifier = normalizeIdentifier(loginIdentifier);
+    if (normalizedIdentifier.isBlank()) {
+      return Optional.empty();
+    }
+
+    return appUserRepository.findAll().stream()
+        .filter(user -> normalizedIdentifier.equals(normalizeIdentifier(user.getEmail()))
+            || normalizedIdentifier.equals(normalizeIdentifier(user.getUserId()))
+            || normalizedIdentifier.equals(normalizeIdentifier(user.getEmployeeId())))
+        .findFirst();
+  }
+
   private PasswordResetResponse resetResponse(boolean ok, boolean emailSent, String email, String resetToken, String expiresAt, String message) {
     PasswordResetResponse response = new PasswordResetResponse();
     response.setOk(ok);
@@ -444,12 +456,14 @@ public class AuthController {
   }
 
   private static final class LegacyAccount {
+    private final String email;
     private final String password;
     private final String role;
     private final String employeeId;
     private final String employeeName;
 
-    private LegacyAccount(String password, String role, String employeeId, String employeeName) {
+    private LegacyAccount(String email, String password, String role, String employeeId, String employeeName) {
+      this.email = email;
       this.password = password;
       this.role = role;
       this.employeeId = employeeId;
@@ -458,6 +472,10 @@ public class AuthController {
 
     private boolean matchesPassword(String candidate) {
       return password.equals(candidate);
+    }
+
+    private String getEmail() {
+      return email;
     }
 
     private String getRole() {
@@ -473,14 +491,19 @@ public class AuthController {
     }
   }
 
-  private Optional<AppUser> buildLegacyAccount(String email, String password) {
-    LegacyAccount account = switch (email) {
-      case "admin@gmail.com" -> new LegacyAccount("admin123", "admin", "ADMIN-001", "Admin Kavya");
-      case "hr@gmail.com" -> new LegacyAccount("hr123", "hr", "HR-001", "Meera Nair");
-      case "teamlead@gmail.com" -> new LegacyAccount("teamlead123", "teamLead", "KV003", "Kabir Khan");
-      case "manager@gmail.com", "projectmanager@gmail.com" ->
-          new LegacyAccount("manager123", "projectManager", "KV004", "Isha Patel");
-      case "employee@gmail.com" -> new LegacyAccount("employee123", "employee", "KV001", "Aarav Sharma");
+  private Optional<AppUser> buildLegacyAccount(String loginIdentifier, String password) {
+    String normalizedIdentifier = normalizeIdentifier(loginIdentifier);
+    LegacyAccount account = switch (normalizedIdentifier) {
+      case "admin@gmail.com", "admin-001", "usr-admin-001" ->
+          new LegacyAccount("admin@gmail.com", "admin123", "admin", "ADMIN-001", "Admin Kavya");
+      case "hr@gmail.com", "hr-001", "usr-hr-001" ->
+          new LegacyAccount("hr@gmail.com", "hr123", "hr", "HR-001", "Meera Nair");
+      case "teamlead@gmail.com", "kv003", "usr-kv003" ->
+          new LegacyAccount("teamlead@gmail.com", "teamlead123", "teamLead", "KV003", "Kabir Khan");
+      case "manager@gmail.com", "projectmanager@gmail.com", "kv004", "usr-kv004" ->
+          new LegacyAccount("manager@gmail.com", "manager123", "projectManager", "KV004", "Isha Patel");
+      case "employee@gmail.com", "kv001", "usr-kv001" ->
+          new LegacyAccount("employee@gmail.com", "employee123", "employee", "KV001", "Aarav Sharma");
       default -> null;
     };
 
@@ -490,7 +513,7 @@ public class AuthController {
 
     AppUser user = new AppUser();
     user.setUserId("USR-" + account.getEmployeeId());
-    user.setEmail(email);
+    user.setEmail(account.getEmail());
     user.setPassword(password);
     user.setRole(account.getRole());
     user.setEmployeeId(account.getEmployeeId());
@@ -606,10 +629,14 @@ public class AuthController {
   }
 
   private String normalizeEmail(@Nullable String email) {
-    if (email == null) {
+    return normalizeIdentifier(email);
+  }
+
+  private String normalizeIdentifier(@Nullable String value) {
+    if (value == null) {
       return "";
     }
-    return email.trim().toLowerCase(Locale.ROOT);
+    return value.trim().toLowerCase(Locale.ROOT);
   }
 
   private String normalizeValue(String value) {
@@ -650,3 +677,4 @@ public class AuthController {
     return trimmed;
   }
 }
+
