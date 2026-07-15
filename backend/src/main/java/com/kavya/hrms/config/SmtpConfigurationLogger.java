@@ -31,7 +31,7 @@ public class SmtpConfigurationLogger {
       }
 
       if (safeFromAddress.isBlank() && safeUsername.isBlank()) {
-        log.warn("SMTP host '{}' is configured without spring.mail.from or spring.mail.username. The mail server must supply a default sender address.", safeHost);
+        log.warn("SMTP host '{}' is configured without app.mail.from or spring.mail.username. The mail server must supply a default sender address.", safeHost);
       }
     };
   }

@@ -1,0 +1,9 @@
+{
+  "properties": [
+    {
+      "name": "app.mail.from",
+      "type": "java.lang.String",
+      "description": "Default sender address used for outgoing mail."
+    }
+  ]
+}

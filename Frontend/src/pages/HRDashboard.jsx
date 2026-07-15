@@ -68,13 +68,13 @@ function HRDashboard() {
       icon: 'ri-group-line',
       onClick: () => navigate('/hr/employees'),
     },
-    {
+      {
       label: 'Interviews Today',
       value: String(interviewsCount).padStart(2, '0'),
       delta: 'Live hiring queue',
       tone: 'green',
       icon: 'ri-chat-check-line',
-      onClick: () => navigate('/hr/employees?status=Active'),
+      onClick: () => navigate('/hr/scheduled-interviews'),
     },
     {
       label: 'Leave Approvals',

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.kavya.hrms.model.PayrollRecord;
@@ -122,8 +123,21 @@ public class PayrollController {
   public ResponseEntity<Object> payslip(
       @RequestParam String employeeId,
       @RequestParam String month,
-      @RequestParam String year) {
-    return selectPreferredPayrollRecord(employeeId, month, year)
+      @RequestParam String year,
+      @RequestHeader(value = "X-Kavya-Employee-Id", required = false) String sessionEmployeeId) {
+    String safeEmployeeId = normalizeEmployeeId(sessionEmployeeId);
+    String requestedEmployeeId = normalizeEmployeeId(employeeId);
+    String effectiveEmployeeId = !safeEmployeeId.isBlank() ? safeEmployeeId : requestedEmployeeId;
+
+    if (effectiveEmployeeId.isBlank()) {
+      return badRequest("Employee ID is required.");
+    }
+
+    if (!requestedEmployeeId.isBlank() && !requestedEmployeeId.equals(effectiveEmployeeId)) {
+      return forbidden("You can only generate your own payslip.");
+    }
+
+    return selectPreferredPayrollRecord(effectiveEmployeeId, month, year)
         .map(record -> {
           if (!payrollValidationService.canGeneratePayslip(record)) {
             return forbidden(PAYSLIP_LIMIT_MESSAGE);
@@ -194,6 +208,10 @@ public class PayrollController {
 
   private boolean isBlank(String value) {
     return value == null || value.trim().isEmpty();
+  }
+
+  private String normalizeEmployeeId(String value) {
+    return value == null ? "" : value.trim();
   }
 
   private <T> List<T> safeList(List<T> values) {

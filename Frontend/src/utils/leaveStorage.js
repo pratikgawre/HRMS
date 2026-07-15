@@ -31,6 +31,7 @@ export async function saveLeaveRequests(requests) {
 export async function refreshStoredLeaveRequests() {
   const requests = await apiRequest('/leaves');
   leaveRequestsCache = Array.isArray(requests) ? requests.map(normalizeLeaveRequestFromApi) : [];
+  window.dispatchEvent(new Event('kavyaLeaveRequestsChanged'));
   return getInitialLeaveRequests();
 }
 

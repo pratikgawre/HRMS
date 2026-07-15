@@ -13,6 +13,9 @@ import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { useLocation } from 'react-router-dom';
 
+const ADMIN_ASSET_CACHE_KEY = 'kavyaAssetsAdminCache';
+const ADMIN_EMPLOYEE_CACHE_KEY = 'kavyaAssetsAdminEmployeesCache';
+
 function Assets() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -33,6 +36,8 @@ function Assets() {
   const [assignedEmployeeQuery, setAssignedEmployeeQuery] = useState('');
   const [isEmployeePickerOpen, setIsEmployeePickerOpen] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [assetForm, setAssetForm] = useState({
     assetName: '',
     category: 'Laptop',
@@ -50,11 +55,20 @@ function Assets() {
     let active = true;
 
     const refreshAssets = async () => {
+      setIsLoading(true);
+      setLoadError('');
       try {
-        const [assetRows, employeeRows, assignmentRows] = await Promise.all([
+        const cachedAssets = readCachedJson(ADMIN_ASSET_CACHE_KEY, []);
+        const cachedEmployees = readCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, []);
+        if (cachedAssets.length && assets.length === 0) {
+          const normalizedCachedEmployees = normalizeAssetDirectoryEmployees(cachedEmployees);
+          setAssets(normalizeAssetRows(cachedAssets, normalizedCachedEmployees));
+          setEmployees(normalizedCachedEmployees);
+        }
+
+        const [assetRows, employeeRows] = await Promise.all([
           apiRequest('/assets').catch(() => []),
           apiRequest('/employees').catch(() => []),
-          apiRequest('/asset-assignments').catch(() => []),
         ]);
 
         if (!active) {
@@ -63,25 +77,23 @@ function Assets() {
 
         const normalizedEmployees = normalizeAssetDirectoryEmployees(Array.isArray(employeeRows) ? employeeRows : []);
         console.info('[Assets] fetch response', {
-          assetCount: Array.isArray(recoveredAssetRows) ? recoveredAssetRows.length : 0,
-          sampleDates: Array.isArray(recoveredAssetRows)
-            ? recoveredAssetRows.slice(0, 3).map((asset) => ({
+          assetCount: Array.isArray(assetRows) ? assetRows.length : 0,
+          sampleDates: Array.isArray(assetRows)
+            ? assetRows.slice(0, 3).map((asset) => ({
                 id: asset?.id,
                 currentDate: asset?.currentDate || asset?.current_date || asset?.assignedDate || asset?.assignmentDate,
                 dueDate: asset?.dueDate || asset?.due_date || asset?.returnDate || asset?.return_date,
               }))
             : [],
         });
-        const normalizedAssets = normalizeAssetRows(Array.isArray(recoveredAssetRows) ? recoveredAssetRows : [], normalizedEmployees);
+        const normalizedAssets = normalizeAssetRows(Array.isArray(assetRows) ? assetRows : [], normalizedEmployees);
         setAssets(normalizedAssets);
         setEmployees(normalizedEmployees);
-        if (isHrModule && normalizedAssets.length > 0) {
-          writeHrAssetCache(normalizedAssets);
-        }
+        writeCachedJson(ADMIN_ASSET_CACHE_KEY, Array.isArray(assetRows) ? assetRows : []);
+        writeCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, Array.isArray(employeeRows) ? employeeRows : []);
       } catch {
         if (active) {
-          const cachedAssets = isHrModule ? readHrAssetCache() : null;
-          setAssets(Array.isArray(cachedAssets) ? cachedAssets : []);
+          setAssets([]);
           setEmployees([]);
         }
       }
@@ -679,6 +691,22 @@ function Assets() {
       <div id="asset-overview" className="card-grid">
         {stats.map((item) => <DashboardCard key={item.label} {...item} />)}
       </div>
+
+      {isLoading && (
+        <div className="announcement-alert" role="status">
+          <i className="ri-loader-4-line" aria-hidden="true" />
+          <span>Loading assets...</span>
+        </div>
+      )}
+      {loadError && (
+        <div className="announcement-alert announcement-alert--undo" role="alert">
+          <i className="ri-error-warning-line" aria-hidden="true" />
+          <span>{loadError}</span>
+          <button type="button" className="announcement-undo-btn" onClick={() => window.dispatchEvent(new Event('kavyaAssetsChanged'))}>
+            Retry
+          </button>
+        </div>
+      )}
 
       <Section title="Submodules / Pages">
         <div className="asset-module-grid">
@@ -1740,6 +1768,23 @@ function isAssignedAssetStatus(status) {
 
 function normalizeStatus(status) {
   return String(status || '').trim().toLowerCase().replaceAll('_', ' ');
+}
+
+function readCachedJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeCachedJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore cache write issues.
+  }
 }
 
 function capitalizeFirst(value) {

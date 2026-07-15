@@ -256,10 +256,9 @@ function TeamAttendance() {
   const teamAttendancePath = getTeamAttendancePath(role);
   const myAttendancePath = getMyAttendancePath(role);
   const teamPagePath = getTeamPagePath(role);
-  const cardCount = selectedDateTeamRows.length;
-  const presentCount = teamRows.filter((row) => String(row.date || '').trim() === selectedDateLabel && String(row.status || '').toLowerCase() === 'present').length;
-  const lateCount = teamRows.filter((row) => String(row.date || '').trim() === selectedDateLabel && String(row.status || '').toLowerCase() === 'late').length;
-  const halfDayCount = teamRows.filter((row) => String(row.date || '').trim() === selectedDateLabel && String(row.status || '').toLowerCase() === 'half day').length;
+  const cardCount = teamIds.size;
+  const presentCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'present').length;
+  const lateCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'late').length;
 
   useEffect(() => {
     if (!toast) {
@@ -351,7 +350,7 @@ function TeamAttendance() {
       dateRange,
       selectedDate,
       selectedMonth,
-      rows: displayedRows,
+      rows,
     });
     const blob = new Blob([reportHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

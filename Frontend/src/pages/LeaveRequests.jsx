@@ -59,18 +59,14 @@ function LeaveRequests() {
   }, [leaveTypeOptions]);
 
   const visibleRequests = useMemo(() => requests.filter((request) => {
-    if (role === 'projectManager') {
-      const requestOwnerRole = String(request.ownerRole || '').trim().toLowerCase().replace(/\s+/g, '');
-      const currentEmployeeId = String(currentEmployee.employeeId || '').trim();
-      const currentEmployeeName = String(currentEmployee.employee || '').trim().toLowerCase();
-      const requestEmployeeId = String(request.employeeId || '').trim();
-      const requestEmployeeName = String(request.employee || '').trim().toLowerCase();
-      return requestOwnerRole === 'projectmanager'
-        || requestEmployeeId === currentEmployeeId
-        || requestEmployeeName === currentEmployeeName;
+    const isSelfOwnedHrRequest = role === 'hr'
+      && String(request.employeeId || '').trim() === String(currentEmployee.employeeId || '').trim();
+
+    if (isSelfOwnedHrRequest) {
+      return false;
     }
 
-    if (role === 'teamLead') {
+    if (role === 'teamLead' || role === 'projectManager') {
       return teamLeadMemberIds.includes(request.employeeId);
     }
 
@@ -211,12 +207,13 @@ function LeaveRequests() {
         const shouldDisableRecommend = !isAdminOrHr && isProjectManagerRoute && !isPending;
         const disableApprove = isReviewing || isActionComplete;
         const disableReject = isReviewing || isRejectComplete;
-        const showApproveAction = !isRejectComplete;
-        const showRejectAction = isAdminOrHr && !isActionComplete;
+        const isOwnHrRequest = role === 'hr'
+          && String(row.employeeId || '').trim() === String(currentEmployee.employeeId || '').trim();
+        const showRejectAction = isAdminOrHr && !isActionComplete && !isOwnHrRequest;
 
         return (
           <div className="table-actions table-actions-inline leave-review-actions">
-            {showApproveAction && (
+            {!isOwnHrRequest && (
               <button
                 type="button"
                 className="leave-approve-action"
