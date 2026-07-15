@@ -69,7 +69,6 @@ function Assets() {
         const [assetRows, employeeRows] = await Promise.all([
           apiRequest('/assets').catch(() => []),
           apiRequest('/employees').catch(() => []),
-          apiRequest('/asset-assignments').catch(() => []),
         ]);
 
         if (!active) {
@@ -77,19 +76,17 @@ function Assets() {
         }
 
         const normalizedEmployees = normalizeAssetDirectoryEmployees(Array.isArray(employeeRows) ? employeeRows : []);
-        setAssets(normalizeAssetRows(Array.isArray(assetRows) ? assetRows : [], normalizedEmployees));
-        const normalizedEmployees = normalizeAssetDirectoryEmployees(Array.isArray(employeeRows) ? employeeRows : []);
         console.info('[Assets] fetch response', {
-          assetCount: Array.isArray(recoveredAssetRows) ? recoveredAssetRows.length : 0,
-          sampleDates: Array.isArray(recoveredAssetRows)
-            ? recoveredAssetRows.slice(0, 3).map((asset) => ({
+          assetCount: Array.isArray(assetRows) ? assetRows.length : 0,
+          sampleDates: Array.isArray(assetRows)
+            ? assetRows.slice(0, 3).map((asset) => ({
                 id: asset?.id,
                 currentDate: asset?.currentDate || asset?.current_date || asset?.assignedDate || asset?.assignmentDate,
                 dueDate: asset?.dueDate || asset?.due_date || asset?.returnDate || asset?.return_date,
               }))
             : [],
         });
-        const normalizedAssets = normalizeAssetRows(Array.isArray(recoveredAssetRows) ? recoveredAssetRows : [], normalizedEmployees);
+        const normalizedAssets = normalizeAssetRows(Array.isArray(assetRows) ? assetRows : [], normalizedEmployees);
         setAssets(normalizedAssets);
         setEmployees(normalizedEmployees);
         writeCachedJson(ADMIN_ASSET_CACHE_KEY, Array.isArray(assetRows) ? assetRows : []);

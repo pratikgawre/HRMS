@@ -55,7 +55,7 @@ public final class SmtpSettings {
         readEnvironmentValue(safeEnvironment, "SMTP_PASSWORD"),
         readFromEnvFiles("SMTP_PASSWORD"));
     String fromAddress = firstNonBlank(
-        readEnvironmentValue(safeEnvironment, "spring.mail.from"),
+        readEnvironmentValue(safeEnvironment, "app.mail.from"),
         readEnvironmentValue(safeEnvironment, "SMTP_FROM"),
         readFromEnvFiles("SMTP_FROM"),
         username);
