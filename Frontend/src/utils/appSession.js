@@ -2,7 +2,6 @@ import { API_BASE, normalizeBackendAssetUrl } from './runtime-config.js';
 
 const TOKEN_STORAGE_KEY = 'kavyaAuthToken';
 const SESSION_STORAGE_KEY = 'kavyaSessionData';
-const API_BASE = '/api';
 const SESSION_TTL_MS = 60 * 60 * 1000;
 const TOUCH_THROTTLE_MS = 5000;
 

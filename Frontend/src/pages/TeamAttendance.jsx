@@ -581,8 +581,8 @@ function TeamAttendance() {
                       Correct Login
                     </button>
                   ),
-                },
-              ]} 
+                }]),
+              ]}
               rows={displayedRows}
               emptyMessage={summaryFocus === 'team'
                 ? 'No team members found for the selected lead.'
