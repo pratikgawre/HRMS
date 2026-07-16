@@ -90,8 +90,28 @@ public class EmployeeWelcomeEmailService {
     } catch (MailException | MessagingException ex) {
       String sender = resolveFromAddress();
       log.error("Unable to send {} to {} from {}.", emailType, to, sender.isBlank() ? "<smtp-default>" : sender, ex);
-      return DeliveryResult.failed("Unable to send employee credential email: " + ex.getMessage());
+      return DeliveryResult.failed(buildCredentialEmailFailureMessage(ex));
     }
+  }
+
+  @NonNull
+  private String buildCredentialEmailFailureMessage(Exception exception) {
+    String detail = exception == null || exception.getMessage() == null
+        ? ""
+        : exception.getMessage().toLowerCase(Locale.ROOT);
+
+    if (detail.contains("authentication") || detail.contains("auth failed")) {
+      return "Credential email was not sent because SMTP authentication failed. Please check the mail username/app password, or share credentials manually.";
+    }
+
+    if (detail.contains("couldn't connect")
+        || detail.contains("connection timed out")
+        || detail.contains("mailconnectexception")
+        || detail.contains("connectexception")) {
+      return "Credential email was not sent because the mail server is unreachable. Please check SMTP host/port/network settings, or share credentials manually.";
+    }
+
+    return "Credential email was not sent. Please check SMTP settings or share credentials manually.";
   }
 
   @NonNull

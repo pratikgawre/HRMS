@@ -14,6 +14,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 public final class SmtpSettings {
+  private static final int DEFAULT_TIMEOUT_MILLIS = 5000;
   private static final List<String> CANDIDATE_ENV_PATHS = List.of(
       ".env",
       "React Project/backend/.env",
@@ -31,13 +32,27 @@ public final class SmtpSettings {
   private final String username;
   private final String password;
   private final String fromAddress;
+  private final int connectionTimeoutMillis;
+  private final int readTimeoutMillis;
+  private final int writeTimeoutMillis;
 
-  private SmtpSettings(String host, int port, String username, String password, String fromAddress) {
+  private SmtpSettings(
+      String host,
+      int port,
+      String username,
+      String password,
+      String fromAddress,
+      int connectionTimeoutMillis,
+      int readTimeoutMillis,
+      int writeTimeoutMillis) {
     this.host = host == null ? "" : host.trim();
     this.port = port > 0 ? port : 587;
     this.username = username == null ? "" : username.trim();
     this.password = password == null ? "" : password.trim();
     this.fromAddress = fromAddress == null ? "" : fromAddress.trim();
+    this.connectionTimeoutMillis = sanitizeTimeout(connectionTimeoutMillis);
+    this.readTimeoutMillis = sanitizeTimeout(readTimeoutMillis);
+    this.writeTimeoutMillis = sanitizeTimeout(writeTimeoutMillis);
   }
 
   public static SmtpSettings resolve(Environment environment) {
@@ -63,7 +78,25 @@ public final class SmtpSettings {
         readEnvironmentValue(safeEnvironment, "spring.mail.port"),
         readEnvironmentValue(safeEnvironment, "SMTP_PORT"),
         readFromEnvFiles("SMTP_PORT")));
-    return new SmtpSettings(host, port, username, password, fromAddress);
+    int connectionTimeoutMillis = parseTimeout(firstNonBlank(
+        readEnvironmentValue(safeEnvironment, "spring.mail.properties.mail.smtp.connectiontimeout"),
+        readEnvironmentValue(safeEnvironment, "SMTP_CONNECTION_TIMEOUT_MS"),
+        readEnvironmentValue(safeEnvironment, "SMTP_TIMEOUT_MS"),
+        readFromEnvFiles("SMTP_CONNECTION_TIMEOUT_MS"),
+        readFromEnvFiles("SMTP_TIMEOUT_MS")));
+    int readTimeoutMillis = parseTimeout(firstNonBlank(
+        readEnvironmentValue(safeEnvironment, "spring.mail.properties.mail.smtp.timeout"),
+        readEnvironmentValue(safeEnvironment, "SMTP_READ_TIMEOUT_MS"),
+        readEnvironmentValue(safeEnvironment, "SMTP_TIMEOUT_MS"),
+        readFromEnvFiles("SMTP_READ_TIMEOUT_MS"),
+        readFromEnvFiles("SMTP_TIMEOUT_MS")));
+    int writeTimeoutMillis = parseTimeout(firstNonBlank(
+        readEnvironmentValue(safeEnvironment, "spring.mail.properties.mail.smtp.writetimeout"),
+        readEnvironmentValue(safeEnvironment, "SMTP_WRITE_TIMEOUT_MS"),
+        readEnvironmentValue(safeEnvironment, "SMTP_TIMEOUT_MS"),
+        readFromEnvFiles("SMTP_WRITE_TIMEOUT_MS"),
+        readFromEnvFiles("SMTP_TIMEOUT_MS")));
+    return new SmtpSettings(host, port, username, password, fromAddress, connectionTimeoutMillis, readTimeoutMillis, writeTimeoutMillis);
   }
 
   public boolean isConfigured() {
@@ -90,6 +123,18 @@ public final class SmtpSettings {
     return fromAddress;
   }
 
+  public int getConnectionTimeoutMillis() {
+    return connectionTimeoutMillis;
+  }
+
+  public int getReadTimeoutMillis() {
+    return readTimeoutMillis;
+  }
+
+  public int getWriteTimeoutMillis() {
+    return writeTimeoutMillis;
+  }
+
   public JavaMailSenderImpl createMailSender() {
     JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
     mailSender.setHost(host);
@@ -104,6 +149,9 @@ public final class SmtpSettings {
     Properties properties = mailSender.getJavaMailProperties();
     properties.put("mail.smtp.auth", "true");
     properties.put("mail.smtp.starttls.enable", "true");
+    properties.put("mail.smtp.connectiontimeout", String.valueOf(connectionTimeoutMillis));
+    properties.put("mail.smtp.timeout", String.valueOf(readTimeoutMillis));
+    properties.put("mail.smtp.writetimeout", String.valueOf(writeTimeoutMillis));
     properties.put("mail.mime.charset", StandardCharsets.UTF_8.name());
     return mailSender;
   }
@@ -211,5 +259,21 @@ public final class SmtpSettings {
     } catch (NumberFormatException ex) {
       return 587;
     }
+  }
+
+  private static int parseTimeout(String value) {
+    if (value == null || value.isBlank()) {
+      return DEFAULT_TIMEOUT_MILLIS;
+    }
+
+    try {
+      return sanitizeTimeout(Integer.parseInt(value.trim()));
+    } catch (NumberFormatException ex) {
+      return DEFAULT_TIMEOUT_MILLIS;
+    }
+  }
+
+  private static int sanitizeTimeout(int value) {
+    return value > 0 ? value : DEFAULT_TIMEOUT_MILLIS;
   }
 }
