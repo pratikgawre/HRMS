@@ -1467,7 +1467,7 @@ function getEmployeeSaveMessage(employee, isUpdate) {
   }
 
   if (employee.credentialEmailSent === false) {
-    return `Employee ${action} successfully, but credential email was not sent: ${employee.credentialEmailMessage || 'check SMTP settings.'}`;
+    return `Employee ${action} successfully. Credential email was not sent, so share login credentials manually.`;
   }
 
   return isUpdate
@@ -1545,7 +1545,7 @@ function getCredentialDeliveryText(credentials) {
   }
 
   if (credentials.credentialEmailSent === false) {
-    return credentials.credentialEmailMessage || 'Credential email was not sent. Share these credentials manually.';
+    return 'Credential email was not sent. Share these credentials manually.';
   }
 
   return `Share these credentials with ${credentials.notificationEmail || 'the employee'}.`;
