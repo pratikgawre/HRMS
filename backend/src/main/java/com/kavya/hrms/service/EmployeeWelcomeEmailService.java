@@ -21,6 +21,7 @@ import org.springframework.web.util.HtmlUtils;
 @SuppressWarnings("all")
 public class EmployeeWelcomeEmailService {
   private static final Logger log = LoggerFactory.getLogger(EmployeeWelcomeEmailService.class);
+  private static final String LOGIN_URL = "https://kavyahrms360.netlify.app/";
   private final SmtpSettings smtpSettings;
   private final SendGridMailClient sendGridMailClient;
 
@@ -189,12 +190,13 @@ public class EmployeeWelcomeEmailService {
 
     return "Hello " + name + ",\n\n"
         + intro + "\n\n"
+        + "Open Kavya HRMS: " + LOGIN_URL + "\n\n"
         + "Login Email: " + loginEmail + "\n"
         + "Temporary Password: " + temporaryPassword + "\n"
         + "Employee Code: " + employeeCode + "\n"
         + "Department: " + department + "\n"
         + "Designation: " + jobTitle + "\n\n"
-        + "Please sign in with the login email above and change your password after the first login.\n\n"
+        + "Please sign in with the login link above and change your password after the first login.\n\n"
         + "If you have any questions, please contact the HR team.\n\n"
         + "Regards,\n"
         + "Kavya HRMS";
@@ -218,20 +220,42 @@ public class EmployeeWelcomeEmailService {
         ? "Your employee profile has been updated in Kavya HRMS. Your login credentials have been refreshed."
         : "Welcome to Kavya HRMS. Your employee profile has been created successfully.";
 
-    return "<div style=\"font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #1f2937;\">"
-        + "<p>Hello " + name + ",</p>"
-        + "<p>" + escapeHtml(intro) + "</p>"
-        + "<p>"
-        + "Login Email: " + loginEmail + "<br/>"
-        + "Temporary Password: <strong>" + temporaryPassword + "</strong><br/>"
-        + "Employee Code: " + employeeCode + "<br/>"
-        + "Department: " + department + "<br/>"
-        + "Designation: " + jobTitle
-        + "</p>"
-        + "<p>Please sign in with the login email above and change your password after the first login.</p>"
-        + "<p>If you have any questions, please contact the HR team.</p>"
-        + "<p>Regards,<br/>Kavya HRMS</p>"
+    return "<div style=\"margin:0; padding:0; background:#f4fbfb; font-family: Arial, sans-serif; color:#1f2937;\">"
+        + "<div style=\"max-width:640px; margin:0 auto; padding:28px 18px;\">"
+        + "<div style=\"background:#ffffff; border:1px solid #d8ecec; border-radius:12px; overflow:hidden;\">"
+        + "<div style=\"background:#0f8f8b; padding:22px 26px; color:#ffffff;\">"
+        + "<div style=\"font-size:12px; letter-spacing:1px; text-transform:uppercase; font-weight:700;\">Kavya HRMS</div>"
+        + "<h1 style=\"margin:8px 0 0; font-size:24px; line-height:1.3; font-weight:700;\">Your login credentials are ready</h1>"
+        + "</div>"
+        + "<div style=\"padding:26px; font-size:14px; line-height:1.7;\">"
+        + "<p style=\"margin:0 0 14px;\">Hello " + name + ",</p>"
+        + "<p style=\"margin:0 0 22px;\">" + escapeHtml(intro) + "</p>"
+        + "<div style=\"background:#f8fbfc; border:1px solid #d8e6ea; border-radius:10px; padding:18px; margin:0 0 22px;\">"
+        + "<div style=\"font-size:12px; color:#64748b; font-weight:700; text-transform:uppercase; margin-bottom:10px;\">Login Details</div>"
+        + "<table role=\"presentation\" style=\"width:100%; border-collapse:collapse; font-size:14px;\">"
+        + credentialRow("Login Email", loginEmail)
+        + credentialRow("Temporary Password", "<strong>" + temporaryPassword + "</strong>")
+        + credentialRow("Employee Code", employeeCode)
+        + credentialRow("Department", department)
+        + credentialRow("Designation", jobTitle)
+        + "</table>"
+        + "</div>"
+        + "<p style=\"margin:0 0 22px;\">Use the button below to open Kavya HRMS. Please change your password after your first login.</p>"
+        + "<p style=\"margin:0 0 18px;\"><a href=\"" + LOGIN_URL + "\" style=\"display:inline-block; background:#0f8f8b; color:#ffffff; text-decoration:none; font-weight:700; padding:12px 20px; border-radius:8px;\">Open Kavya HRMS</a></p>"
+        + "<p style=\"margin:0 0 22px; color:#64748b; font-size:13px;\">If the button does not work, open this link: <a href=\"" + LOGIN_URL + "\" style=\"color:#0f766e;\">" + LOGIN_URL + "</a></p>"
+        + "<p style=\"margin:0 0 8px;\">If you have any questions, please contact the HR team.</p>"
+        + "<p style=\"margin:0;\">Regards,<br/>Kavya HRMS</p>"
+        + "</div>"
+        + "</div>"
+        + "</div>"
         + "</div>";
+  }
+
+  private String credentialRow(String label, String value) {
+    return "<tr>"
+        + "<td style=\"padding:7px 12px 7px 0; color:#64748b; width:42%; vertical-align:top;\">" + escapeHtml(label) + "</td>"
+        + "<td style=\"padding:7px 0; color:#0f172a; font-weight:600; vertical-align:top;\">" + value + "</td>"
+        + "</tr>";
   }
 
   @NonNull
