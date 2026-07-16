@@ -15,22 +15,28 @@ import org.springframework.stereotype.Service;
 public class PasswordResetEmailService {
   private static final Logger log = LoggerFactory.getLogger(PasswordResetEmailService.class);
   private final SmtpSettings smtpSettings;
+  private final SendGridMailClient sendGridMailClient;
 
   public PasswordResetEmailService(
       ObjectProvider<JavaMailSender> mailSenderProvider,
       Environment environment) {
     this.smtpSettings = SmtpSettings.resolve(environment);
+    this.sendGridMailClient = new SendGridMailClient(environment);
   }
 
   public DeliveryResult sendResetCode(AppUser user, String resetToken, String expiresAt) {
-    if (!smtpSettings.isConfigured()) {
-      log.warn("Password reset email skipped because SMTP host is blank.");
-      return DeliveryResult.notConfigured();
-    }
-
     String to = user == null || user.getEmail() == null ? "" : user.getEmail().trim();
     if (to.isBlank()) {
       return DeliveryResult.failed("Recipient email is missing.");
+    }
+
+    if (sendGridMailClient.isEnabled()) {
+      return sendResetCodeWithSendGrid(to, user, resetToken, expiresAt);
+    }
+
+    if (!smtpSettings.isConfigured()) {
+      log.warn("Password reset email skipped because SMTP host is blank.");
+      return DeliveryResult.notConfigured();
     }
 
     JavaMailSender mailSender = smtpSettings.createMailSender();
@@ -53,6 +59,22 @@ public class PasswordResetEmailService {
       log.error("Unable to send password reset email to {} from {}.", to, sender.isBlank() ? "<smtp-default>" : sender, ex);
       return DeliveryResult.failed("Unable to send reset email: " + ex.getMessage());
     }
+  }
+
+  private DeliveryResult sendResetCodeWithSendGrid(String to, AppUser user, String resetToken, String expiresAt) {
+    SendGridMailClient.DeliveryResult delivery = sendGridMailClient.sendEmail(
+        to,
+        "Kavya HRMS password reset code",
+        buildMessage(user, resetToken, expiresAt),
+        "",
+        "Password reset email");
+    if (!delivery.isConfigured()) {
+      return DeliveryResult.notConfigured(delivery.getMessage());
+    }
+    if (delivery.isSent()) {
+      return DeliveryResult.sent();
+    }
+    return DeliveryResult.failed(delivery.getMessage());
   }
 
   private String resolveFromAddress() {
@@ -98,7 +120,11 @@ public class PasswordResetEmailService {
     }
 
     public static DeliveryResult notConfigured() {
-      return new DeliveryResult(false, false, "Email service is not configured.");
+      return notConfigured("Email service is not configured.");
+    }
+
+    public static DeliveryResult notConfigured(String message) {
+      return new DeliveryResult(false, false, message == null || message.isBlank() ? "Email service is not configured." : message);
     }
 
     public static DeliveryResult sent() {

@@ -1467,12 +1467,17 @@ function getEmployeeSaveMessage(employee, isUpdate) {
   }
 
   if (employee.credentialEmailSent === false) {
-    return `Employee ${action} successfully. Credential email was not sent, so share login credentials manually.`;
+    return `Employee ${action} successfully. ${getCredentialEmailFailureMessage(employee)}`;
   }
 
   return isUpdate
     ? 'Employee details updated successfully. Share the refreshed credentials with the employee.'
     : 'Employee added successfully. Share these login credentials with the employee.';
+}
+
+function getCredentialEmailFailureMessage(record) {
+  const message = String(record?.credentialEmailMessage || '').trim();
+  return message || 'Credential email was not sent, so share login credentials manually.';
 }
 
 function getEmployeeSaveToastMessage(isUpdate) {
@@ -1545,7 +1550,7 @@ function getCredentialDeliveryText(credentials) {
   }
 
   if (credentials.credentialEmailSent === false) {
-    return 'Credential email was not sent. Share these credentials manually.';
+    return getCredentialEmailFailureMessage(credentials);
   }
 
   return `Share these credentials with ${credentials.notificationEmail || 'the employee'}.`;

@@ -22,11 +22,13 @@ import org.springframework.web.util.HtmlUtils;
 public class EmployeeWelcomeEmailService {
   private static final Logger log = LoggerFactory.getLogger(EmployeeWelcomeEmailService.class);
   private final SmtpSettings smtpSettings;
+  private final SendGridMailClient sendGridMailClient;
 
   public EmployeeWelcomeEmailService(
       ObjectProvider<JavaMailSender> mailSenderProvider,
       Environment environment) {
     this.smtpSettings = SmtpSettings.resolve(environment);
+    this.sendGridMailClient = new SendGridMailClient(environment);
   }
 
   public DeliveryResult sendWelcomeEmail(Employee employee) {
@@ -56,14 +58,18 @@ public class EmployeeWelcomeEmailService {
       @NonNull String htmlMessage,
       @NonNull String emailType,
       @NonNull String successMessage) {
-    if (!smtpSettings.isConfigured()) {
-      log.warn("{} skipped because SMTP host is blank.", emailType);
-      return DeliveryResult.notConfigured();
-    }
-
     String to = employee == null || employee.getEmail() == null ? "" : employee.getEmail().trim();
     if (to.isBlank()) {
       return DeliveryResult.failed("Employee email is missing.");
+    }
+
+    if (sendGridMailClient.isEnabled()) {
+      return sendCredentialEmailWithSendGrid(to, subject, plainTextMessage, htmlMessage, emailType, successMessage);
+    }
+
+    if (!smtpSettings.isConfigured()) {
+      log.warn("{} skipped because SMTP host is blank.", emailType);
+      return DeliveryResult.notConfigured();
     }
 
     JavaMailSender mailSender = smtpSettings.createMailSender();
@@ -90,14 +96,46 @@ public class EmployeeWelcomeEmailService {
     }
   }
 
+  private DeliveryResult sendCredentialEmailWithSendGrid(
+      String to,
+      String subject,
+      String plainTextMessage,
+      String htmlMessage,
+      String emailType,
+      String successMessage) {
+    SendGridMailClient.DeliveryResult delivery = sendGridMailClient.sendEmail(to, subject, plainTextMessage, htmlMessage, emailType);
+    if (!delivery.isConfigured()) {
+      return DeliveryResult.notConfigured(delivery.getMessage());
+    }
+    if (delivery.isSent()) {
+      return DeliveryResult.sent(successMessage);
+    }
+    return DeliveryResult.failed(delivery.getMessage());
+  }
+
   @NonNull
   private String buildCredentialEmailFailureMessage(Exception exception) {
-    String detail = exception == null || exception.getMessage() == null
-        ? ""
-        : exception.getMessage().toLowerCase(Locale.ROOT);
+    String detail = collectExceptionMessages(exception);
 
-    if (detail.contains("authentication") || detail.contains("auth failed")) {
-      return "Credential email was not sent because SMTP authentication failed. Please check the mail username/app password, or share credentials manually.";
+    if (detail.contains("authentication")
+        || detail.contains("auth failed")
+        || detail.contains("authenticationfailedexception")
+        || detail.contains("username and password not accepted")
+        || detail.contains("535-5.7.8")
+        || detail.contains("534-5.7.9")) {
+      return "Credential email was not sent because SMTP authentication failed. Please check the Gmail username/app password, or share credentials manually.";
+    }
+
+    if (detail.contains("not authorized")
+        || detail.contains("send as denied")
+        || detail.contains("invalid address")
+        || detail.contains("sender address rejected")
+        || detail.contains("from address")) {
+      return "Credential email was not sent because Gmail did not allow this From address. Verify the SMTP_FROM alias in the same Gmail account, or share credentials manually.";
+    }
+
+    if (detail.contains("starttls") || detail.contains("tls negotiation") || detail.contains("ssl")) {
+      return "Credential email was not sent because SMTP security negotiation failed. Check SMTP port and SSL/TLS settings, or share credentials manually.";
     }
 
     if (detail.contains("couldn't connect")
@@ -108,6 +146,22 @@ public class EmployeeWelcomeEmailService {
     }
 
     return "Credential email was not sent. Please check SMTP settings or share credentials manually.";
+  }
+
+  @NonNull
+  private String collectExceptionMessages(Throwable throwable) {
+    StringBuilder detail = new StringBuilder();
+    Throwable current = throwable;
+    int depth = 0;
+    while (current != null && depth < 8) {
+      detail.append(' ').append(current.getClass().getName());
+      if (current.getMessage() != null) {
+        detail.append(' ').append(current.getMessage());
+      }
+      current = current.getCause();
+      depth += 1;
+    }
+    return detail.toString().toLowerCase(Locale.ROOT);
   }
 
   @NonNull
@@ -262,7 +316,11 @@ public class EmployeeWelcomeEmailService {
     }
 
     public static DeliveryResult notConfigured() {
-      return new DeliveryResult(false, false, "Email service is not configured.");
+      return notConfigured("Email service is not configured.");
+    }
+
+    public static DeliveryResult notConfigured(String message) {
+      return new DeliveryResult(false, false, message == null || message.isBlank() ? "Email service is not configured." : message);
     }
 
     public static DeliveryResult sent() {
