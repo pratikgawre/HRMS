@@ -21,13 +21,11 @@ import org.springframework.web.util.HtmlUtils;
 @SuppressWarnings("all")
 public class EmployeeWelcomeEmailService {
   private static final Logger log = LoggerFactory.getLogger(EmployeeWelcomeEmailService.class);
-  private final ObjectProvider<JavaMailSender> mailSenderProvider;
   private final SmtpSettings smtpSettings;
 
   public EmployeeWelcomeEmailService(
       ObjectProvider<JavaMailSender> mailSenderProvider,
       Environment environment) {
-    this.mailSenderProvider = mailSenderProvider;
     this.smtpSettings = SmtpSettings.resolve(environment);
   }
 
@@ -68,10 +66,8 @@ public class EmployeeWelcomeEmailService {
       return DeliveryResult.failed("Employee email is missing.");
     }
 
-    JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
-    if (mailSender == null) {
-      mailSender = smtpSettings.createMailSender();
-    }
+    JavaMailSender mailSender = smtpSettings.createMailSender();
+    log.info("{} sending via SMTP {}:{} ssl={} timeout={}ms.", emailType, smtpSettings.getHost(), smtpSettings.getPort(), smtpSettings.isSslEnabled(), smtpSettings.getConnectionTimeoutMillis());
 
     try {
       MimeMessage mimeMessage = mailSender.createMimeMessage();

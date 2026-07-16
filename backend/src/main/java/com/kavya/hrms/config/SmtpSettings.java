@@ -35,6 +35,7 @@ public final class SmtpSettings {
   private final int connectionTimeoutMillis;
   private final int readTimeoutMillis;
   private final int writeTimeoutMillis;
+  private final boolean sslEnabled;
 
   private SmtpSettings(
       String host,
@@ -44,7 +45,8 @@ public final class SmtpSettings {
       String fromAddress,
       int connectionTimeoutMillis,
       int readTimeoutMillis,
-      int writeTimeoutMillis) {
+      int writeTimeoutMillis,
+      boolean sslEnabled) {
     this.host = host == null ? "" : host.trim();
     this.port = port > 0 ? port : 587;
     this.username = username == null ? "" : username.trim();
@@ -53,6 +55,7 @@ public final class SmtpSettings {
     this.connectionTimeoutMillis = sanitizeTimeout(connectionTimeoutMillis);
     this.readTimeoutMillis = sanitizeTimeout(readTimeoutMillis);
     this.writeTimeoutMillis = sanitizeTimeout(writeTimeoutMillis);
+    this.sslEnabled = sslEnabled || this.port == 465;
   }
 
   public static SmtpSettings resolve(Environment environment) {
@@ -96,7 +99,11 @@ public final class SmtpSettings {
         readEnvironmentValue(safeEnvironment, "SMTP_TIMEOUT_MS"),
         readFromEnvFiles("SMTP_WRITE_TIMEOUT_MS"),
         readFromEnvFiles("SMTP_TIMEOUT_MS")));
-    return new SmtpSettings(host, port, username, password, fromAddress, connectionTimeoutMillis, readTimeoutMillis, writeTimeoutMillis);
+    boolean sslEnabled = parseBoolean(firstNonBlank(
+        readEnvironmentValue(safeEnvironment, "spring.mail.properties.mail.smtp.ssl.enable"),
+        readEnvironmentValue(safeEnvironment, "SMTP_SSL_ENABLED"),
+        readFromEnvFiles("SMTP_SSL_ENABLED")));
+    return new SmtpSettings(host, port, username, password, fromAddress, connectionTimeoutMillis, readTimeoutMillis, writeTimeoutMillis, sslEnabled);
   }
 
   public boolean isConfigured() {
@@ -135,6 +142,10 @@ public final class SmtpSettings {
     return writeTimeoutMillis;
   }
 
+  public boolean isSslEnabled() {
+    return sslEnabled;
+  }
+
   public JavaMailSenderImpl createMailSender() {
     JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
     mailSender.setHost(host);
@@ -148,10 +159,17 @@ public final class SmtpSettings {
 
     Properties properties = mailSender.getJavaMailProperties();
     properties.put("mail.smtp.auth", "true");
-    properties.put("mail.smtp.starttls.enable", "true");
+    properties.put("mail.smtp.ssl.enable", String.valueOf(sslEnabled));
+    properties.put("mail.smtp.starttls.enable", String.valueOf(!sslEnabled));
+    properties.put("mail.smtp.starttls.required", String.valueOf(!sslEnabled));
     properties.put("mail.smtp.connectiontimeout", String.valueOf(connectionTimeoutMillis));
     properties.put("mail.smtp.timeout", String.valueOf(readTimeoutMillis));
     properties.put("mail.smtp.writetimeout", String.valueOf(writeTimeoutMillis));
+    if (sslEnabled) {
+      properties.put("mail.smtp.socketFactory.port", String.valueOf(port));
+      properties.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+      properties.put("mail.smtp.socketFactory.fallback", "false");
+    }
     properties.put("mail.mime.charset", StandardCharsets.UTF_8.name());
     return mailSender;
   }
@@ -275,5 +293,14 @@ public final class SmtpSettings {
 
   private static int sanitizeTimeout(int value) {
     return value > 0 ? value : DEFAULT_TIMEOUT_MILLIS;
+  }
+
+  private static boolean parseBoolean(String value) {
+    if (value == null || value.isBlank()) {
+      return false;
+    }
+
+    String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+    return "true".equals(normalized) || "1".equals(normalized) || "yes".equals(normalized);
   }
 }

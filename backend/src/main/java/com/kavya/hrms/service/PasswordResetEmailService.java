@@ -14,13 +14,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class PasswordResetEmailService {
   private static final Logger log = LoggerFactory.getLogger(PasswordResetEmailService.class);
-  private final ObjectProvider<JavaMailSender> mailSenderProvider;
   private final SmtpSettings smtpSettings;
 
   public PasswordResetEmailService(
       ObjectProvider<JavaMailSender> mailSenderProvider,
       Environment environment) {
-    this.mailSenderProvider = mailSenderProvider;
     this.smtpSettings = SmtpSettings.resolve(environment);
   }
 
@@ -35,10 +33,8 @@ public class PasswordResetEmailService {
       return DeliveryResult.failed("Recipient email is missing.");
     }
 
-    JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
-    if (mailSender == null) {
-      mailSender = smtpSettings.createMailSender();
-    }
+    JavaMailSender mailSender = smtpSettings.createMailSender();
+    log.info("Password reset email sending via SMTP {}:{} ssl={} timeout={}ms.", smtpSettings.getHost(), smtpSettings.getPort(), smtpSettings.isSslEnabled(), smtpSettings.getConnectionTimeoutMillis());
 
     SimpleMailMessage message = new SimpleMailMessage();
     message.setTo(to);
