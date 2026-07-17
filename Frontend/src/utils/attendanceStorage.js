@@ -1,5 +1,5 @@
 import { getCurrentEmployeeIdentity } from './employeeStorage.js';
-import { apiRequest } from './api.js';
+import { apiRequest, safeApiRequest } from './api.js';
 
 let attendanceRowsCache = [];
 
@@ -61,7 +61,7 @@ export async function fetchAttendanceRows() {
 }
 
 export async function refreshStoredAttendanceRows() {
-  const rawRows = await apiRequest('/attendance');
+  const rawRows = await safeApiRequest('/attendance', attendanceRowsCache);
   const rows = finalizeAttendanceRows(rawRows);
   attendanceRowsCache = rows;
   if (hasAttendanceChanged(rawRows, rows)) {
