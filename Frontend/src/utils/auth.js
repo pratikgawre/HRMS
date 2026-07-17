@@ -142,6 +142,13 @@ export async function authenticateUser(loginIdentifier, password) {
       return { ok: true, user: { ...user, authMode: 'backend' } };
     }
 
+    if (response.status >= 500) {
+      const localUser = findLocalUser(normalizedLoginIdentifier, password);
+      if (localUser) {
+        return { ok: true, user: { ...localUser, authMode: 'local' } };
+      }
+    }
+
     if (result?.message) {
       return { ok: false, message: result.message };
     }

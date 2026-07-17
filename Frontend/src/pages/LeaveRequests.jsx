@@ -52,6 +52,9 @@ function LeaveRequests() {
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
   const [dataState, setDataState] = useState({ loading: true, error: '' });
+  const [selectedLeaveType, setSelectedLeaveType] = useState('All Leave');
+  const [selectedMonth, setSelectedMonth] = useState('All Months');
+  const [selectedYear, setSelectedYear] = useState('All Years');
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -116,19 +119,23 @@ function LeaveRequests() {
   }), [requests, role, currentEmployee.employeeId]);
 
   const filteredLeaveRequests = useMemo(() => {
-    const baseRows = queueFilter === 'approved'
-      ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved')
+    const baseRows = visibleRequests.filter((request) => (
+      matchesSelectedLeaveType(request, selectedLeaveType)
+      && matchesSelectedLeavePeriod(request, selectedMonth, selectedYear)
+    ));
+    const queueRows = queueFilter === 'approved'
+      ? baseRows.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved')
       : queueFilter === 'recommended'
-        ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'recommended')
+        ? baseRows.filter((request) => String(request.status || '').trim().toLowerCase() === 'recommended')
         : queueFilter === 'rejected'
-          ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'rejected')
+          ? baseRows.filter((request) => String(request.status || '').trim().toLowerCase() === 'rejected')
       : queueFilter === 'pending'
-        ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending')
+        ? baseRows.filter((request) => String(request.status || '').trim().toLowerCase() === 'pending')
         : queueFilter === 'used'
-          ? visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved' && normalizeLeaveDays(request.days) > 0)
-          : visibleRequests;
+          ? baseRows.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved' && normalizeLeaveDays(request.days) > 0)
+          : baseRows;
 
-    return baseRows
+    return queueRows
       .filter((request) => status === 'All' || request.status === status)
       .filter((request) => {
         const query = searchText.trim().toLowerCase();
@@ -144,7 +151,7 @@ function LeaveRequests() {
           request.status,
         ].some((value) => String(value || '').toLowerCase().includes(query));
       });
-  }, [queueFilter, searchText, status, visibleRequests]);
+  }, [queueFilter, searchText, selectedLeaveType, selectedMonth, selectedYear, status, visibleRequests]);
   const visibleLeaveSummary = useMemo(() => {
     const showingRows = visibleRequests;
     const approvedRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved');
@@ -176,6 +183,15 @@ function LeaveRequests() {
         block: 'start',
       });
     });
+  };
+
+  const openNewRequest = () => {
+    setFileErrors({});
+    setForm({
+      ...getEmptyLeaveForm(currentEmployee, leaveTypes),
+      type: toolbarLeaveTypes.includes(selectedLeaveType) ? selectedLeaveType : leaveTypes[0]?.name || DEFAULT_LEAVE_TYPES[0].name,
+    });
+    setShowForm(true);
   };
 
   const selectedRequestDetails = useMemo(() => {
@@ -843,6 +859,94 @@ function getEmptyLeaveForm(currentEmployee = getCurrentEmployeeIdentity(), leave
 function normalizeLeaveDays(value) {
   const numeric = Number.parseInt(value, 10);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+function matchesSelectedLeaveType(request, selectedLeaveType) {
+  const selectedType = String(selectedLeaveType || '').trim().toLowerCase();
+  if (!selectedType || selectedType === 'all leave') {
+    return true;
+  }
+
+  return String(request?.type || '').trim().toLowerCase() === selectedType;
+}
+
+function matchesSelectedLeavePeriod(request, month, year) {
+  const monthIndex = leaveMonths.indexOf(month);
+  const targetYear = Number.parseInt(year, 10);
+
+  if (month === 'All Months' && year === 'All Years') {
+    return true;
+  }
+
+  if (month === 'All Months' || year === 'All Years') {
+    return true;
+  }
+
+  if (monthIndex < 0 || !Number.isFinite(targetYear)) {
+    return true;
+  }
+
+  const periodStart = new Date(targetYear, monthIndex, 1);
+  const periodEnd = new Date(targetYear, monthIndex + 1, 0);
+  const requestRange = getLeaveDateRange(request, targetYear);
+
+  if (!requestRange) {
+    return true;
+  }
+
+  return getDateKey(requestRange.start) <= getDateKey(periodEnd)
+    && getDateKey(requestRange.end) >= getDateKey(periodStart);
+}
+
+function getLeaveDateRange(request, fallbackYear) {
+  const start = parseLeaveDate(request?.fromDate || request?.from, fallbackYear);
+  const end = parseLeaveDate(request?.toDate || request?.to, fallbackYear);
+
+  if (!start && !end) {
+    return null;
+  }
+
+  return {
+    start: start || end,
+    end: end || start,
+  };
+}
+
+function parseLeaveDate(value, fallbackYear) {
+  if (!value) {
+    return null;
+  }
+
+  const text = String(value).trim();
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    return startOfDay(parsed);
+  }
+
+  const monthDayYear = text.match(/^(\d{1,2})\s([A-Za-z]{3,9})(?:\s(\d{4}))?$/);
+  if (monthDayYear) {
+    const monthIndex = leaveMonths.findIndex((item) => item.toLowerCase().startsWith(monthDayYear[2].slice(0, 3).toLowerCase()));
+    if (monthIndex >= 0) {
+      return startOfDay(new Date(Number(monthDayYear[3] || fallbackYear), monthIndex, Number(monthDayYear[1])));
+    }
+  }
+
+  const numericDate = text.match(/^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?$/);
+  if (numericDate) {
+    return startOfDay(new Date(Number(numericDate[3] || fallbackYear), Number(numericDate[2]) - 1, Number(numericDate[1])));
+  }
+
+  return null;
+}
+
+function getDateKey(date) {
+  return date instanceof Date && !Number.isNaN(date.getTime())
+    ? new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+    : Number.NEGATIVE_INFINITY;
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 async function downloadMedicalReportAsPdf(request) {

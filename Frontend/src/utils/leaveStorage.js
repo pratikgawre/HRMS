@@ -1,5 +1,5 @@
 import { people } from '../data/dummyData.js';
-import { apiRequest } from './api.js';
+import { apiRequest, safeApiRequest } from './api.js';
 
 let leaveRequestsCache = [];
 
@@ -29,7 +29,7 @@ export async function saveLeaveRequests(requests) {
 }
 
 export async function refreshStoredLeaveRequests() {
-  const requests = await apiRequest('/leaves');
+  const requests = await safeApiRequest('/leaves', leaveRequestsCache);
   leaveRequestsCache = Array.isArray(requests) ? requests.map(normalizeLeaveRequestFromApi) : [];
   window.dispatchEvent(new Event('kavyaLeaveRequestsChanged'));
   return getInitialLeaveRequests();
