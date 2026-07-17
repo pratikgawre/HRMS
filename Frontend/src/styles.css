@@ -896,6 +896,73 @@ button.attendance-summary-card.is-clickable:focus-visible {
   border-top-color: #C45AC5;
 }
 
+.leave-period-fields {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.35fr) minmax(150px, 1fr) minmax(130px, 0.8fr) auto;
+  align-items: end;
+  gap: 0.9rem;
+  margin: 1.15rem 0 1.35rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(201, 221, 221, 0.9);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(247, 252, 251, 0.94));
+  box-shadow: 0 10px 24px rgba(21, 59, 73, 0.06);
+}
+
+.leave-period-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.45rem;
+}
+
+.leave-period-field > span {
+  color: var(--dark-text);
+  font-size: 0.82rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.leave-period-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0.65rem 2.35rem 0.65rem 0.85rem;
+  border: 1px solid rgba(177, 207, 211, 0.9);
+  border-radius: 10px;
+  color: var(--normal-text);
+  background-color: #fff;
+  font: inherit;
+  font-weight: 650;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.leave-period-field select:hover {
+  border-color: rgba(15, 159, 154, 0.55);
+}
+
+.leave-period-field select:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(15, 159, 154, 0.13);
+}
+
+.leave-period-request {
+  min-height: 46px;
+  min-width: 148px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+@media (max-width: 920px) {
+  .leave-period-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .leave-period-request {
+    width: 100%;
+  }
+}
+
 .leave-queue-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
