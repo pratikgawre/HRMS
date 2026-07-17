@@ -259,6 +259,7 @@ function TeamAttendance() {
   const cardCount = teamIds.size;
   const presentCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'present').length;
   const lateCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'late').length;
+  const halfDayCount = rows.filter((row) => String(row.status || '').toLowerCase() === 'half day').length;
 
   useEffect(() => {
     if (!toast) {
@@ -328,15 +329,6 @@ function TeamAttendance() {
       tone: 'green',
       icon: 'ri-sun-line',
       onClick: () => navigate(`${teamAttendancePath}?status=Half%20Day`),
-    },
-    {
-      key: 'range',
-      label: 'Range',
-      value: currentRangeValue,
-      delta: rangeLabel,
-      tone: 'pink',
-      icon: 'ri-calendar-event-line',
-      onClick: () => navigate(`${teamAttendancePath}?range=month`),
     },
   ];
 
@@ -1190,7 +1182,6 @@ function getWorkbookDateKey(date) {
 }
 
 export default TeamAttendance;
-
 
 
 

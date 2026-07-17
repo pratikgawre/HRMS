@@ -15,6 +15,25 @@ import {
 } from '../utils/leaveBalance.js';
 
 const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
+const leaveMonthOptions = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+const currentLeavePeriod = new Date();
+const currentLeaveYear = currentLeavePeriod.getFullYear();
+const currentLeaveMonth = leaveMonthOptions[currentLeavePeriod.getMonth()];
+const leaveYearOptions = Array.from({ length: 5 }, (_, index) => currentLeaveYear - 2 + index);
+const leaveFilterOptions = ['All', 'Casual Leave', 'Sick Leave', 'Earned Leave', 'Work From Home'];
 const approveActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%2309767a" stroke-width="2.4"/%3E%3Cpath d="M8 12.25l2.45 2.45L16.5 8.65" stroke="%2309767a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/%3E%3C/svg%3E';
 const rejectActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%23d94d63" stroke-width="2.4"/%3E%3Cpath d="M8.75 8.75l6.5 6.5M15.25 8.75l-6.5 6.5" stroke="%23d94d63" stroke-width="2.4" stroke-linecap="round"/%3E%3C/svg%3E';
 
@@ -37,6 +56,9 @@ function LeaveRequests() {
   const [fileErrors, setFileErrors] = useState({});
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [queueFilter, setQueueFilter] = useState('all');
+  const [selectedLeaveType, setSelectedLeaveType] = useState('All');
+  const [leaveMonth, setLeaveMonth] = useState(currentLeaveMonth);
+  const [leaveYear, setLeaveYear] = useState(String(currentLeaveYear));
   const [reviewingRequestIds, setReviewingRequestIds] = useState(() => new Set());
   const tableRef = useRef(null);
   const leaveSummary = useMemo(
@@ -45,6 +67,22 @@ function LeaveRequests() {
   );
   const leaveTypeOptions = useMemo(() => getLeaveTypeOptions(leaveTypes), [leaveTypes]);
   const showMyLeaveSection = role !== 'admin';
+
+  const ownRequests = useMemo(() => requests.filter((request) => (
+    String(request.employeeId || '').trim() === String(currentEmployee.employeeId || '').trim()
+  )), [requests, currentEmployee.employeeId]);
+
+  const filteredOwnRequests = useMemo(() => ownRequests.filter((request) => {
+    const requestType = String(request.type || '').trim().toLowerCase();
+    if (selectedLeaveType !== 'All' && requestType !== selectedLeaveType.toLowerCase()) {
+      return false;
+    }
+
+    const requestDate = String(request.from || request.fromDate || '').slice(0, 10);
+    const [requestYear, requestMonth] = requestDate.split('-').map(Number);
+    return requestYear === Number(leaveYear)
+      && requestMonth === leaveMonthOptions.indexOf(leaveMonth) + 1;
+  }), [leaveMonth, leaveYear, ownRequests, selectedLeaveType]);
 
   useEffect(() => {
     if (leaveTypeOptions.length === 0) {
@@ -147,8 +185,9 @@ function LeaveRequests() {
 
     return filteredLeaveRequests.find((request) => request.id === selectedRequest.id)
       || visibleRequests.find((request) => request.id === selectedRequest.id)
+      || ownRequests.find((request) => request.id === selectedRequest.id)
       || null;
-  }, [filteredLeaveRequests, selectedRequest, visibleRequests]);
+  }, [filteredLeaveRequests, ownRequests, selectedRequest, visibleRequests]);
 
   useEffect(() => {
     const refreshRequests = () => {
@@ -470,10 +509,50 @@ function LeaveRequests() {
                 />
               ))}
             </section>
+            <div className="leave-period-fields" aria-label="Leave type, month and year">
+              <label className="leave-period-field">
+                <span>Leave</span>
+                <select value={selectedLeaveType} onChange={(event) => setSelectedLeaveType(event.target.value)}>
+                  {leaveFilterOptions.map((leaveType) => <option key={leaveType}>{leaveType}</option>)}
+                </select>
+              </label>
+              <label className="leave-period-field">
+                <span>Month</span>
+                <select value={leaveMonth} onChange={(event) => setLeaveMonth(event.target.value)}>
+                  {leaveMonthOptions.map((month) => <option key={month}>{month}</option>)}
+                </select>
+              </label>
+              <label className="leave-period-field">
+                <span>Year</span>
+                <select value={leaveYear} onChange={(event) => setLeaveYear(event.target.value)}>
+                  {leaveYearOptions.map((year) => <option key={year} value={year}>{year}</option>)}
+                </select>
+              </label>
+              {canCreateRequest && (
+                <button className="toolbar-primary leave-period-request" type="button" onClick={() => {
+                  setFileErrors({});
+                  setShowForm(true);
+                }}>
+                  <i className="ri-add-line" aria-hidden="true" />
+                  New Request
+                </button>
+              )}
+            </div>
+            <div className="leave-own-requests">
+              <h3>My Leave Requests</h3>
+              <DataTable
+                columns={leaveColumns}
+                rows={filteredOwnRequests}
+                emptyMessage="No leave requests found for the selected leave, month, and year."
+                onRowClick={setSelectedRequest}
+              />
+            </div>
           </Section>
         )}
 
-        <Section title="Leave Request Queue">
+        {canReviewRequests && (
+          <>
+            <Section title="Leave Request Queue">
           <section className="leave-queue-summary-grid" aria-label="Visible leave request count">
             {[ 
               {
@@ -521,9 +600,9 @@ function LeaveRequests() {
               />
             ))}
           </section>
-        </Section>
+            </Section>
 
-        <div className="page-toolbar" style={{ gap: '1.2rem', marginTop: '1.5rem' }}>
+            <div className="page-toolbar" style={{ gap: '1.2rem', marginTop: '1.5rem' }}>
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter leave status">
             <option>All</option>
             <option>Pending</option>
@@ -543,24 +622,17 @@ function LeaveRequests() {
               />
             </label>
           )}
-          {canCreateRequest && (
-            <button className="toolbar-primary" type="button" onClick={() => {
-              setFileErrors({});
-              setShowForm(true);
-            }}>
-              <i className="ri-add-line" aria-hidden="true" />
-              New Request
-            </button>
-          )}
-        </div>
-        <div ref={tableRef} style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-          <DataTable
-            columns={columns}
-            rows={filteredLeaveRequests}
-            emptyMessage={queueEmptyMessage}
-            onRowClick={isAdminOrHr ? undefined : setSelectedRequest}
-          />
-        </div>
+            </div>
+            <div ref={tableRef} style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+              <DataTable
+                columns={columns}
+                rows={filteredLeaveRequests}
+                emptyMessage={queueEmptyMessage}
+                onRowClick={isAdminOrHr ? undefined : setSelectedRequest}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {showForm && (
@@ -1018,4 +1090,3 @@ function getLeaveBalanceTone(name) {
 }
 
 export default LeaveRequests;
-

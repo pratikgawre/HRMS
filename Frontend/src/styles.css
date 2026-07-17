@@ -725,6 +725,10 @@ button.attendance-summary-card.is-clickable:focus-visible {
   border-top: 4px solid #f58f28;
 }
 
+.attendance-summary-card.is-green {
+  border-top: 4px solid #10b981;
+}
+
 .attendance-summary-card.is-pink {
   border-top: 4px solid #de5ca8;
 }
@@ -777,6 +781,10 @@ button.attendance-summary-card.is-clickable:focus-visible {
   background: linear-gradient(135deg, #f58f28, #ffb347);
 }
 
+.attendance-summary-card.is-green .attendance-summary-icon {
+  background: linear-gradient(135deg, #10b981, #34d399);
+}
+
 .attendance-summary-card.is-pink .attendance-summary-icon {
   background: linear-gradient(135deg, #de5ca8, #b15fd6);
 }
@@ -789,6 +797,55 @@ button.attendance-summary-card.is-clickable:focus-visible {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.85rem;
+}
+
+.leave-period-fields {
+  display: grid;
+  grid-template-columns: 220px 220px 180px minmax(150px, 1fr);
+  align-items: end;
+  gap: 1rem;
+  margin-top: 1.1rem;
+}
+
+.leave-period-request {
+  justify-self: end;
+  margin-bottom: 0;
+}
+
+.leave-own-requests {
+  margin-top: 1.4rem;
+}
+
+.leave-own-requests h3 {
+  margin: 0 0 0.85rem;
+  color: var(--dark-text);
+  font-size: 1rem;
+}
+
+.leave-period-field {
+  display: grid;
+  gap: 0.55rem;
+  color: #07162d;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.leave-period-field select {
+  width: 100%;
+  height: 44px;
+  padding: 0 2.5rem 0 1rem;
+  border: 1px solid #c8dfe4;
+  border-radius: 8px;
+  background: #fff;
+  color: #44566c;
+  font: inherit;
+  font-weight: 500;
+  outline: none;
+}
+
+.leave-period-field select:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(9, 159, 154, 0.12);
 }
 
 .leave-summary-grid .dashboard-card {
@@ -10461,6 +10518,14 @@ img.profile-avatar.large {
 
   .leave-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .leave-period-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .leave-period-request {
+    justify-self: stretch;
   }
 
   .leave-queue-summary-grid {
