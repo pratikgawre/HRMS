@@ -364,6 +364,7 @@ function getSearchRoutes(role) {
       { path: '/team-lead/team-attendance', keywords: ['team attendance', 'team attendence', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
       { path: '/team-lead/attendance', keywords: ['my attendance', 'self attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
       { path: '/team-lead/team', keywords: ['my team', 'employee', 'employees', 'team member', 'team members', 'member', 'people'] },
+      { path: '/team-lead/assets', keywords: ['asset', 'assets', 'inventory'] },
       { path: '/team-lead/leave-review', keywords: ['leave', 'vacation', 'absence'] },
       { path: '/team-lead/tasks', keywords: ['task', 'tasks', 'assignment'] },
       { path: '/team-lead/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
@@ -486,7 +487,7 @@ function getNotificationTargetPath(notification, role, roleBasePath) {
     return getRolePath(role, {
       admin: '/admin/assets',
       hr: '/hr/assets',
-      teamLead: '/team-lead/dashboard',
+      teamLead: '/team-lead/assets',
       projectManager: '/project-manager/assets',
       employee: '/employee/assets',
     }, `${roleBasePath}/dashboard`);
@@ -560,4 +561,3 @@ function getHeaderEmployeeIdentity(role) {
     profilePicture: resolvedProfilePicture,
   };
 }
-
