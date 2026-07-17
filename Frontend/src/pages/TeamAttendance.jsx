@@ -560,20 +560,6 @@ function TeamAttendance() {
                   ),
                 },
                 ...attendanceColumns,
-                ...(isMyAttendanceView ? [] : [{
-                  key: 'actions',
-                  label: 'Actions',
-                  render: (row) => (
-                    <button
-                      className="payroll-secondary"
-                      type="button"
-                      onClick={() => openRecommendDialog(row)}
-                    >
-                      <i className="ri-edit-line" aria-hidden="true" />
-                      Correct Login
-                    </button>
-                  ),
-                }])
               ]}
               rows={displayedRows}
               emptyMessage={summaryFocus === 'team'

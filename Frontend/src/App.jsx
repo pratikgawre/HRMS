@@ -99,6 +99,7 @@ function App() {
           <Route element={<DashboardLayout />}>
             <Route path="/team-lead/dashboard" element={<TeamLeadDashboard />} />
             <Route path="/team-lead/team" element={<MyTeam />} />
+            <Route path="/team-lead/assets" element={<Assets />} />
             <Route path="/team-lead/attendance" element={<EmployeeAttendance />} />
             <Route path="/team-lead/my-attendance" element={<EmployeeAttendance />} />
             <Route path="/team-lead/team-attendance" element={<TeamAttendance />} />

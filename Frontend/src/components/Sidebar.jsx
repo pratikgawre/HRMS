@@ -38,6 +38,7 @@ const menus = {
   teamLead: [
     { label: 'Team Dashboard', to: '/team-lead/dashboard', icon: 'ri-dashboard-line' },
     { label: 'Announcements', to: '/team-lead/announcements', icon: 'ri-megaphone-line' },
+    { label: 'Assets', to: '/team-lead/assets', icon: 'ri-briefcase-4-line' },
     { label: 'Leave Review', to: '/team-lead/leave-review', icon: 'ri-calendar-check-line' },
     { label: 'My Attendance', to: '/team-lead/attendance', icon: 'ri-time-line' },
     { label: 'Team Attendance', to: '/team-lead/team-attendance', icon: 'ri-team-line' },

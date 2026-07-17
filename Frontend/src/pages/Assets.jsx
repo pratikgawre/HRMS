@@ -12,6 +12,7 @@ import { apiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import { useLocation } from 'react-router-dom';
+import { getVisibleTeamEmployeeIds, normalizeProjects } from './attendancePageUtils.js';
 
 const ADMIN_ASSET_CACHE_KEY = 'kavyaAssetsAdminCache';
 const ADMIN_EMPLOYEE_CACHE_KEY = 'kavyaAssetsAdminEmployeesCache';
@@ -20,16 +21,18 @@ function Assets() {
   const navigate = useNavigate();
   const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
+  const currentEmployee = getCurrentEmployeeIdentity();
   const isHrModule = location.pathname.startsWith('/hr/');
+  const isTeamScopedRole = role === 'projectManager' || role === 'teamLead';
   if (role === 'employee') {
     return <EmployeeAssetsView />;
   }
   const canManage = role === 'admin' || role === 'hr';
-  const isProjectManager = role === 'projectManager';
   const canRaiseRepair = role === 'employee';
-  const canRaiseReplacement = role === 'employee' || role === 'projectManager';
+  const canRaiseReplacement = role === 'employee' || isTeamScopedRole;
   const [assets, setAssets] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [assetView, setAssetView] = useState('all');
   const [selectedAsset, setSelectedAsset] = useState(null);
@@ -66,9 +69,10 @@ function Assets() {
           setEmployees(normalizedCachedEmployees);
         }
 
-        const [assetRows, employeeRows] = await Promise.all([
+        const [assetRows, employeeRows, projectRows] = await Promise.all([
           apiRequest('/assets').catch(() => []),
           apiRequest('/employees').catch(() => []),
+          apiRequest('/projects').catch(() => []),
         ]);
 
         if (!active) {
@@ -76,6 +80,7 @@ function Assets() {
         }
 
         const normalizedEmployees = normalizeAssetDirectoryEmployees(Array.isArray(employeeRows) ? employeeRows : []);
+        const normalizedProjects = normalizeProjects(Array.isArray(projectRows) ? projectRows : []);
         console.info('[Assets] fetch response', {
           assetCount: Array.isArray(assetRows) ? assetRows.length : 0,
           sampleDates: Array.isArray(assetRows)
@@ -89,6 +94,7 @@ function Assets() {
         const normalizedAssets = normalizeAssetRows(Array.isArray(assetRows) ? assetRows : [], normalizedEmployees);
         setAssets(normalizedAssets);
         setEmployees(normalizedEmployees);
+        setProjects(normalizedProjects);
         writeCachedJson(ADMIN_ASSET_CACHE_KEY, Array.isArray(assetRows) ? assetRows : []);
         writeCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, Array.isArray(employeeRows) ? employeeRows : []);
       } catch {
@@ -148,14 +154,21 @@ function Assets() {
     pendingReturn: assets.filter((asset) => asset.status === 'Pending Return').length,
   }), [assets]);
 
-  const teamMembers = useMemo(() => employees.filter((employee) => !isAdminEmployee(employee)), [employees]);
-  const teamMemberIds = useMemo(() => new Set(
-    teamMembers
-      .map((employee) => String(employee.employeeCode || employee.employeeId || employee.id || '').trim().toLowerCase())
-      .filter(Boolean),
-  ), [teamMembers]);
+  const teamMemberIds = useMemo(() => {
+    if (!isTeamScopedRole) {
+      return new Set();
+    }
+
+    return getVisibleTeamEmployeeIds({
+      role,
+      currentEmployeeId: currentEmployee.employeeId || currentEmployee.id || '',
+      currentEmployeeName: currentEmployee.employeeName || currentEmployee.name || currentEmployee.displayName || '',
+      employees,
+      projects,
+    });
+  }, [currentEmployee.displayName, currentEmployee.employeeId, currentEmployee.employeeName, currentEmployee.id, currentEmployee.name, employees, isTeamScopedRole, projects, role]);
   const scopedAssets = useMemo(() => {
-    if (!isProjectManager) {
+    if (!isTeamScopedRole) {
       return assets;
     }
 
@@ -164,7 +177,7 @@ function Assets() {
       const assignedTo = String(asset.assignedTo || '').trim();
       return teamMemberIds.has(assignedToEmployeeId) || (assignedTo && assignedTo !== '-');
     });
-  }, [assets, isProjectManager, teamMemberIds]);
+  }, [assets, isTeamScopedRole, teamMemberIds]);
   const scopedSummary = useMemo(() => ({
     total: scopedAssets.length,
     assigned: scopedAssets.filter((asset) => asset.status === 'Assigned').length,
@@ -175,7 +188,7 @@ function Assets() {
     pendingReturn: scopedAssets.filter((asset) => asset.status === 'Pending Return').length,
   }), [scopedAssets]);
 
-  const activeSummary = isProjectManager ? scopedSummary : summary;
+  const activeSummary = isTeamScopedRole ? scopedSummary : summary;
 
   const handleSummaryCardClick = (view, matchFn) => {
     const matchingAssets = scopedAssets.filter(matchFn);
@@ -681,8 +694,8 @@ function Assets() {
     <>
       <Hero
         title="Asset Management"
-        copy={isProjectManager
-          ? 'Project Managers can view team assets and raise replacement requests for their team only.'
+        copy={isTeamScopedRole
+          ? 'Team Leads and Project Managers can view team assets and raise replacement requests for their team only.'
           : role === 'employee'
             ? 'Employees can view assigned assets and raise replacement or repair requests.'
             : 'HR and Admin can manage company assets, assignments, replacement requests, repair cases, and return tracking.'}
@@ -850,13 +863,13 @@ function Assets() {
           <DataTable
             columns={assignedColumns}
             rows={assignedAssets}
-            emptyMessage={canManage ? 'No assigned assets.' : isProjectManager ? 'No team assets found.' : 'No assigned assets available for your account.'}
+            emptyMessage={canManage ? 'No assigned assets.' : isTeamScopedRole ? 'No team assets found.' : 'No assigned assets available for your account.'}
           />
         </Section>
         <Section id="replacement-request" title="Replacement Request">
           <DataTable columns={requestColumns} rows={replacementRequests} emptyMessage="No replacement requests." />
         </Section>
-        {!isProjectManager && (
+        {!isTeamScopedRole && (
           <>
             <Section id="repair-status" title="Repair Status">
               <DataTable columns={requestColumns} rows={repairAssets} emptyMessage="No repair requests." />
