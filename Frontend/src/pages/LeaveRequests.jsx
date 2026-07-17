@@ -59,7 +59,7 @@ function LeaveRequests() {
   const [fileErrors, setFileErrors] = useState({});
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [queueFilter, setQueueFilter] = useState('all');
-  const [selectedLeaveType, setSelectedLeaveType] = useState('All');
+  const [ownLeaveType, setOwnLeaveType] = useState('All');
   const [leaveMonth, setLeaveMonth] = useState(currentLeaveMonth);
   const [leaveYear, setLeaveYear] = useState(String(currentLeaveYear));
   const [reviewingRequestIds, setReviewingRequestIds] = useState(() => new Set());
@@ -77,7 +77,7 @@ function LeaveRequests() {
 
   const filteredOwnRequests = useMemo(() => ownRequests.filter((request) => {
     const requestType = String(request.type || '').trim().toLowerCase();
-    if (selectedLeaveType !== 'All' && requestType !== selectedLeaveType.toLowerCase()) {
+    if (ownLeaveType !== 'All' && requestType !== ownLeaveType.toLowerCase()) {
       return false;
     }
 
@@ -85,7 +85,7 @@ function LeaveRequests() {
     const [requestYear, requestMonth] = requestDate.split('-').map(Number);
     return requestYear === Number(leaveYear)
       && requestMonth === leaveMonthOptions.indexOf(leaveMonth) + 1;
-  }), [leaveMonth, leaveYear, ownRequests, selectedLeaveType]);
+  }), [leaveMonth, leaveYear, ownLeaveType, ownRequests]);
 
   useEffect(() => {
     if (leaveTypeOptions.length === 0) {
@@ -528,7 +528,7 @@ function LeaveRequests() {
             <div className="leave-period-fields" aria-label="Leave type, month and year">
               <label className="leave-period-field">
                 <span>Leave</span>
-                <select value={selectedLeaveType} onChange={(event) => setSelectedLeaveType(event.target.value)}>
+                <select value={ownLeaveType} onChange={(event) => setOwnLeaveType(event.target.value)}>
                   {leaveFilterOptions.map((leaveType) => <option key={leaveType}>{leaveType}</option>)}
                 </select>
               </label>
@@ -871,7 +871,7 @@ function matchesSelectedLeaveType(request, selectedLeaveType) {
 }
 
 function matchesSelectedLeavePeriod(request, month, year) {
-  const monthIndex = leaveMonths.indexOf(month);
+  const monthIndex = leaveMonthOptions.indexOf(month);
   const targetYear = Number.parseInt(year, 10);
 
   if (month === 'All Months' && year === 'All Years') {
@@ -925,7 +925,7 @@ function parseLeaveDate(value, fallbackYear) {
 
   const monthDayYear = text.match(/^(\d{1,2})\s([A-Za-z]{3,9})(?:\s(\d{4}))?$/);
   if (monthDayYear) {
-    const monthIndex = leaveMonths.findIndex((item) => item.toLowerCase().startsWith(monthDayYear[2].slice(0, 3).toLowerCase()));
+    const monthIndex = leaveMonthOptions.findIndex((item) => item.toLowerCase().startsWith(monthDayYear[2].slice(0, 3).toLowerCase()));
     if (monthIndex >= 0) {
       return startOfDay(new Date(Number(monthDayYear[3] || fallbackYear), monthIndex, Number(monthDayYear[1])));
     }
