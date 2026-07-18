@@ -15,7 +15,6 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.AbstractMap;
 import com.kavya.hrms.repository.AnnouncementRepository;
 import com.kavya.hrms.repository.AttendanceRecordRepository;
 import com.kavya.hrms.repository.AssetRepository;
@@ -248,12 +247,21 @@ public class DashboardController {
     Set<DayOfWeek> weekOffDays = resolveWeekOffDays(settings != null ? settings.getWeekOff() : null);
     Set<LocalDate> holidayDates = resolveHolidayDates(settings, month);
     Map<LocalDate, AttendanceRecord> attendanceByDate = attendanceRecords.stream()
-        .map(record -> new AbstractMap.SimpleEntry<>(parseAttendanceDate(record, month.getYear()), record))
-        .filter(entry -> entry.getKey() != null
-            && entry.getKey().getYear() == month.getYear()
-            && entry.getKey().getMonthValue() == month.getMonthValue()
-            && !entry.getKey().isAfter(summaryEndDate))
-        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, this::choosePreferredAttendanceRecord));
+        .map(record -> {
+          LocalDate attendanceDate = parseAttendanceDate(record, month.getYear());
+          if (attendanceDate == null
+              || attendanceDate.getYear() != month.getYear()
+              || attendanceDate.getMonthValue() != month.getMonthValue()
+              || attendanceDate.isAfter(summaryEndDate)) {
+            return null;
+          }
+          return Map.entry(attendanceDate, record);
+        })
+        .filter(entry -> entry != null)
+        .collect(Collectors.toMap(
+            entry -> entry.getKey(),
+            entry -> entry.getValue(),
+            (left, right) -> choosePreferredAttendanceRecord(left, right)));
 
     LeaveCoverage approvedLeaveCoverage = resolveApprovedLeaveCoverage(
         employeeId, employeeName, month, weekOffDays, holidayDates, effectiveEndDate);
@@ -324,7 +332,7 @@ public class DashboardController {
 
     String timezone = systemSettingsRepository.findAll().stream()
         .findFirst()
-        .map(SystemSettings::getTimezone)
+        .map(settings -> settings.getTimezone())
         .filter(value -> value != null && !value.isBlank())
         .orElse("Asia/Kolkata");
 
@@ -408,7 +416,7 @@ public class DashboardController {
   private ZoneId resolveZoneId() {
     String timezone = systemSettingsRepository.findAll().stream()
         .findFirst()
-        .map(SystemSettings::getTimezone)
+        .map(settings -> settings.getTimezone())
         .filter(value -> value != null && !value.isBlank())
         .orElse("Asia/Kolkata");
 
