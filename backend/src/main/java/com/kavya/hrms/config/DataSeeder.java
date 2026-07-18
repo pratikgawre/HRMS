@@ -137,6 +137,7 @@ public class DataSeeder {
         settings.setDepartments(java.util.List.of("HR", "Engineering", "Finance", "Operations", "Sales", "Support"));
         settings.setDesignations(java.util.List.of("HR Manager", "Software Engineer", "Product Designer", "Accountant",
             "Sales Executive", "Support Executive"));
+        settings.setHolidays(new ArrayList<>());
         SystemSettings.LeaveTypeSetting casual = new SystemSettings.LeaveTypeSetting();
         casual.setName("Casual Leave");
         casual.setDays(12);

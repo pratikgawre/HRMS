@@ -1224,18 +1224,6 @@ function Projects() {
               )}
             </div>
 
-            <div className="project-snapshot-card">
-              <p className="eyebrow">Delivery Snapshot</p>
-              <div className="project-snapshot-list">
-                {visibleProjects.slice(0, 4).map((project) => (
-                  <button key={project.id} type="button" className={project.id === selectedProjectId ? 'is-selected' : ''} onClick={() => openProject(project)}>
-                    <strong>{project.name}</strong>
-                    <small>{project.progress} • {project.status}</small>
-                  </button>
-                ))}
-                {visibleProjects.length === 0 && <span className="project-empty-state">No project records found.</span>}
-              </div>
-            </div>
           </aside>
         </div>
       </Section>

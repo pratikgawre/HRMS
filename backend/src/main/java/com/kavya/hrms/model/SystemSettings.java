@@ -16,6 +16,7 @@ public class SystemSettings {
   private String payrollCutoff;
   private List<String> departments;
   private List<String> designations;
+  private List<String> holidays;
   private List<LeaveTypeSetting> leaveTypes;
   private Map<String, List<String>> permissionMatrix;
   private Map<String, String> payrollSettings;
@@ -36,6 +37,8 @@ public class SystemSettings {
   public void setDepartments(List<String> departments) { this.departments = departments; }
   public List<String> getDesignations() { return designations; }
   public void setDesignations(List<String> designations) { this.designations = designations; }
+  public List<String> getHolidays() { return holidays; }
+  public void setHolidays(List<String> holidays) { this.holidays = holidays; }
   public List<LeaveTypeSetting> getLeaveTypes() { return leaveTypes; }
   public void setLeaveTypes(List<LeaveTypeSetting> leaveTypes) { this.leaveTypes = leaveTypes; }
   public Map<String, List<String>> getPermissionMatrix() { return permissionMatrix; }
