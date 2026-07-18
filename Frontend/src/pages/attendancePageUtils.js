@@ -54,6 +54,7 @@ export function normalizeProjects(items = []) {
     teamLeadId: project.teamLeadId || '',
     teamLeadName: project.teamLeadName || '',
     teamMembers: Array.isArray(project.teamMembers) ? project.teamMembers : [],
+    teamMemberDetails: Array.isArray(project.teamMemberDetails) ? project.teamMemberDetails : [],
     status: project.status || 'Planning',
   }));
 }
@@ -74,12 +75,7 @@ export function getVisibleTeamEmployeeIds({ role, currentEmployeeId, currentEmpl
         return;
       }
 
-      project.teamMembers.forEach((member) => {
-        const memberId = getEmployeeId(member);
-        if (memberId) {
-          ids.add(memberId);
-        }
-      });
+      collectProjectMemberIds(project).forEach((memberId) => ids.add(memberId));
     });
   }
 
@@ -91,12 +87,7 @@ export function getVisibleTeamEmployeeIds({ role, currentEmployeeId, currentEmpl
         return;
       }
 
-      project.teamMembers.forEach((member) => {
-        const memberId = getEmployeeId(member);
-        if (memberId) {
-          ids.add(memberId);
-        }
-      });
+      collectProjectMemberIds(project).forEach((memberId) => ids.add(memberId));
     });
   }
 
@@ -294,6 +285,37 @@ function getMonthIndex(shortMonth) {
 
 function getEmployeeId(employee) {
   return String(employee?.employeeId || employee?.employeeCode || employee?.id || '').trim();
+}
+
+function collectProjectMemberIds(project) {
+  const memberIds = new Set();
+
+  (Array.isArray(project?.teamMembers) ? project.teamMembers : []).forEach((member) => {
+    const memberId = getEmployeeId(member) || String(member || '').trim();
+    if (memberId) {
+      memberIds.add(memberId);
+    }
+  });
+
+  (Array.isArray(project?.teamMemberDetails) ? project.teamMemberDetails : []).forEach((member, index) => {
+    if (typeof member === 'string') {
+      const memberId = String(member).trim();
+      if (memberId) {
+        memberIds.add(memberId);
+      }
+      return;
+    }
+
+    const memberId = getEmployeeId(member)
+      || String(member?.employeeId || member?.employeeCode || member?.name || member?.displayName || '').trim()
+      || String(project?.teamMembers?.[index] || '').trim();
+
+    if (memberId) {
+      memberIds.add(memberId);
+    }
+  });
+
+  return memberIds;
 }
 
 function matchesIdentity(primaryValue, secondaryValue, currentEmployeeId, currentEmployeeName) {

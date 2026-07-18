@@ -17,7 +17,8 @@ import { getUsers, saveUsers, setUsersCache } from '../utils/user-management.js'
 import { ACCESS_ROLE_OPTIONS, normalizeAccessRole } from '../utils/role-access.js';
 import { getSessionValue } from '../utils/appSession.js';
 
-const departments = ['Design', 'People Ops', 'Engineering', 'Finance', 'Quality', 'Delivery', 'Sales'];
+const DEFAULT_DEPARTMENTS = ['Design', 'People Ops', 'Engineering', 'Finance', 'Quality', 'Delivery', 'Sales'];
+const DEFAULT_DESIGNATIONS = ['Developer', 'Team Lead', 'Project Manager', 'HR Manager', 'Accountant', 'Designer'];
 const statuses = ['Active', 'On Leave', 'Inactive'];
 const employmentTypes = ['Full Time', 'Contract', 'Intern', 'Probation'];
 const DEFAULT_EMPLOYEE_PASSWORD = 'employee123';
@@ -111,7 +112,7 @@ const fileUploadConfig = {
 const optionalEmployeeFields = new Set(['profilePicture', 'displayName', 'esiNo', 'pfUanNo']);
 const fieldValidationLabels = {
   employeeCode: 'Employee ID',
-  jobTitle: 'Job Title',
+  jobTitle: 'Designation',
   grade: 'Grade',
   mobileNo: 'Mobile number',
   email: 'Email address',
@@ -144,7 +145,7 @@ const fieldValidationLabels = {
 };
 const fieldHints = {
   employeeCode: 'Required. Use letters and numbers only.',
-  jobTitle: 'Required. Use letters and spaces only.',
+  jobTitle: 'Required. Select a designation.',
   grade: 'Required. Enter one capital letter.',
   mobileNo: 'Required. Enter exactly 10 digits.',
   email: 'Required. Enter a valid email address.',
@@ -161,6 +162,27 @@ const fieldHints = {
 };
 
 const EMPLOYEE_DELETE_UNDO_MS = 6000;
+
+function normalizeEmployeeOptionList(value, fallback = []) {
+  const source = Array.isArray(value) && value.length > 0 ? value : fallback;
+  return [...new Set(source.map((item) => String(item || '').trim()).filter(Boolean))];
+}
+
+function normalizeEmployeeSettings(payload = {}) {
+  return {
+    departments: normalizeEmployeeOptionList(payload.departments, DEFAULT_DEPARTMENTS),
+    designations: normalizeEmployeeOptionList(payload.designations, DEFAULT_DESIGNATIONS),
+  };
+}
+
+function includeCurrentEmployeeOption(options, currentValue) {
+  const value = String(currentValue || '').trim();
+  if (!value) {
+    return options;
+  }
+
+  return options.includes(value) ? options : [value, ...options];
+}
 
 const employeeSteps = [
   {
@@ -189,8 +211,8 @@ const employeeSteps = [
       ['joiningDate', 'Joining Date', 'date'],
       ['workingLocation', 'Working Location'],
       ['employmentType', 'Employment Type', 'select', employmentTypes],
-      ['department', 'Department', 'select', departments],
-      ['jobTitle', 'Job Title'],
+      ['department', 'Department', 'select'],
+      ['jobTitle', 'Designation', 'select'],
       ['accessRole', 'Access Role', 'select', []],
       ['grade', 'Grade'],
       ['employmentBackground', 'Employment Background'],
@@ -242,6 +264,7 @@ const employeeSteps = [
 function Employees() {
   const location = useLocation();
   const [employees, setEmployees] = useState([]);
+  const [employeeSettings, setEmployeeSettings] = useState(() => normalizeEmployeeSettings());
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All');
   const [department, setDepartment] = useState('All Departments');
@@ -255,7 +278,7 @@ function Employees() {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [deleteTargetEmployee, setDeleteTargetEmployee] = useState(null);
   const [undoDeleteRecord, setUndoDeleteRecord] = useState(null);
-  const [form, setForm] = useState(getEmptyEmployeeForm());
+  const [form, setForm] = useState(() => createEmptyEmployeeForm());
   const [saveToast, setSaveToast] = useState(null);
   const [isSavingEmployee, setIsSavingEmployee] = useState(false);
 
@@ -284,15 +307,37 @@ function Employees() {
       }
     };
 
+    const loadEmployeeSettings = async () => {
+      try {
+        const payload = await safeApiRequest('/settings', null);
+        if (!active) {
+          return;
+        }
+
+        setEmployeeSettings(normalizeEmployeeSettings(payload || {}));
+      } catch {
+        if (active) {
+          setEmployeeSettings(normalizeEmployeeSettings());
+        }
+      }
+    };
+
     loadEmployees();
+    loadEmployeeSettings();
     const handleWindowFocus = () => {
       loadEmployees();
+      loadEmployeeSettings();
+    };
+    const handleSettingsChanged = () => {
+      loadEmployeeSettings();
     };
     window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('kavyaSettingsChanged', handleSettingsChanged);
 
     return () => {
       active = false;
       window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('kavyaSettingsChanged', handleSettingsChanged);
     };
   }, []);
 
@@ -388,6 +433,8 @@ function Employees() {
       { label: 'Full Time', value: String(fullTime).padStart(2, '0'), delta: 'Core team', tone: 'pink', icon: 'ri-briefcase-4-line', onClick: () => handleSummaryCardClick('Full Time') },
     ];
   }, [employees]);
+  const departmentOptions = employeeSettings.departments.length ? employeeSettings.departments : DEFAULT_DEPARTMENTS;
+  const designationOptions = employeeSettings.designations.length ? employeeSettings.designations : DEFAULT_DESIGNATIONS;
 
   const columns = [
     {
@@ -403,7 +450,7 @@ function Employees() {
         </div>
       ),
     },
-    { key: 'jobTitle', label: 'Job Title' },
+    { key: 'jobTitle', label: 'Designation' },
     { key: 'department', label: 'Department' },
     { key: 'employmentType', label: 'Type' },
     { key: 'status', label: 'Status' },
@@ -431,7 +478,10 @@ function Employees() {
 
   const openAddEmployee = () => {
     setEditingEmployee(null);
-    setForm(getEmptyEmployeeForm());
+    setForm(createEmptyEmployeeForm({
+      department: departmentOptions[0] || '',
+      jobTitle: designationOptions[0] || '',
+    }));
     setMessage('');
     setCredentialNotice(null);
     setIsModalOpen(true);
@@ -648,14 +698,14 @@ function Employees() {
       </div>
 
       <Section title="Employee Directory" id="employee-directory">
-        <div className="page-toolbar">
+    <div className="page-toolbar">
           <label className="toolbar-search">
             <i className="ri-search-line" aria-hidden="true" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search employee, email, job title, department" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search employee, email, designation, department" />
           </label>
           <select value={department} onChange={(event) => setDepartment(event.target.value)} aria-label="Filter by department">
             <option>All Departments</option>
-            {departments.map((item) => <option key={item}>{item}</option>)}
+            {departmentOptions.map((item) => <option key={item}>{item}</option>)}
           </select>
           <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter by status">
             <option>All</option>
@@ -731,6 +781,8 @@ function Employees() {
           setForm={setForm}
           employees={employees}
           editingEmployee={editingEmployee}
+          departmentOptions={departmentOptions}
+          designationOptions={designationOptions}
           title={editingEmployee ? 'Edit Employee' : 'Add Employee'}
           onClose={() => setIsModalOpen(false)}
           onSubmit={saveEmployee}
@@ -808,7 +860,7 @@ function EmployeePreviewModal({ employee, onClose }) {
             <Avatar employee={employee} className="profile-avatar" />
             <div>
               <h3>{employee.displayName}</h3>
-              <p>{employee.jobTitle}</p>
+              <p>{employee.jobTitle || employee.designation || '-'}</p>
             </div>
             <span className={`status status-${String(employee.status).toLowerCase().replaceAll(' ', '-')}`}>{employee.status}</span>
           </div>
@@ -834,7 +886,7 @@ function EmployeePreviewModal({ employee, onClose }) {
             ['Working Location', employee.workingLocation],
             ['Employment Type', employee.employmentType],
             ['Department', employee.department],
-            ['Job Title', employee.jobTitle],
+            ['Designation', employee.jobTitle || employee.designation],
             ['Grade', employee.grade],
             ['Employment Background', employee.employmentBackground],
           ]} />
@@ -892,7 +944,19 @@ function Avatar({ employee, className = '' }) {
   return <span className={classes}>{employee.avatar}</span>;
 }
 
-function EmployeeModal({ form, setForm, employees, editingEmployee, title, onClose, onSubmit, isSaving = false, submitLabel = 'Save Employee' }) {
+function EmployeeModal({
+  form,
+  setForm,
+  employees,
+  editingEmployee,
+  departmentOptions,
+  designationOptions,
+  title,
+  onClose,
+  onSubmit,
+  isSaving = false,
+  submitLabel = 'Save Employee',
+}) {
   const [stepIndex, setStepIndex] = useState(0);
   const [fileErrors, setFileErrors] = useState({});
   const [sameAsAboveAddress, setSameAsAboveAddress] = useState(false);
@@ -1106,12 +1170,17 @@ function EmployeeModal({ form, setForm, employees, editingEmployee, title, onClo
     }
 
     if (type === 'select') {
+      const currentValue = String(value || '').trim();
       const selectOptions = key === 'bankName'
         ? getBankNameOptions(value)
         : key === 'accountType'
           ? getAccountTypeOptions(value)
           : key === 'accessRole'
             ? accessRoleOptions
+            : key === 'department'
+              ? includeCurrentEmployeeOption(departmentOptions, currentValue)
+              : key === 'jobTitle'
+                ? includeCurrentEmployeeOption(designationOptions, currentValue)
             : options;
 
       return (
@@ -1119,6 +1188,8 @@ function EmployeeModal({ form, setForm, employees, editingEmployee, title, onClo
           <span>{label}</span>
           <select required={isFieldRequired(key)} value={value} onChange={(event) => update(key, event.target.value)}>
             {key === 'bankName' && <option value="">Select bank name</option>}
+            {key === 'department' && <option value="">Select department</option>}
+            {key === 'jobTitle' && <option value="">Select designation</option>}
             {renderSelectOptions(selectOptions)}
           </select>
         </label>
@@ -1246,7 +1317,7 @@ function EmployeeModal({ form, setForm, employees, editingEmployee, title, onClo
   );
 }
 
-function getEmptyEmployeeForm() {
+function createEmptyEmployeeForm(defaults = {}) {
   return {
     employeeCode: '',
     profilePicture: '',
@@ -1266,8 +1337,8 @@ function getEmptyEmployeeForm() {
     joiningDate: '',
     workingLocation: '',
     employmentType: employmentTypes[0],
-    department: departments[0],
-    jobTitle: '',
+    department: defaults.department || '',
+    jobTitle: defaults.jobTitle || '',
     accessRole: 'Employee',
     grade: '',
     employmentBackground: '',
@@ -1353,7 +1424,7 @@ function isAdminEmployee(employee) {
 }
 
 function getFormFromEmployee(employee) {
-  const emptyForm = getEmptyEmployeeForm();
+  const emptyForm = createEmptyEmployeeForm();
   const form = Object.fromEntries(Object.keys(emptyForm).map((key) => [key, employee[key] || emptyForm[key]]));
   form.aadhaarDocument = deserializeEmployeeDocument(employee.aadhaarDocument);
   form.panDocument = deserializeEmployeeDocument(employee.panDocument);
@@ -1881,7 +1952,7 @@ function getEmployeeFieldError(key, value, { requireFilled = true, today = new D
     case 'employeeCode':
       return /^[A-Za-z0-9]+$/.test(trimmed) ? '' : 'Employee ID must contain only letters and numbers.';
     case 'jobTitle':
-      return /^[A-Za-z ]+$/.test(trimmed) ? '' : 'Job Title must contain letters and spaces only.';
+      return /^[A-Za-z ]+$/.test(trimmed) ? '' : 'Designation must contain letters and spaces only.';
     case 'grade':
       return /^[A-Z]$/.test(trimmed) ? '' : 'Grade must be a single capital letter.';
     case 'mobileNo':
