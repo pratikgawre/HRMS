@@ -2,23 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import { CardGrid, Hero, InsightGrid, QuickActions, Section, leaveColumns } from './AdminDashboard.jsx';
-import { getVisibleTeamEmployeeIds, normalizeEmployees, normalizeProjects } from './attendancePageUtils.js';
+import { normalizeEmployees } from './attendancePageUtils.js';
+import { getProjectAssigneeOptions, normalizeLookupValue } from '../utils/teamLeadAssignments.js';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
 import {
   getInitialAttendanceRows,
   getTodayLabel,
-  refreshStoredAttendanceRows,
 } from '../utils/attendanceStorage.js';
 import {
   getInitialLeaveRequests,
   refreshStoredLeaveRequests,
 } from '../utils/leaveStorage.js';
-import { safeApiRequest } from '../utils/api.js';
+import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { DEFAULT_LEAVE_TYPES, getEmployeeLeaveSummary, normalizeLeaveTypes } from '../utils/leaveBalance.js';
 import {
   announcements as fallbackAnnouncements,
-  people as fallbackPeople,
-  projects as fallbackProjects,
   tasks as fallbackTasks,
 } from '../data/dummyData.js';
 
@@ -30,7 +28,6 @@ function TeamLeadDashboard() {
   const todayLabel = getTodayLabel();
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
   const [employees, setEmployees] = useState([]);
-  const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState(fallbackTasks);
   const [leaveRequests, setLeaveRequests] = useState(getInitialLeaveRequests);
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
@@ -45,13 +42,29 @@ function TeamLeadDashboard() {
 
     const refreshAttendance = async () => {
       try {
-        const rows = await refreshStoredAttendanceRows();
-        if (active && Array.isArray(rows)) {
-          setAttendance(rows);
+        const [teamPayload, scopedProjects] = await Promise.all([
+          apiRequest('/attendance/team').catch(() => ({ records: [], members: [], projects: [] })),
+          safeApiRequest(`/projects/team-lead/${encodeURIComponent(employeeIdentity.employeeId || '')}`, []),
+        ]);
+        if (active) {
+          setAttendance(Array.isArray(teamPayload?.records) ? teamPayload.records : []);
+          const payloadMembers = normalizeEmployees(teamPayload?.members);
+          const projectsForScope = Array.isArray(teamPayload?.projects) && teamPayload.projects.length > 0
+            ? teamPayload.projects
+            : (Array.isArray(scopedProjects) ? scopedProjects : []);
+          const membersById = new Map();
+          projectsForScope.forEach((project) => {
+            getProjectAssigneeOptions(project, payloadMembers, employeeIdentity).forEach((member) => {
+              const memberId = normalizeLookupValue(member.employeeId || member.employeeCode || member.id);
+              if (memberId) membersById.set(memberId, member);
+            });
+          });
+          setEmployees(normalizeEmployees([...membersById.values()]));
         }
       } catch {
         if (active) {
-          setAttendance(getInitialAttendanceRows());
+          setAttendance([]);
+          setEmployees([]);
         }
       }
     };
@@ -71,18 +84,14 @@ function TeamLeadDashboard() {
 
     const refreshScope = () => {
       Promise.all([
-        safeApiRequest('/employees', fallbackPeople),
-        safeApiRequest('/projects', fallbackProjects),
         safeApiRequest('/tasks', fallbackTasks),
         safeApiRequest('/announcements', fallbackAnnouncements),
         safeApiRequest('/settings', null),
-      ]).then(([employeeRows, projectRows, taskRows, announcementRows, settingsPayload]) => {
+      ]).then(([taskRows, announcementRows, settingsPayload]) => {
         if (!active) {
           return;
         }
 
-        setEmployees(normalizeEmployees(employeeRows));
-        setProjects(normalizeProjects(projectRows));
         setTasks(Array.isArray(taskRows) ? taskRows : fallbackTasks);
         setAnnouncements(Array.isArray(announcementRows) ? announcementRows : fallbackAnnouncements);
         setLeaveTypes(normalizeLeaveTypes(settingsPayload?.leaveTypes, DEFAULT_LEAVE_TYPES));
@@ -102,6 +111,8 @@ function TeamLeadDashboard() {
     window.addEventListener('kavyaProjectsChanged', refreshScope);
     window.addEventListener('kavyaTasksChanged', refreshScope);
     window.addEventListener('kavyaAnnouncementsChanged', refreshScope);
+    window.addEventListener('kavyaSettingsChanged', refreshScope);
+    window.addEventListener('focus', refreshScope);
 
     const intervalId = window.setInterval(() => {
       refreshAttendance();
@@ -121,22 +132,19 @@ function TeamLeadDashboard() {
       window.removeEventListener('kavyaProjectsChanged', refreshScope);
       window.removeEventListener('kavyaTasksChanged', refreshScope);
       window.removeEventListener('kavyaAnnouncementsChanged', refreshScope);
+      window.removeEventListener('kavyaSettingsChanged', refreshScope);
+      window.removeEventListener('focus', refreshScope);
     };
   }, []);
 
   const teamIds = useMemo(() => (
     new Set(
-      [...getVisibleTeamEmployeeIds({
-        role: 'teamLead',
-        currentEmployeeId: employeeIdentity.employeeId,
-        currentEmployeeName: employeeIdentity.employee,
-        employees: normalizeEmployees(employees),
-        projects: normalizeProjects(projects),
-      })]
+      normalizeEmployees(employees)
+        .map((employee) => employee.employeeId || employee.id)
         .map((value) => String(value || '').trim().toLowerCase())
         .filter(Boolean),
     )
-  ), [employeeIdentity.employee, employeeIdentity.employeeId, employees, projects]);
+  ), [employees]);
 
   const teamMembers = useMemo(() => (
     normalizeEmployees(employees).filter((employee) => teamIds.has(String(employee.employeeId || employee.id || '').trim().toLowerCase()))

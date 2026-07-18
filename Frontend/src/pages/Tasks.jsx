@@ -58,6 +58,7 @@ function Tasks() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [selectedDetailsTask, setSelectedDetailsTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [undoTask, setUndoTask] = useState(null);
   const [message, setMessage] = useState('');
@@ -86,17 +87,25 @@ function Tasks() {
   useEffect(() => {
     let active = true;
 
-    const loadTeamLeadProjects = async () => {
-      if (!isTeamLead) {
-        return safeApiRequest('/projects', []);
+    const loadAssignmentScope = async () => {
+      if (isTeamLead) {
+        const [payload, scopedProjects] = await Promise.all([
+          safeApiRequest('/attendance/team', { projects: [], members: [] }),
+          safeApiRequest(`/projects/team-lead/${encodeURIComponent(currentEmployeeId)}`, []),
+        ]);
+        const payloadProjects = Array.isArray(payload?.projects) ? payload.projects : [];
+        return {
+          employeeRows: Array.isArray(payload?.members) ? payload.members : [],
+          projectRows: payloadProjects.length > 0
+            ? payloadProjects
+            : (Array.isArray(scopedProjects) ? scopedProjects : []),
+        };
       }
-
-      const teamLeadProjects = await safeApiRequest(`/projects/team-lead/${currentEmployeeId}`, []);
-      if (Array.isArray(teamLeadProjects) && teamLeadProjects.length > 0) {
-        return teamLeadProjects;
-      }
-
-      return safeApiRequest('/projects', []);
+      const [employeeRows, projectRows] = await Promise.all([
+        safeApiRequest('/employees', people),
+        safeApiRequest('/projects', []),
+      ]);
+      return { employeeRows, projectRows };
     };
 
     const refreshData = () => {
@@ -107,13 +116,13 @@ function Tasks() {
       console.debug('[TeamLead Tasks] API URL', apiUrl);
       Promise.all([
         loadNormalizedTaskRows(),
-        safeApiRequest('/employees', people),
-        loadTeamLeadProjects(),
-      ]).then(([rows, employeeRows, projectRows]) => {
+        loadAssignmentScope(),
+      ]).then(([rows, assignmentScope]) => {
         if (!active) {
           return;
         }
 
+        const { employeeRows, projectRows } = assignmentScope;
         setTaskRows(rows);
         setEmployees(normalizeEmployees(employeeRows));
         setProjects(normalizeProjectRows(projectRows));
@@ -238,6 +247,8 @@ function Tasks() {
     setForm({
       ...getEmptyTaskForm(),
       status: task.status || 'Pending',
+      summary: task.taskSummary || '',
+      attachmentFile: null,
     });
     setMessage('');
     setIsStatusModalOpen(true);
@@ -395,10 +406,13 @@ function Tasks() {
       render: (row) => (
         <div className="table-actions table-actions-inline">
           <button type="button" onClick={() => openTaskEditModal(row)}>
-            Edit
+            View
           </button>
           <button type="button" className="danger" onClick={() => deleteTaskAssignment(row)}>
             Delete
+          </button>
+          <button type="button" onClick={() => setSelectedDetailsTask(row)}>
+            Update
           </button>
         </div>
       ),
@@ -577,9 +591,17 @@ function Tasks() {
     };
 
     try {
+      if (form.attachmentFile) {
+        const attachmentData = new FormData();
+        attachmentData.append('file', form.attachmentFile);
+        await apiRequest(`/tasks/${selectedTask.id}/attachment`, {
+          method: 'POST',
+          body: attachmentData,
+        });
+      }
       const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: nextTask.status }),
+        body: JSON.stringify({ status: nextTask.status, summary: form.summary || '' }),
       });
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
@@ -721,6 +743,9 @@ function Tasks() {
           onSubmit={updateTaskStatus}
         />
       )}
+      {selectedDetailsTask && (
+        <TaskDetailsModal task={selectedDetailsTask} onClose={() => setSelectedDetailsTask(null)} />
+      )}
       {undoTask && (
         <div className="user-undo-toast" role="status" aria-live="polite">
           <span>{undoTask.title} was deleted.</span>
@@ -837,6 +862,8 @@ function EmployeeTasksView() {
     setForm({
       ...getEmptyTaskForm(),
       status: task.status || 'Pending',
+      summary: task.taskSummary || '',
+      attachmentFile: null,
     });
     setMessage('');
     setIsStatusModalOpen(true);
@@ -933,9 +960,17 @@ function EmployeeTasksView() {
     };
 
     try {
+      if (form.attachmentFile) {
+        const attachmentData = new FormData();
+        attachmentData.append('file', form.attachmentFile);
+        await apiRequest(`/tasks/${selectedTask.id}/attachment`, {
+          method: 'POST',
+          body: attachmentData,
+        });
+      }
       const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: nextTask.status }),
+        body: JSON.stringify({ status: nextTask.status, summary: form.summary || '' }),
       });
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
@@ -944,11 +979,13 @@ function EmployeeTasksView() {
       setSelectedTask(null);
       setMessage('Task status updated successfully.');
       setToast({
-        message: 'Task status updated successfully.',
+        message: 'Task status, summary and attachment saved successfully.',
         type: 'success',
       });
-    } catch {
-      setMessage('Task status could not be updated right now.');
+    } catch (error) {
+      const errorMessage = error?.message || 'Task update could not be saved right now.';
+      setMessage(errorMessage);
+      setToast({ message: errorMessage, type: 'error' });
     }
   };
 
@@ -967,10 +1004,10 @@ function EmployeeTasksView() {
       {toast && (
         <div className={`project-toast is-${toast.type || 'success'}`} role="status" aria-live="polite">
           <span className="project-toast__icon" aria-hidden="true">
-            <i className="ri-checkbox-circle-fill" />
+            <i className={toast.type === 'error' ? 'ri-error-warning-fill' : 'ri-checkbox-circle-fill'} />
           </span>
           <div className="project-toast__copy">
-            <span>Success</span>
+            <span>{toast.type === 'error' ? 'Unable to save' : 'Saved successfully'}</span>
             <strong>{toast.message}</strong>
           </div>
           <button type="button" className="project-toast__close" onClick={() => setToast(null)} aria-label="Dismiss notification">
@@ -1048,6 +1085,7 @@ function EmployeeTasksView() {
           task={selectedTask}
           form={form}
           setForm={setForm}
+          canEditStatus
           onClose={() => {
             setIsStatusModalOpen(false);
             setSelectedTask(null);
@@ -1110,7 +1148,7 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
                   <div className="task-summary-card task-summary-card-compact">
                     <small>{selectedProject.projectCode || selectedProject.id}</small>
                     <strong>{selectedProject.name}</strong>
-                    <small>Team members: {Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers.length : 0}</small>
+                    <small>Team members: {assigneeOptions.length}</small>
                   </div>
                 )}
 
@@ -1173,7 +1211,7 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
             <div className="task-summary-card task-summary-card-compact">
               <small>{selectedProject.projectCode || selectedProject.id}</small>
               <strong>{selectedProject.name}</strong>
-              <small>Team members: {Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers.length : 0}</small>
+              <small>Team members: {assigneeOptions.length}</small>
             </div>
           )}
           <label className="field">
@@ -1217,42 +1255,69 @@ function TaskDetailsModal({ task, onClose }) {
     return null;
   }
 
-  const dueIndicator = getDueIndicator(task);
+  const assignedDate = task.createdDateTime
+    ? new Date(task.createdDateTime).toLocaleDateString('en-CA')
+    : '-';
+  const statusTone = String(task.status || 'Pending').toLowerCase().replace(/\s+/g, '-');
+  const priorityTone = String(task.priority || 'Medium').toLowerCase();
 
   return (
     <div className="payroll-modal-backdrop" role="presentation">
-      <section className="payroll-modal" role="dialog" aria-modal="true" aria-label="Task details">
-        <div className="payroll-modal-head">
-          <h3>Task Details</h3>
+      <section className="payroll-modal task-details-modal" role="dialog" aria-modal="true" aria-label="Task details">
+        <div className="payroll-modal-head task-details-head">
+          <h3><span><i className="ri-clipboard-line" aria-hidden="true" /></span>Task Details</h3>
           <button type="button" onClick={onClose} aria-label="Close task details">
             <i className="ri-close-line" aria-hidden="true" />
           </button>
         </div>
 
-        <div className="task-summary-card" style={{ display: 'grid', gap: '0.75rem' }}>
-          <div>
-            <p className="eyebrow">{task.id}</p>
-            <strong>{task.title}</strong>
+        <div className="task-details-body">
+          <div className="task-details-grid">
+            <div className="task-details-column">
+              <TaskDetailItem icon="ri-clipboard-line" label="Task ID" value={task.id || '-'} accent />
+              <TaskDetailItem icon="ri-edit-box-line" label="Task Title" value={task.title || '-'} />
+              <TaskDetailItem icon="ri-user-line" label="Assigned By" value={task.owner || task.assignedToName || '-'} />
+              <TaskDetailItem icon="ri-notification-3-line" label="Priority" value={<span className={`task-detail-pill is-${priorityTone}`}>{task.priority || 'Medium'}</span>} />
+              <TaskDetailItem icon="ri-checkbox-circle-line" label="Status" value={<span className={`task-detail-pill is-${statusTone}`}>{task.status || 'Pending'}</span>} />
+            </div>
+            <div className="task-details-column is-right">
+              <TaskDetailItem icon="ri-calendar-line" label="Due Date" value={task.dueDate || task.due || '-'} />
+              <TaskDetailItem icon="ri-briefcase-4-line" label="Project" value={`${task.projectName || '-'}${task.projectCode ? ` (${task.projectCode})` : ''}`} />
+              <TaskDetailItem icon="ri-file-text-line" label="Description" value={task.description || '-'} />
+              <TaskDetailItem icon="ri-calendar-check-line" label="Assigned Date" value={assignedDate} />
+            </div>
           </div>
-          <small>Assigned by: {task.owner || '-'}</small>
-          <small>Priority: {task.priority || 'Medium'}</small>
-          <small>Status: {task.status || 'Pending'}</small>
-          <small>Due date: {task.dueDate || task.due || '-'}</small>
-          {dueIndicator ? (
-            <small>
-              Deadline: {dueIndicator.label}
-            </small>
-          ) : null}
-          {task.projectName || task.projectCode ? (
-            <small>Project: {task.projectName || '-'}{task.projectCode ? ` (${task.projectCode})` : ''}</small>
-          ) : null}
-          {task.description ? <p style={{ margin: 0, color: 'var(--muted-text, #667085)' }}>{task.description}</p> : null}
+
+          <section className="task-detail-summary-box">
+            <h4><i className="ri-edit-box-line" aria-hidden="true" />Summary</h4>
+            <p>{task.taskSummary || 'No summary submitted yet.'}</p>
+          </section>
+
+          <section className="task-detail-attachment-box">
+            <h4><i className="ri-attachment-2" aria-hidden="true" />Attachment</h4>
+            {task.attachmentUrl ? (
+              <div className="task-detail-file-row">
+                <span className="task-detail-file-icon"><i className={task.attachmentType?.includes('pdf') ? 'ri-file-pdf-2-line' : 'ri-image-line'} /></span>
+                <div><strong>{task.attachmentName || 'Task attachment'}</strong><small>{task.attachmentType?.includes('pdf') ? 'PDF document' : 'Image attachment'}</small></div>
+                <a href={task.attachmentUrl} download={task.attachmentName || true} target="_blank" rel="noreferrer" aria-label="Download attachment"><i className="ri-download-line" /></a>
+              </div>
+            ) : <p>No attachment submitted yet.</p>}
+          </section>
         </div>
 
         <div className="salary-form-actions">
           <button className="payroll-primary" type="button" onClick={onClose}>Close</button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function TaskDetailItem({ icon, label, value, accent = false }) {
+  return (
+    <div className="task-detail-item">
+      <span className="task-detail-item-icon"><i className={icon} aria-hidden="true" /></span>
+      <div><small>{label}</small><strong className={accent ? 'is-accent' : ''}>{value}</strong></div>
     </div>
   );
 }
@@ -1290,6 +1355,33 @@ function TaskStatusModal({ task, form, setForm, canEditStatus, onClose, onSubmit
               {statusOptions.map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
+          <label className="field">
+            <span>Summary</span>
+            <textarea
+              rows="4"
+              maxLength="2000"
+              value={form.summary || ''}
+              disabled={!canEditStatus}
+              onChange={(event) => setForm((current) => ({ ...current, summary: event.target.value }))}
+              placeholder="Add a short update about the work completed, progress, or blockers..."
+            />
+          </label>
+          <label className="field">
+            <span>Attachment (Image or PDF)</span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,application/pdf"
+              disabled={!canEditStatus}
+              onChange={(event) => setForm((current) => ({ ...current, attachmentFile: event.target.files?.[0] || null }))}
+            />
+            <small>PNG, JPG, WEBP or PDF up to 10 MB.</small>
+            {task.attachmentUrl && (
+              <a href={task.attachmentUrl} target="_blank" rel="noreferrer">
+                <i className="ri-attachment-2" aria-hidden="true" />
+                {task.attachmentName || 'View current attachment'}
+              </a>
+            )}
+          </label>
           <div className="salary-form-actions">
             {canEditStatus && <button className="payroll-primary" type="submit">Save Status</button>}
             <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
@@ -1313,6 +1405,8 @@ function getEmptyTaskForm(defaultEmployee = null) {
     dueDate: today,
     status: 'Pending',
     description: '',
+    summary: '',
+    attachmentFile: null,
   };
 }
 
@@ -1328,18 +1422,29 @@ function normalizeEmployees(rows) {
 }
 
 function normalizeProjectRows(rows) {
-  return (Array.isArray(rows) ? rows : []).map((project, index) => ({
-    ...project,
-    id: project.id || project.projectId || `PRJ-${index + 1}`,
-    projectCode: project.projectCode || project.id || project.projectId || `PRJ-${index + 1}`,
-    teamLeadId: project.teamLeadId || '',
-    teamLeadName: project.teamLeadName || '',
-    teamLeadDesignation: project.teamLeadDesignation || '',
-    teamMembers: Array.isArray(project.teamMembers) ? project.teamMembers.filter(Boolean).map((value) => String(value)) : [],
-    teamMemberDetails: Array.isArray(project.teamMemberDetails) ? project.teamMemberDetails : [],
-    name: project.name || `Project ${index + 1}`,
-    status: project.status || 'Planning',
-  }));
+  return (Array.isArray(rows) ? rows : []).map((project, index) => {
+    const teamMemberDetails = Array.isArray(project.teamMemberDetails) ? project.teamMemberDetails : [];
+    const storedMemberIds = Array.isArray(project.teamMembers)
+      ? project.teamMembers.filter(Boolean).map((value) => String(value))
+      : [];
+    const detailMemberIds = teamMemberDetails
+      .map((member) => String(member?.id || member?.employeeCode || member?.employeeId || '').trim())
+      .filter(Boolean);
+    const teamMembers = [...new Set([...storedMemberIds, ...detailMemberIds])];
+
+    return {
+      ...project,
+      id: project.id || project.projectId || `PRJ-${index + 1}`,
+      projectCode: project.projectCode || project.id || project.projectId || `PRJ-${index + 1}`,
+      teamLeadId: project.teamLeadId || '',
+      teamLeadName: project.teamLeadName || '',
+      teamLeadDesignation: project.teamLeadDesignation || '',
+      teamMembers,
+      teamMemberDetails,
+      name: project.name || `Project ${index + 1}`,
+      status: project.status || 'Planning',
+    };
+  });
 }
 
 function isActiveProject(project) {
@@ -1357,7 +1462,7 @@ function getTeamLeadProjectOptions(projects, teamLeadIdentity) {
     return matchedProjects;
   }
 
-  return (Array.isArray(projects) ? projects : []).filter((project) => isActiveProject(project));
+  return [];
 }
 
 function buildTaskFormFromTask(task, isTeamLead) {
@@ -1421,6 +1526,7 @@ async function loadNormalizedTaskRows() {
 
 function normalizeTaskRow(task) {
   return {
+    ...task,
     id: task.id,
     title: task.title || '-',
     description: task.description || '',
@@ -1441,6 +1547,10 @@ function normalizeTaskRow(task) {
     projectName: task.projectName || '',
     projectCode: task.projectCode || '',
     createdDateTime: task.createdDateTime || task.createdAt || '',
+    taskSummary: task.taskSummary || '',
+    attachmentUrl: task.attachmentUrl || '',
+    attachmentName: task.attachmentName || '',
+    attachmentType: task.attachmentType || '',
   };
 }
 

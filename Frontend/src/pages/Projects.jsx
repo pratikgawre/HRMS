@@ -288,7 +288,7 @@ function Projects() {
     if (editingProjectId && !isTeamDraftDirty) {
       setSelectedTeamMembers(Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers : []);
     } else if (!editingProjectId) {
-      setSelectedTeamMembers([]);
+      setSelectedTeamMembers(Array.isArray(selectedProject.teamMembers) ? selectedProject.teamMembers : []);
     }
   }, [editingProjectId, isTeamDraftDirty, selectedProject]);
 
@@ -1063,7 +1063,7 @@ function Projects() {
                   </div>
                   <div className="project-member-grid">
                     {filteredEmployees.map((employee) => {
-                      const checked = selectedTeamMembers.includes(employee.id);
+                      const checked = selectedTeamMembers.some((memberId) => normalizeLookupValue(memberId) === normalizeLookupValue(employee.id));
                       return (
                         <label key={employee.id} className={`project-member-option ${checked ? 'is-selected' : ''}`}>
                           <input
@@ -1100,7 +1100,7 @@ function Projects() {
                 </div>
                 <div className="project-member-grid compact">
                   {filteredEmployees.map((employee) => {
-                    const checked = selectedTeamMembers.includes(employee.id);
+                    const checked = selectedTeamMembers.some((memberId) => normalizeLookupValue(memberId) === normalizeLookupValue(employee.id));
                     return (
                       <label key={employee.id} className={`project-member-option ${checked ? 'is-selected' : ''}`}>
                         <input
@@ -1423,16 +1423,20 @@ function updateProjectForm(setter, field, value) {
 
 function toggleTeamMember(setter, memberId) {
   setter((current) => (
-    current.includes(memberId)
-      ? current.filter((value) => value !== memberId)
+    current.some((value) => normalizeLookupValue(value) === normalizeLookupValue(memberId))
+      ? current.filter((value) => normalizeLookupValue(value) !== normalizeLookupValue(memberId))
       : [...current, memberId]
   ));
 }
 
 function normalizeProjectRows(items = []) {
   return items.map((item, index) => {
-    const teamMembers = normalizeTeamMembers(item.teamMembers, item.team);
-    const teamMemberDetails = normalizeProjectMemberDetails(item.teamMemberDetails, teamMembers);
+    const storedTeamMembers = normalizeTeamMembers(item.teamMembers, item.team);
+    const teamMemberDetails = normalizeProjectMemberDetails(item.teamMemberDetails, storedTeamMembers);
+    const detailMemberIds = teamMemberDetails
+      .map((member) => String(member.id || member.employeeCode || '').trim())
+      .filter(Boolean);
+    const teamMembers = [...new Set([...storedTeamMembers, ...detailMemberIds])];
     const projectCode = formatProjectCode(item.projectCode || item.id, index);
     const teamLabel = teamMemberDetails.length > 0
       ? `${teamMemberDetails.length} member${teamMemberDetails.length === 1 ? '' : 's'}`

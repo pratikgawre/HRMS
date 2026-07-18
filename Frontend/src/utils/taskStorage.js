@@ -2,6 +2,7 @@ import { apiRequest } from './api.js';
 
 export function normalizeTaskRows(rows = []) {
   return rows.map((task, index) => ({
+    ...task,
     id: task.id || `TSK-${String(index + 101).padStart(3, '0')}`,
     title: task.title || '-',
     description: task.description || '',
@@ -21,6 +22,10 @@ export function normalizeTaskRows(rows = []) {
     projectName: task.projectName || '',
     projectCode: task.projectCode || '',
     createdDateTime: task.createdDateTime || task.createdAt || '',
+    taskSummary: task.taskSummary || '',
+    attachmentUrl: task.attachmentUrl || '',
+    attachmentName: task.attachmentName || '',
+    attachmentType: task.attachmentType || '',
   }));
 }
 

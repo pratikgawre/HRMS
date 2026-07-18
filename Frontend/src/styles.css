@@ -11042,11 +11042,63 @@ img.profile-avatar.large {
 
 .interview-filter-card {
   display: grid;
-  gap: 1rem;
+  gap: 1.25rem;
+}
+
+.task-details-modal { max-width: 760px; }
+.task-details-head h3 { display: flex; align-items: center; gap: 0.7rem; }
+.task-details-head h3 > span { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 10px; color: #fff; background: linear-gradient(135deg, #08aaa5, #087f86); }
+.task-details-body { display: grid; gap: 1rem; padding: 1.15rem; }
+.task-details-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.task-details-column { display: grid; align-content: start; gap: 0.9rem; padding-right: 1rem; }
+.task-details-column.is-right { padding-right: 0; padding-left: 1rem; border-left: 1px solid #dce8e8; }
+.task-detail-item { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: center; gap: 0.7rem; }
+.task-detail-item-icon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 10px; color: #009994; background: #effafa; }
+.task-detail-item > div { display: grid; gap: 0.15rem; }
+.task-detail-item small { color: #708090; font-size: 0.75rem; font-weight: 700; }
+.task-detail-item strong { color: var(--dark-text); font-size: 0.88rem; overflow-wrap: anywhere; }
+.task-detail-item strong.is-accent { color: #009994; }
+.task-detail-pill { justify-self: start; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.78rem; }
+.task-detail-pill.is-pending, .task-detail-pill.is-medium { color: #cf7d00; background: #fff2d9; }
+.task-detail-pill.is-completed, .task-detail-pill.is-approved, .task-detail-pill.is-low { color: #07845f; background: #ddf7ee; }
+.task-detail-pill.is-active, .task-detail-pill.is-in-progress { color: #1766b1; background: #e5f1ff; }
+.task-detail-pill.is-high, .task-detail-pill.is-urgent, .task-detail-pill.is-blocked { color: #c33d4f; background: #ffe8eb; }
+.task-detail-summary-box, .task-detail-attachment-box { padding: 0.9rem 1rem; border: 1px solid #cce9e7; border-radius: 9px; background: linear-gradient(135deg, #effafa, #f8fdfd); }
+.task-detail-summary-box h4, .task-detail-attachment-box h4 { display: flex; align-items: center; gap: 0.55rem; margin: 0 0 0.55rem; color: #007f7b; font-size: 0.82rem; }
+.task-detail-summary-box p, .task-detail-attachment-box p { margin: 0; color: #536474; font-size: 0.86rem; white-space: pre-wrap; }
+.task-detail-attachment-box { background: #fff; border-color: #16aaa5; }
+.task-detail-file-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) 38px; align-items: center; gap: 0.7rem; }
+.task-detail-file-icon { display: grid; width: 42px; height: 42px; place-items: center; color: #00a09a; border: 1px solid #bfe5e3; border-radius: 7px; background: #f1fbfa; font-size: 1.25rem; }
+.task-detail-file-row > div { display: grid; gap: 0.15rem; min-width: 0; }
+.task-detail-file-row strong { color: #008f8a; font-size: 0.84rem; overflow-wrap: anywhere; }
+.task-detail-file-row small { color: #748391; font-size: 0.72rem; }
+.task-detail-file-row > a { display: grid; width: 38px; height: 38px; place-items: center; color: #008f8a; border: 1px solid #9edbd8; border-radius: 7px; text-decoration: none; }
+
+@media (max-width: 700px) {
+  .task-details-grid { grid-template-columns: 1fr; }
+  .task-details-column { padding-right: 0; }
+  .task-details-column.is-right { padding: 1rem 0 0; border-top: 1px solid #dce8e8; border-left: 0; }
 }
 
 .interview-filter-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.2rem 1.35rem;
+}
+
+.interview-filters-section {
+  padding-bottom: 0;
+}
+
+.interview-filters-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.interview-filters-title i {
+  color: #356ff0;
+  font-size: 1.15rem;
 }
 
 .interview-filter-field {
@@ -11084,11 +11136,22 @@ img.profile-avatar.large {
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
+  margin: 0 -1.35rem;
+  padding: 1rem 1.35rem;
+  border-top: 1px solid rgba(220, 232, 231, 0.85);
+  background: rgba(250, 252, 255, 0.58);
 }
 
 .interview-filter-actions .ghost-btn,
 .interview-filter-actions .secondary-btn {
   min-width: 132px;
+}
+
+.interview-filter-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
 }
 
 .scheduled-table-shell {

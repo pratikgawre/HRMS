@@ -9,19 +9,23 @@ import com.kavya.hrms.model.AttendanceRecord;
 import com.kavya.hrms.model.LeaveRequest;
 import com.kavya.hrms.model.SystemSettings;
 import com.kavya.hrms.model.TaskItem;
+import com.kavya.hrms.repository.AnnouncementRepository;
+import com.kavya.hrms.repository.AssetRepository;
+import com.kavya.hrms.repository.AttendanceRecordRepository;
+import com.kavya.hrms.repository.AuthSessionRepository;
+import com.kavya.hrms.repository.EmployeeRepository;
+import com.kavya.hrms.repository.LeaveRequestRepository;
+import com.kavya.hrms.repository.SystemSettingsRepository;
+import com.kavya.hrms.repository.TaskRepository;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import com.kavya.hrms.repository.AnnouncementRepository;
-import com.kavya.hrms.repository.AttendanceRecordRepository;
-import com.kavya.hrms.repository.AssetRepository;
-import com.kavya.hrms.repository.EmployeeRepository;
-import com.kavya.hrms.repository.LeaveRequestRepository;
-import com.kavya.hrms.repository.SystemSettingsRepository;
-import com.kavya.hrms.repository.TaskRepository;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -32,9 +36,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import com.kavya.hrms.repository.AuthSessionRepository;
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,6 +48,9 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/dashboard")
 public class DashboardController {
+  private static final ZoneId KOLKATA_ZONE = ZoneId.of("Asia/Kolkata");
+  private static final DateTimeFormatter ATTENDANCE_DATE_FORMATTER =
+      DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH);
   private final EmployeeRepository employeeRepository;
   private final LeaveRequestRepository leaveRequestRepository;
   private final AnnouncementRepository announcementRepository;
@@ -101,21 +105,26 @@ public class DashboardController {
     EmployeeDashboardSummary response = new EmployeeDashboardSummary();
     response.setEmployeeId(employeeId);
     response.setEmployeeName(resolveEmployeeName(employeeId));
-    MonthlyAttendanceSummary monthlyAttendanceSummary = buildMonthlyAttendanceSummary(employeeId, resolveMonth(null));
+
+    LocalDate today = LocalDate.now(KOLKATA_ZONE);
+    String normalizedEmployeeId = normalize(employeeId);
+    List<AttendanceRecord> attendanceRecords = attendanceRecordRepository.findAll().stream()
+        .filter(record -> normalizedEmployeeId.equals(normalize(record.getEmployeeId())))
+        .filter(record -> isInMonth(record, today))
+        .collect(Collectors.toList());
+    long presentDays = attendanceRecords.stream()
+        .filter(r -> Set.of("present", "late").contains(normalize(r.getStatus())))
+        .count();
+    long halfDays = attendanceRecords.stream().filter(r -> "half day".equals(normalize(r.getStatus()))).count();
+    long absentDays = attendanceRecords.stream().filter(r -> "absent".equals(normalize(r.getStatus()))).count();
+    double weightedPresence = presentDays + (halfDays * 0.5);
+    int daysInCurrentMonth = today.lengthOfMonth();
+    int attendanceRate = Math.min(100, (int) Math.round((weightedPresence * 100.0) / daysInCurrentMonth));
 
     EmployeeDashboardSummary.CardMetric attendance = new EmployeeDashboardSummary.CardMetric();
     attendance.setLabel("Attendance");
-    attendance.setValue(monthlyAttendanceSummary.getRecordCount() == 0
-        ? "0%"
-        : String.format(Locale.ROOT, "%.2f%%", monthlyAttendanceSummary.getAttendancePercentage()));
-    attendance.setDelta(String.format(Locale.ROOT,
-        "Working %d | Present %d | Half %d | Absent %d | Leave %d | Worked %.2f",
-        monthlyAttendanceSummary.getTotalWorkingDays(),
-        monthlyAttendanceSummary.getPresentDays(),
-        monthlyAttendanceSummary.getHalfDays(),
-        monthlyAttendanceSummary.getAbsentDays(),
-        monthlyAttendanceSummary.getLeaveDays(),
-        monthlyAttendanceSummary.getWorkedDays()));
+    attendance.setValue(attendanceRate + "%");
+    attendance.setDelta(formatAttendanceDays(weightedPresence) + " present • " + absentDays + " absent");
     attendance.setTone("blue");
     attendance.setIcon("ri-time-line");
     attendance.setNavigateTo(List.of("/employee/attendance"));
@@ -656,6 +665,48 @@ public class DashboardController {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+  }
+
+  private boolean isInMonth(AttendanceRecord record, LocalDate referenceDate) {
+    LocalDate attendanceDate = parseAttendanceDate(record);
+    return attendanceDate != null
+        && attendanceDate.getYear() == referenceDate.getYear()
+        && attendanceDate.getMonthValue() == referenceDate.getMonthValue();
+  }
+
+  private LocalDate parseAttendanceDate(AttendanceRecord record) {
+    if (record == null) {
+      return null;
+    }
+
+    for (String value : List.of(
+        Optional.ofNullable(record.getDateLabel()).orElse(""),
+        Optional.ofNullable(record.getDate()).orElse(""))) {
+      if (value.isBlank()) {
+        continue;
+      }
+      try {
+        return LocalDate.parse(value.trim(), ATTENDANCE_DATE_FORMATTER);
+      } catch (DateTimeParseException ignored) {
+        try {
+          return LocalDate.parse(value.trim());
+        } catch (DateTimeParseException ignoredAgain) {
+          // Try the check-in timestamp below.
+        }
+      }
+    }
+
+    try {
+      return record.getCheckInAt() == null || record.getCheckInAt().isBlank()
+          ? null
+          : Instant.parse(record.getCheckInAt()).atZone(KOLKATA_ZONE).toLocalDate();
+    } catch (DateTimeParseException ex) {
+      return null;
+    }
+  }
+
+  private String formatAttendanceDays(double days) {
+    return days == Math.rint(days) ? String.valueOf((long) days) : String.valueOf(days);
   }
 
   private int safeDays(Integer days) {
