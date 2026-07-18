@@ -94,6 +94,15 @@ function TeamAttendance() {
 
     const refreshTeamAttendance = async () => {
       try {
+        if (role === 'teamLead' && !isMyAttendanceView) {
+          const teamPayload = await apiRequest('/attendance/team');
+          if (active) {
+            setAttendance(Array.isArray(teamPayload?.records) ? teamPayload.records : []);
+            setEmployees(normalizeEmployees(teamPayload?.members));
+            setProjects([]);
+          }
+          return;
+        }
         const rows = isMyAttendanceView && attendanceEmployee.employeeId
           ? await apiRequest(`/attendance/employee/${encodeURIComponent(attendanceEmployee.employeeId)}`)
           : await refreshStoredAttendanceRows();
@@ -102,12 +111,16 @@ function TeamAttendance() {
         }
       } catch {
         if (active) {
-          setAttendance(getInitialAttendanceRows());
+          setAttendance(role === 'teamLead' ? [] : getInitialAttendanceRows());
+          if (role === 'teamLead') setEmployees([]);
         }
       }
     };
 
     const refreshTeamScope = () => {
+      if (role === 'teamLead' && !isMyAttendanceView) {
+        return;
+      }
       Promise.all([
         safeApiRequest('/employees', fallbackPeople),
         safeApiRequest('/projects', fallbackProjects),
@@ -142,22 +155,24 @@ function TeamAttendance() {
       window.removeEventListener('kavyaEmployeesChanged', refreshTeamScope);
       window.removeEventListener('kavyaProjectsChanged', refreshTeamScope);
     };
-  }, [attendanceEmployee.employeeId, isMyAttendanceView]);
+  }, [attendanceEmployee.employeeId, isMyAttendanceView, role]);
 
   const teamIds = useMemo(() => (
-    getVisibleTeamEmployeeIds({
+    role === 'teamLead' && !isMyAttendanceView
+      ? new Set(normalizeEmployees(employees).map((employee) => String(employee.employeeId || '').trim().toLowerCase()).filter(Boolean))
+      : getVisibleTeamEmployeeIds({
       role,
       currentEmployeeId: attendanceEmployee.employeeId,
       currentEmployeeName: attendanceEmployee.employee,
       employees: normalizeEmployees(employees),
       projects: normalizeProjects(projects),
-    })
-  ), [attendanceEmployee.employee, attendanceEmployee.employeeId, employees, projects, role]);
+      })
+  ), [attendanceEmployee.employee, attendanceEmployee.employeeId, employees, isMyAttendanceView, projects, role]);
 
   const teamRows = useMemo(() => (
     isMyAttendanceView
       ? attendance.filter((row) => String(row.employeeId || '').trim() === String(attendanceEmployee.employeeId || '').trim())
-      : attendance.filter((row) => teamIds.has(String(row.employeeId || '').trim()))
+      : attendance.filter((row) => teamIds.has(String(row.employeeId || '').trim().toLowerCase()))
   ), [attendance, attendanceEmployee.employeeId, isMyAttendanceView, teamIds]);
 
   const selectedDateLabel = useMemo(() => (
@@ -178,7 +193,7 @@ function TeamAttendance() {
     });
 
     return normalizeEmployees(employees)
-      .filter((employee) => teamIds.has(String(employee.employeeId || '').trim()))
+      .filter((employee) => teamIds.has(String(employee.employeeId || '').trim().toLowerCase()))
       .map((employee) => {
         const employeeId = String(employee.employeeId || '').trim();
         const matchedRow = attendanceByEmployeeId.get(employeeId);
@@ -197,7 +212,7 @@ function TeamAttendance() {
   }, [employees, selectedDateLabel, teamIds, teamRows]);
 
   const rows = useMemo(() => (
-    teamRows
+    (dateRange === 'day' || teamRows.length === 0 ? selectedDateTeamRows : teamRows)
       .filter((row) => {
         const matchesStatus = status === 'All' || row.status === status;
         const matchesRange = isRowWithinSelectedRange(row, dateRange, selectedDate, selectedMonth);
@@ -214,7 +229,7 @@ function TeamAttendance() {
         employee: row.employee || row.employeeName || row.name || 'Employee',
         employeeId: row.employeeId || row.employeeCode || '-',
       }))
-  ), [dateRange, searchText, selectedDate, selectedMonth, status, teamRows]);
+  ), [dateRange, searchText, selectedDate, selectedDateTeamRows, selectedMonth, status, teamRows]);
 
   const displayedRows = useMemo(() => {
     const query = searchText.trim().toLowerCase();
@@ -376,7 +391,7 @@ function TeamAttendance() {
     setEditingRow(null);
   }
 
-  function saveRecommendedRecord() {
+  async function saveRecommendedRecord() {
     if (!editingRow) {
       return;
     }
@@ -416,7 +431,15 @@ function TeamAttendance() {
     }
 
     setAttendance(nextRows);
-    saveAttendanceRows(nextRows);
+    if (role === 'teamLead') {
+      const updatedRecord = nextRows.find((row) => (
+        String(row.employeeId || '').trim() === targetEmployeeId
+        && String(row.date || '').trim() === targetDate
+      ));
+      await apiRequest('/attendance', { method: 'POST', body: JSON.stringify(updatedRecord) });
+    } else {
+      await saveAttendanceRows(nextRows);
+    }
     setMessage(`Attendance corrected for ${editingRow.employee}.`);
     closeCorrectDialog();
   }
@@ -562,7 +585,9 @@ function TeamAttendance() {
                 ...attendanceColumns,
               ]}
               rows={displayedRows}
-              emptyMessage={summaryFocus === 'team'
+              emptyMessage={role === 'teamLead' && teamIds.size === 0
+                ? 'No team members have been assigned to you yet.'
+                : summaryFocus === 'team'
                 ? 'No team members found for the selected lead.'
                 : `No attendance records found for ${rangeLabel}.`}
             />

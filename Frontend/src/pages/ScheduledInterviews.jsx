@@ -73,7 +73,22 @@ function ScheduledInterviews() {
         <KpiCard label="Cancelled" value={summary.cancelled} icon="ri-close-circle-line" accent="red" note="Cancelled or withdrawn" />
       </div>
 
-      <Section title="Interview Filters">
+      <Section
+        className="interview-filters-section"
+        title={(
+          <span className="interview-filters-title">
+            <i className="ri-filter-3-line" aria-hidden="true" />
+            Interview Filters
+          </span>
+        )}
+        action={(
+          <>
+            <i className="ri-add-circle-line" aria-hidden="true" />
+            Add Candidate
+          </>
+        )}
+        actionOnClick={() => openCreateModal(setShowModal, setForm, setEditingId)}
+      >
         <div className="interview-filter-card">
           <div className="filter-grid interview-filter-grid">
             <FilterField
@@ -132,7 +147,10 @@ function ScheduledInterviews() {
             />
           </div>
           <div className="interview-filter-actions">
-            <button className="ghost-btn" type="button" onClick={() => setFilters(initialFilters())}>Reset</button>
+            <button className="ghost-btn" type="button" onClick={() => setFilters(initialFilters())}>
+              <i className="ri-refresh-line" aria-hidden="true" />
+              Reset
+            </button>
             <button className="secondary-btn" type="button" onClick={() => setFilters((current) => ({ ...current }))}>
               <i className="ri-filter-3-line" aria-hidden="true" />
               Apply Filters
@@ -141,20 +159,18 @@ function ScheduledInterviews() {
         </div>
       </Section>
 
-      <div className="scheduled-add-row">
-        <button className="primary-btn" type="button" onClick={() => openCreateModal(setShowModal, setForm, setEditingId)}>
-          <i className="ri-add-circle-line" aria-hidden="true" />
-          Add Candidate
-        </button>
-        <button className="secondary-btn" type="button" onClick={exportCsv}>
-          <i className="ri-download-cloud-2-line" aria-hidden="true" />
-          Export
-        </button>
-      </div>
-
-      <Section title={`Scheduled Interviews (${filteredRows.length})`}>
+      <Section
+        title={`Scheduled Interviews (${filteredRows.length})`}
+        action={(
+          <>
+            <i className="ri-download-cloud-2-line" aria-hidden="true" />
+            Export
+          </>
+        )}
+        actionOnClick={exportCsv}
+      >
         {filteredRows.length === 0 ? (
-          <EmptyState onAdd={() => openCreateModal(setShowModal, setForm, setEditingId)} />
+          <EmptyState />
         ) : (
           <div className="scheduled-table-shell">
             <div className="scheduled-table-toolbar">
@@ -438,7 +454,7 @@ function ModalSection({ title, children }) {
   );
 }
 
-function EmptyState({ onAdd }) {
+function EmptyState() {
   return (
     <div className="interview-empty-state">
       <div className="interview-empty-illustration" aria-hidden="true">
@@ -446,10 +462,6 @@ function EmptyState({ onAdd }) {
       </div>
       <h3>No Scheduled Interviews Found</h3>
       <p>Start by adding a shortlisted candidate to manage the interview pipeline.</p>
-      <button className="primary-btn" type="button" onClick={onAdd}>
-        <i className="ri-add-circle-line" aria-hidden="true" />
-        Add Candidate
-      </button>
     </div>
   );
 }

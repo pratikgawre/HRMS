@@ -1,7 +1,6 @@
 export const DEFAULT_LEAVE_TYPES = [
   { name: 'Casual Leave', days: 12 },
   { name: 'Sick Leave', days: 10 },
-  { name: 'Paid Leave', days: 18 },
   { name: 'Earned Leave', days: 18 },
   { name: 'Work From Home', days: 0 },
 ];

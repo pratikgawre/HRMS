@@ -25,6 +25,10 @@ public class TaskItem {
   private String projectName;
   private String projectCode;
   private String createdDateTime;
+  private String taskSummary;
+  private String attachmentUrl;
+  private String attachmentName;
+  private String attachmentType;
 
   public String getId() { return id; }
   public void setId(String id) { this.id = id; }
@@ -64,4 +68,12 @@ public class TaskItem {
   public void setProjectCode(String projectCode) { this.projectCode = projectCode; }
   public String getCreatedDateTime() { return createdDateTime; }
   public void setCreatedDateTime(String createdDateTime) { this.createdDateTime = createdDateTime; }
+  public String getTaskSummary() { return taskSummary; }
+  public void setTaskSummary(String taskSummary) { this.taskSummary = taskSummary; }
+  public String getAttachmentUrl() { return attachmentUrl; }
+  public void setAttachmentUrl(String attachmentUrl) { this.attachmentUrl = attachmentUrl; }
+  public String getAttachmentName() { return attachmentName; }
+  public void setAttachmentName(String attachmentName) { this.attachmentName = attachmentName; }
+  public String getAttachmentType() { return attachmentType; }
+  public void setAttachmentType(String attachmentType) { this.attachmentType = attachmentType; }
 }

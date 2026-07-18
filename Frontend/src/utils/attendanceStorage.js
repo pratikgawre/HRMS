@@ -334,7 +334,7 @@ function getAutoCheckoutDate(row, now) {
   );
 }
 
-function getAttendanceDate(row) {
+export function getAttendanceDate(row) {
   if (row?.checkInAt) {
     const parsed = new Date(row.checkInAt);
     if (!Number.isNaN(parsed.getTime())) {

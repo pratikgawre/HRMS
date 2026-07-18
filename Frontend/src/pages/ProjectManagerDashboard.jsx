@@ -74,6 +74,8 @@ function ProjectManagerDashboard() {
     window.addEventListener('kavyaEmployeesChanged', loadDashboard);
     window.addEventListener('kavyaLeaveRequestsChanged', loadDashboard);
     window.addEventListener('kavyaAnnouncementsChanged', loadDashboard);
+    window.addEventListener('kavyaSettingsChanged', loadDashboard);
+    window.addEventListener('storage', loadDashboard);
 
     return () => {
       mounted = false;
@@ -84,6 +86,8 @@ function ProjectManagerDashboard() {
       window.removeEventListener('kavyaEmployeesChanged', loadDashboard);
       window.removeEventListener('kavyaLeaveRequestsChanged', loadDashboard);
       window.removeEventListener('kavyaAnnouncementsChanged', loadDashboard);
+      window.removeEventListener('kavyaSettingsChanged', loadDashboard);
+      window.removeEventListener('storage', loadDashboard);
     };
   }, []);
 

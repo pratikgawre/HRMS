@@ -1,5 +1,3 @@
-const teamLeadMemberIds = ['KV001', 'KV003', 'KV005'];
-
 export function getDateInputValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -108,24 +106,12 @@ export function getVisibleTeamEmployeeIds({ role, currentEmployeeId, currentEmpl
       }
 
       const assignedToCurrentLead = matchesIdentity(employee.teamLeadId, employee.reportingManagerId, normalizedEmployeeId, normalizedEmployeeName)
-        || matchesIdentity(employee.reportingManagerId, employee.reportingManager, normalizedEmployeeId, normalizedEmployeeName)
-        || (role === 'teamLead' && teamLeadMemberIds.includes(employeeId));
+        || matchesIdentity(employee.reportingManagerId, employee.reportingManager, normalizedEmployeeId, normalizedEmployeeName);
 
       if (assignedToCurrentLead) {
         ids.add(employeeId);
       }
     });
-  }
-
-  if (ids.size === 0) {
-    normalizedEmployees
-      .filter((employee) => String(employee.status || '').toLowerCase() !== 'inactive')
-      .forEach((employee) => {
-        const employeeId = getEmployeeId(employee);
-        if (employeeId && employeeId !== normalizedEmployeeId) {
-          ids.add(employeeId);
-        }
-      });
   }
 
   return ids;

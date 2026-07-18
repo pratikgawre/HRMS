@@ -549,11 +549,22 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
       return;
     }
 
+    if (!isPaidStatus(record.status)) {
+      setMessage('Payslip is available only after the salary has been marked as Paid.');
+      return;
+    }
+
     try {
       const payslipRecord = await loadPayrollPayslip(record);
       setMessage('');
       setSelectedPayslip(payslipRecord);
     } catch (error) {
+      const fallbackPayslip = normalizePayrollRecords([record])[0];
+      if (fallbackPayslip && isPaidStatus(fallbackPayslip.status)) {
+        setMessage('');
+        setSelectedPayslip(fallbackPayslip);
+        return;
+      }
       setMessage(error instanceof Error ? error.message : 'Unable to load payslip.');
     }
   };
@@ -848,7 +859,9 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
                         <button
                           type="button"
                           onClick={() => handlePayslipClick(record)}
-                          title="Open payslip preview"
+                          disabled={!isPaidStatus(record.status)}
+                          aria-disabled={!isPaidStatus(record.status)}
+                          title={isPaidStatus(record.status) ? 'Open payslip preview' : 'Payslip is available after salary is paid'}
                         >
                           <i className="ri-file-download-line" aria-hidden="true" />
                           Payslip
@@ -865,7 +878,11 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
       </div>
 
       {selectedPayslip && (
-        <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
+        <PayslipModal
+          record={selectedPayslip}
+          onClose={() => setSelectedPayslip(null)}
+          onDownload={() => downloadPayslipPdf(selectedPayslip)}
+        />
       )}
     </>
   );
@@ -933,11 +950,22 @@ function PayrollSalaryTable({ records, setStatusOverrides, focusRecordId = '' })
       return;
     }
 
+    if (!isPaidStatus(record.status)) {
+      setMessage('Payslip is available only after the salary has been marked as Paid.');
+      return;
+    }
+
     try {
       const payslipRecord = await loadPayrollPayslip(record);
       setMessage('');
       setSelectedPayslip(payslipRecord);
     } catch (error) {
+      const fallbackPayslip = normalizePayrollRecords([record])[0];
+      if (fallbackPayslip && isPaidStatus(fallbackPayslip.status)) {
+        setMessage('');
+        setSelectedPayslip(fallbackPayslip);
+        return;
+      }
       setMessage(error instanceof Error ? error.message : 'Unable to load payslip.');
     }
   };
@@ -1014,7 +1042,9 @@ function PayrollSalaryTable({ records, setStatusOverrides, focusRecordId = '' })
                         <button
                           type="button"
                           onClick={() => handlePayslipClick(record)}
-                          title="Open payslip preview"
+                          disabled={!isPaidStatus(record.status)}
+                          aria-disabled={!isPaidStatus(record.status)}
+                          title={isPaidStatus(record.status) ? 'Open payslip preview' : 'Payslip is available after salary is paid'}
                         >
                           <i className="ri-file-download-line" aria-hidden="true" />
                           Payslip
@@ -1030,7 +1060,11 @@ function PayrollSalaryTable({ records, setStatusOverrides, focusRecordId = '' })
       </Section>
 
       {selectedPayslip && (
-        <PayslipModal record={selectedPayslip} onClose={() => setSelectedPayslip(null)} />
+        <PayslipModal
+          record={selectedPayslip}
+          onClose={() => setSelectedPayslip(null)}
+          onDownload={() => downloadPayslipPdf(selectedPayslip)}
+        />
       )}
     </>
   );
@@ -1505,6 +1539,7 @@ function PayslipModal({ record, onClose, onDownload }) {
               ['Designation', record.role],
               ['Department', record.department],
               ['Location', record.location],
+              ['Annual Package', formatCurrency(record.packageAmount)],
               ['Effective Work Days', formatPayslipNumber(record.payableDays)],
               ['Days In Month', record.daysInMonth],
             ]} />
@@ -1610,8 +1645,8 @@ function printPayslip(record) {
   }, 350);
 }
 
-function openPayslipPreview(record) {
-  const pdfBlob = buildPayslipPdfBlob(record);
+async function openPayslipPreview(record) {
+  const pdfBlob = await buildPayslipPdfBlob(record);
   const previewUrl = URL.createObjectURL(pdfBlob);
   const previewWindow = window.open(previewUrl, '_blank');
   if (!previewWindow) {
@@ -1624,8 +1659,8 @@ function openPayslipPreview(record) {
   }, { once: true });
 }
 
-function downloadPayslipPdf(record) {
-  const pdfBlob = buildPayslipPdfBlob(record);
+async function downloadPayslipPdf(record) {
+  const pdfBlob = await buildPayslipPdfBlob(record);
   const downloadUrl = URL.createObjectURL(pdfBlob);
   const link = document.createElement('a');
   link.href = downloadUrl;
@@ -1636,10 +1671,217 @@ function downloadPayslipPdf(record) {
   window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
 }
 
-function buildPayslipPdfBlob(record) {
-  const lines = getPayslipPdfLines(record);
-  const pdf = buildSimplePdf(lines);
-  return new Blob([pdf], { type: 'application/pdf' });
+async function buildPayslipPdfBlob(record) {
+  const safeRecord = normalizePayrollRecords([record])[0]
+    || getEmptyPayslip(record?.role || 'employee', record?.month || months[0], record?.year || years[0]);
+  const canvas = document.createElement('canvas');
+  canvas.width = 1684;
+  canvas.height = 1190;
+  const context = canvas.getContext('2d');
+  drawPayslipCanvas(context, canvas, safeRecord);
+
+  try {
+    const logo = await loadPayslipLogo();
+    context.drawImage(logo, 105, 75, 260, 145);
+  } catch {
+    // The company heading remains visible if the logo cannot be decoded.
+  }
+
+  const jpegUrl = canvas.toDataURL('image/jpeg', 0.94);
+  return buildImagePdfBlob(jpegUrl);
+}
+
+function drawPayslipCanvas(context, canvas, record) {
+  const left = 70;
+  const top = 55;
+  const width = canvas.width - 140;
+  const right = left + width;
+  const split = left + Math.round(width / 2);
+  const headerBottom = 255;
+  const detailsBottom = 535;
+  const tableBottom = 895;
+  const netBottom = 1025;
+  const footerBottom = 1100;
+  const earnings = getPayslipEarnings(record);
+  const deductions = getPayslipDeductions(record);
+  const totalEarnings = getEarnings(record);
+  const totalDeductions = getDeductions(record);
+  const netPay = getNetSalary(record);
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = '#222222';
+  context.lineWidth = 3;
+  context.strokeRect(left, top, width, footerBottom - top);
+
+  drawCanvasLine(context, left, headerBottom, right, headerBottom, 3);
+  context.textAlign = 'center';
+  drawCanvasText(context, 'KAVYA INFOWEB PVT. LTD.', split, 105, '700 29px Arial');
+  drawCanvasText(context, 'Flat 201, Manorama Apartment, Plot No 54, near Bharat Petroleum,', split, 140, '17px Arial');
+  drawCanvasText(context, 'Kukde Layout, Rameshwari, Nagpur, Maharashtra 440027', split, 165, '17px Arial');
+  drawCanvasText(context, `Payslip for the month of ${record.month} ${record.year}`, split, 210, '700 25px Arial');
+
+  drawCanvasLine(context, split, headerBottom, split, detailsBottom, 2);
+  drawCanvasLine(context, left, detailsBottom, right, detailsBottom, 3);
+  const leftDetails = [
+    ['Employee Code', record.employeeId],
+    ['Name', record.employeeName],
+    ['Designation', record.role],
+    ['Department', record.department],
+    ['Location', record.location],
+    ['Annual Package', `Rs. ${formatPayslipAmount(record.packageAmount)}`],
+    ['Effective Work Days', formatPayslipNumber(record.payableDays)],
+    ['Days In Month', record.daysInMonth],
+  ];
+  const rightDetails = [
+    ['Bank Name', record.bankName],
+    ['Bank Account No', record.accountNo],
+    ['UAN', record.uanNo],
+    ['Aadhar No', record.aadhaarNo],
+    ['PAN No', record.panNo],
+    ['LOP', formatPayslipNumber(record.lopDays)],
+    ['Payment Status', isPaidStatus(record.status) ? 'PAID' : record.status],
+  ];
+  drawCanvasDetails(context, left + 14, 285, 315, leftDetails);
+  drawCanvasDetails(context, split + 14, 285, 315, rightDetails);
+
+  drawCanvasLine(context, split, detailsBottom, split, tableBottom, 2);
+  drawCanvasLine(context, left, 585, right, 585, 2);
+  drawCanvasLine(context, left, tableBottom, right, tableBottom, 3);
+  context.textAlign = 'left';
+  drawCanvasText(context, 'Earnings', left + 12, 570, '700 18px Arial');
+  context.textAlign = 'right';
+  drawCanvasText(context, 'Full', split - 175, 570, '700 18px Arial');
+  drawCanvasText(context, 'Actual', split - 15, 570, '700 18px Arial');
+  context.textAlign = 'left';
+  drawCanvasText(context, 'Deductions', split + 12, 570, '700 18px Arial');
+  context.textAlign = 'right';
+  drawCanvasText(context, 'Actual', right - 15, 570, '700 18px Arial');
+
+  earnings.forEach((item, index) => {
+    const y = 625 + (index * 48);
+    context.textAlign = 'left';
+    drawCanvasText(context, item.label, left + 12, y, '18px Arial');
+    context.textAlign = 'right';
+    drawCanvasText(context, formatPayslipAmount(item.full), split - 175, y, '18px Arial');
+    drawCanvasText(context, formatPayslipAmount(item.actual), split - 15, y, '18px Arial');
+  });
+  deductions.forEach((item, index) => {
+    const y = 625 + (index * 48);
+    context.textAlign = 'left';
+    drawCanvasText(context, item.label, split + 12, y, '18px Arial');
+    context.textAlign = 'right';
+    drawCanvasText(context, formatPayslipAmount(item.actual), right - 15, y, '18px Arial');
+  });
+
+  drawCanvasLine(context, left, 835, right, 835, 2);
+  context.textAlign = 'left';
+  drawCanvasText(context, 'Total Earnings: Rs.', left + 12, 875, '700 18px Arial');
+  context.textAlign = 'right';
+  drawCanvasText(context, formatPayslipAmount(totalEarnings), split - 175, 875, '700 18px Arial');
+  drawCanvasText(context, formatPayslipAmount(totalEarnings), split - 15, 875, '700 18px Arial');
+  context.textAlign = 'left';
+  drawCanvasText(context, 'Total Deductions:', split + 12, 875, '700 18px Arial');
+  context.textAlign = 'right';
+  drawCanvasText(context, `Rs. ${formatPayslipAmount(totalDeductions)}`, right - 15, 875, '700 18px Arial');
+
+  drawCanvasLine(context, left, netBottom, right, netBottom, 3);
+  context.textAlign = 'left';
+  drawCanvasText(context, 'Net Pay for the month ( Total Earnings - Total Deductions):', left + 12, 940, '700 21px Arial');
+  drawCanvasText(context, formatPayslipAmount(netPay), split + 15, 940, '700 21px Arial');
+  drawCanvasText(context, `(${toIndianCurrencyWords(netPay)} Only)`, left + 12, 988, 'italic 18px Arial');
+  context.textAlign = 'center';
+  drawCanvasText(context, 'This is a system generated payslip and does not require signature.', split, 1072, '17px Arial');
+}
+
+function drawCanvasDetails(context, x, startY, labelWidth, rows) {
+  rows.forEach(([label, value], index) => {
+    const y = startY + (index * 30);
+    context.textAlign = 'left';
+    drawCanvasText(context, `${label}:`, x, y, '17px Arial');
+    drawCanvasText(context, safeText(value), x + labelWidth, y, '17px Arial', 390);
+  });
+}
+
+function drawCanvasText(context, text, x, y, font, maxWidth) {
+  context.fillStyle = '#111111';
+  context.font = font;
+  context.textBaseline = 'alphabetic';
+  if (maxWidth) {
+    context.fillText(String(text ?? ''), x, y, maxWidth);
+    return;
+  }
+  context.fillText(String(text ?? ''), x, y);
+}
+
+function drawCanvasLine(context, x1, y1, x2, y2, lineWidth) {
+  context.beginPath();
+  context.lineWidth = lineWidth;
+  context.strokeStyle = '#222222';
+  context.moveTo(x1, y1);
+  context.lineTo(x2, y2);
+  context.stroke();
+}
+
+function loadPayslipLogo() {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = kavyaLogo;
+  });
+}
+
+function buildImagePdfBlob(jpegDataUrl) {
+  const jpegBytes = base64ToBytes(jpegDataUrl.split(',')[1]);
+  const encoder = new TextEncoder();
+  const pageWidth = 842;
+  const pageHeight = 595;
+  const content = `q\n${pageWidth} 0 0 ${pageHeight} 0 0 cm\n/Im0 Do\nQ`;
+  const objects = [
+    encoder.encode('1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n'),
+    encoder.encode('2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n'),
+    encoder.encode(`3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >> endobj\n`),
+    joinByteArrays([
+      encoder.encode(`4 0 obj << /Type /XObject /Subtype /Image /Width 1684 /Height 1190 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >> stream\n`),
+      jpegBytes,
+      encoder.encode('\nendstream\nendobj\n'),
+    ]),
+    encoder.encode(`5 0 obj << /Length ${content.length} >> stream\n${content}\nendstream\nendobj\n`),
+  ];
+  const parts = [encoder.encode('%PDF-1.4\n')];
+  const offsets = [0];
+  let length = parts[0].length;
+  objects.forEach((object) => {
+    offsets.push(length);
+    parts.push(object);
+    length += object.length;
+  });
+  const xrefOffset = length;
+  const xref = [
+    `xref\n0 ${objects.length + 1}\n`,
+    '0000000000 65535 f \n',
+    ...offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`),
+    `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`,
+  ].join('');
+  parts.push(encoder.encode(xref));
+  return new Blob(parts, { type: 'application/pdf' });
+}
+
+function base64ToBytes(value) {
+  const binary = window.atob(value);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function joinByteArrays(arrays) {
+  const totalLength = arrays.reduce((total, array) => total + array.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  arrays.forEach((array) => {
+    result.set(array, offset);
+    offset += array.length;
+  });
+  return result;
 }
 
 function getPayslipPdfLines(record) {
@@ -1663,6 +1905,7 @@ function getPayslipPdfLines(record) {
     `Designation: ${safeText(safeRecord.role)}`,
     `Payroll Month: ${safeText(safeRecord.month)}`,
     `Payroll Year: ${safeText(safeRecord.year)}`,
+    `Annual Package: ${formatCurrencySafe(safeRecord.packageAmount)}`,
     `Basic Salary: ${formatCurrencySafe(safeRecord.basic)}`,
     `Earnings: ${formatCurrencySafe(getEarnings(safeRecord))}`,
     `Allowances: ${formatCurrencySafe(safeRecord.allowance)}`,
@@ -1853,6 +2096,7 @@ function getPayslipMarkup(record, earningsRows, deductionRows, totalEarnings, to
         ['Designation', record.role],
         ['Department', record.department],
         ['Location', record.location],
+        ['Annual Package', formatCurrency(record.packageAmount)],
         ['Effective Work Days', formatPayslipNumber(record.payableDays)],
         ['Days In Month', record.daysInMonth],
       ])}
@@ -2414,6 +2658,7 @@ function getPayslipDeductions(record) {
     { label: 'PF', actual: record.providentFund },
     { label: 'GRATUITY', actual: record.gratuity },
     { label: 'PROF TAX', actual: record.professionalTax },
+    { label: 'LOP', actual: getSafeMoney(record.absentDeduction) + getSafeMoney(record.halfDayDeduction) },
     { label: 'OTHER DEDUCTION', actual: record.otherDeduction },
   ].filter((item) => item.actual > 0);
 }

@@ -7,6 +7,7 @@ import {
   applyCheckOutToRecord,
   createCheckInRecord,
   getAttendanceEmployee,
+  getAttendanceDate,
   getLateCheckInCountForMonth,
   getInitialAttendanceRows,
   getTodayLabel,
@@ -36,14 +37,27 @@ function EmployeeDashboard() {
     [leaveRequests, leaveTypes, employeeIdentity],
   );
 
-  const myRows = useMemo(() => attendance.filter((row) => row.employeeId === attendanceEmployee.employeeId), [attendance, attendanceEmployee.employeeId]);
+  const myRows = useMemo(() => {
+    const employeeId = normalizeAttendanceValue(attendanceEmployee.employeeId);
+    return attendance.filter((row) => normalizeAttendanceValue(row.employeeId) === employeeId);
+  }, [attendance, attendanceEmployee.employeeId]);
   const todayRecord = myRows.find((row) => row.date === todayLabel);
   const canCheckIn = !todayRecord;
   const canCheckOut = Boolean(todayRecord && hasRecordedCheckIn(todayRecord) && !hasRecordedCheckOut(todayRecord));
-  const presentDays = myRows.filter((row) => row.status === 'Present').length;
-  const halfDays = myRows.filter((row) => row.status === 'Half Day').length;
-  const totalConsideredDays = myRows.filter((row) => ['Present', 'Half Day', 'Absent', 'Late'].includes(row.status)).length;
+  const currentMonthRows = useMemo(() => {
+    const now = new Date();
+    return myRows.filter((row) => {
+      const attendanceDate = getAttendanceDate(row);
+      return attendanceDate
+        && attendanceDate.getMonth() === now.getMonth()
+        && attendanceDate.getFullYear() === now.getFullYear();
+    });
+  }, [myRows]);
+  const presentDays = currentMonthRows.filter((row) => ['present', 'late'].includes(normalizeAttendanceValue(row.status))).length;
+  const halfDays = currentMonthRows.filter((row) => normalizeAttendanceValue(row.status) === 'half day').length;
+  const absentDays = currentMonthRows.filter((row) => normalizeAttendanceValue(row.status) === 'absent').length;
   const weightedPresence = presentDays + (halfDays * 0.5);
+  const daysInCurrentMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
   const navigate = useNavigate();
 
   const normalizeAnnouncements = (items = []) => (Array.isArray(items)
@@ -57,13 +71,13 @@ function EmployeeDashboard() {
     }))
     : []);
 
-  const attendanceRate = totalConsideredDays ? Math.round((weightedPresence / totalConsideredDays) * 100) : 0;
+  const attendanceRate = Math.min(100, Math.round((weightedPresence / daysInCurrentMonth) * 100));
   const employeeStats = useMemo(() => {
     const fallbackStats = [
       {
         label: 'Attendance',
         value: `${attendanceRate}%`,
-        delta: `${presentDays} present days`,
+        delta: `${weightedPresence} present • ${absentDays} absent`,
         tone: 'blue',
         icon: 'ri-time-line',
         onClick: () => navigate('/employee/attendance'),
@@ -95,7 +109,7 @@ function EmployeeDashboard() {
     ];
 
     const summaryStats = dashboardSummary ? [
-      dashboardSummary.attendance,
+      fallbackStats[0],
       dashboardSummary.leaveBalance,
       dashboardSummary.tasks,
       dashboardSummary.announcements,
@@ -105,7 +119,7 @@ function EmployeeDashboard() {
       ...stat,
       onClick: fallbackStats[index]?.onClick,
     }));
-  }, [attendanceRate, dashboardSummary, leaveSummary.totalRemaining, leaveSummary.totalUsed, navigate, presentDays]);
+  }, [absentDays, attendanceRate, dashboardSummary, leaveSummary.totalRemaining, leaveSummary.totalUsed, navigate, weightedPresence]);
 
   useEffect(() => {
     let active = true;
@@ -153,19 +167,25 @@ function EmployeeDashboard() {
     window.addEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
     window.addEventListener('kavyaSettingsChanged', refreshLeaveTypes);
     window.addEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
+    window.addEventListener('storage', refreshLeaveTypes);
+    window.addEventListener('focus', refreshLeaveTypes);
 
     refreshLeaves();
     refreshLeaveTypes();
     refreshAnnouncements();
     refreshDashboardSummary();
+    const settingsIntervalId = window.setInterval(refreshLeaveTypes, 15000);
 
     return () => {
       active = false;
+      window.clearInterval(settingsIntervalId);
       window.removeEventListener('storage', refreshAttendance);
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
       window.removeEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
       window.removeEventListener('kavyaSettingsChanged', refreshLeaveTypes);
       window.removeEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
+      window.removeEventListener('storage', refreshLeaveTypes);
+      window.removeEventListener('focus', refreshLeaveTypes);
     };
   }, [employeeIdentity.employeeId]);
 
@@ -289,5 +309,9 @@ export const attendanceColumns = [
   { key: 'hours', label: 'Hours' },
   { key: 'status', label: 'Status' },
 ];
+
+function normalizeAttendanceValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
 
 export default EmployeeDashboard;

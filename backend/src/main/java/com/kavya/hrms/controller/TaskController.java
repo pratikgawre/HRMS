@@ -12,6 +12,12 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.io.IOException;
+import java.util.Locale;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,12 +28,16 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
+  private static final Path TASK_ATTACHMENT_DIRECTORY = Paths.get("uploads", "task-attachments");
+  private static final long MAX_ATTACHMENT_SIZE = 10L * 1024L * 1024L;
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
   private final EmployeeRepository employeeRepository;
@@ -147,9 +157,46 @@ public class TaskController {
     TaskItem current = taskRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
     String nextStatus = firstNonBlank(request == null ? null : request.getStatus(), current.getStatus());
     current.setStatus(nextStatus);
+    if (request != null) {
+      current.setTaskSummary(request.getSummary() == null ? "" : request.getSummary().trim());
+    }
     TaskItem saved = taskRepository.save(current);
     notifyTaskChangeSafely(saved, "Task updated", "updated", accessRole, userId);
     return saved;
+  }
+
+  @PostMapping("/{id}/attachment")
+  public TaskItem uploadAttachment(@PathVariable("id") String id, @RequestParam("file") MultipartFile file) {
+    TaskItem current = taskRepository.findById(id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
+    if (file == null || file.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please choose an image or PDF file.");
+    }
+    if (file.getSize() > MAX_ATTACHMENT_SIZE) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Attachment must be 10 MB or smaller.");
+    }
+    String contentType = firstNonBlank(file.getContentType()).toLowerCase(Locale.ROOT);
+    if (!(contentType.equals("application/pdf") || contentType.startsWith("image/"))) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only image and PDF attachments are allowed.");
+    }
+    String originalName = firstNonBlank(file.getOriginalFilename(), "attachment");
+    String extension = originalName.contains(".") ? originalName.substring(originalName.lastIndexOf('.')).replaceAll("[^A-Za-z0-9.]", "") : "";
+    String storedName = UUID.randomUUID() + extension;
+    Path directory = TASK_ATTACHMENT_DIRECTORY.toAbsolutePath().normalize();
+    Path target = directory.resolve(storedName).normalize();
+    if (!target.startsWith(directory)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid attachment name.");
+    }
+    try {
+      Files.createDirectories(directory);
+      file.transferTo(target);
+    } catch (IOException exception) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Attachment could not be stored.", exception);
+    }
+    current.setAttachmentUrl("/uploads/task-attachments/" + storedName);
+    current.setAttachmentName(originalName);
+    current.setAttachmentType(contentType);
+    return taskRepository.save(current);
   }
 
   @DeleteMapping("/{id}")
@@ -375,4 +422,3 @@ public class TaskController {
     }
   }
 }
-

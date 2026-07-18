@@ -41,7 +41,6 @@ function LeaveRequests() {
   const location = useLocation();
   const role = getSessionValue('kavyaRole') || 'employee';
   const isAdminOrHr = role === 'admin' || role === 'hr';
-  const isProjectManagerRoute = location.pathname.startsWith('/project-manager/');
   const currentEmployee = getCurrentEmployeeIdentity();
   const canCreateRequest = role !== 'admin';
   const canReviewRequests = isAdminOrHr || role === 'teamLead' || role === 'projectManager';
@@ -225,13 +224,19 @@ function LeaveRequests() {
 
     window.addEventListener('kavyaLeaveRequestsChanged', refreshRequests);
     window.addEventListener('kavyaSettingsChanged', refreshLeaveTypes);
+    window.addEventListener('storage', refreshLeaveTypes);
+    window.addEventListener('focus', refreshLeaveTypes);
 
     refreshRequests();
     refreshLeaveTypes();
+    const settingsIntervalId = window.setInterval(refreshLeaveTypes, 15000);
 
     return () => {
+      window.clearInterval(settingsIntervalId);
       window.removeEventListener('kavyaLeaveRequestsChanged', refreshRequests);
       window.removeEventListener('kavyaSettingsChanged', refreshLeaveTypes);
+      window.removeEventListener('storage', refreshLeaveTypes);
+      window.removeEventListener('focus', refreshLeaveTypes);
     };
   }, []);
 
@@ -259,16 +264,17 @@ function LeaveRequests() {
         const isActionComplete = String(row.status || '').trim().toLowerCase() === targetStatus.toLowerCase();
         const isRejectComplete = String(row.status || '').trim().toLowerCase() === 'rejected';
         const isPending = String(row.status || '').trim().toLowerCase() === 'pending';
-        const shouldDisableRecommend = !isAdminOrHr && isProjectManagerRoute && !isPending;
-        const disableApprove = isReviewing || isActionComplete;
+        const shouldDisableRecommend = !isAdminOrHr && !isPending;
+        const disableApprove = isReviewing || isActionComplete || shouldDisableRecommend;
         const disableReject = isReviewing || isRejectComplete;
         const isOwnHrRequest = role === 'hr'
           && String(row.employeeId || '').trim() === String(currentEmployee.employeeId || '').trim();
+        const showApproveAction = !isOwnHrRequest && (!isAdminOrHr || !isRejectComplete);
         const showRejectAction = isAdminOrHr && !isActionComplete && !isOwnHrRequest;
 
         return (
           <div className="table-actions table-actions-inline leave-review-actions">
-            {!isOwnHrRequest && (
+            {showApproveAction && (
               <button
                 type="button"
                 className="leave-approve-action"

@@ -210,6 +210,7 @@ function Settings() {
       setNotice(successMessage);
       showToast(successMessage, 'success');
       window.dispatchEvent(new Event('kavyaSettingsChanged'));
+      window.localStorage.setItem('kavyaSettingsVersion', String(Date.now()));
       refreshSettingsFromServer().catch(() => {});
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to save settings right now.';

@@ -23,6 +23,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.time.LocalDate;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,6 +35,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/dashboard")
 public class DashboardController {
+  private static final ZoneId KOLKATA_ZONE = ZoneId.of("Asia/Kolkata");
+  private static final DateTimeFormatter ATTENDANCE_DATE_FORMATTER =
+      DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH);
   private final EmployeeRepository employeeRepository;
   private final LeaveRequestRepository leaveRequestRepository;
   private final AnnouncementRepository announcementRepository;
@@ -84,19 +90,25 @@ public class DashboardController {
     response.setEmployeeId(employeeId);
     response.setEmployeeName(resolveEmployeeName(employeeId));
 
-    List<AttendanceRecord> attendanceRecords = attendanceRecordRepository.findByEmployeeId(employeeId);
-    long presentDays = attendanceRecords.stream().filter(r -> "Present".equalsIgnoreCase(r.getStatus())).count();
-    long halfDays = attendanceRecords.stream().filter(r -> "Half Day".equalsIgnoreCase(r.getStatus())).count();
-    long consideredDays = attendanceRecords.stream()
-        .filter(r -> Set.of("present", "half day", "absent", "late").contains(normalize(r.getStatus())))
+    LocalDate today = LocalDate.now(KOLKATA_ZONE);
+    String normalizedEmployeeId = normalize(employeeId);
+    List<AttendanceRecord> attendanceRecords = attendanceRecordRepository.findAll().stream()
+        .filter(record -> normalizedEmployeeId.equals(normalize(record.getEmployeeId())))
+        .filter(record -> isInMonth(record, today))
+        .collect(Collectors.toList());
+    long presentDays = attendanceRecords.stream()
+        .filter(r -> Set.of("present", "late").contains(normalize(r.getStatus())))
         .count();
+    long halfDays = attendanceRecords.stream().filter(r -> "half day".equals(normalize(r.getStatus()))).count();
+    long absentDays = attendanceRecords.stream().filter(r -> "absent".equals(normalize(r.getStatus()))).count();
     double weightedPresence = presentDays + (halfDays * 0.5);
-    int attendanceRate = consideredDays > 0 ? (int) Math.round((weightedPresence * 100.0) / consideredDays) : 0;
+    int daysInCurrentMonth = today.lengthOfMonth();
+    int attendanceRate = Math.min(100, (int) Math.round((weightedPresence * 100.0) / daysInCurrentMonth));
 
     EmployeeDashboardSummary.CardMetric attendance = new EmployeeDashboardSummary.CardMetric();
     attendance.setLabel("Attendance");
     attendance.setValue(attendanceRate + "%");
-    attendance.setDelta(presentDays + " present days");
+    attendance.setDelta(formatAttendanceDays(weightedPresence) + " present • " + absentDays + " absent");
     attendance.setTone("blue");
     attendance.setIcon("ri-time-line");
     attendance.setNavigateTo(List.of("/employee/attendance"));
@@ -190,6 +202,48 @@ public class DashboardController {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+  }
+
+  private boolean isInMonth(AttendanceRecord record, LocalDate referenceDate) {
+    LocalDate attendanceDate = parseAttendanceDate(record);
+    return attendanceDate != null
+        && attendanceDate.getYear() == referenceDate.getYear()
+        && attendanceDate.getMonthValue() == referenceDate.getMonthValue();
+  }
+
+  private LocalDate parseAttendanceDate(AttendanceRecord record) {
+    if (record == null) {
+      return null;
+    }
+
+    for (String value : List.of(
+        Optional.ofNullable(record.getDateLabel()).orElse(""),
+        Optional.ofNullable(record.getDate()).orElse(""))) {
+      if (value.isBlank()) {
+        continue;
+      }
+      try {
+        return LocalDate.parse(value.trim(), ATTENDANCE_DATE_FORMATTER);
+      } catch (DateTimeParseException ignored) {
+        try {
+          return LocalDate.parse(value.trim());
+        } catch (DateTimeParseException ignoredAgain) {
+          // Try the check-in timestamp below.
+        }
+      }
+    }
+
+    try {
+      return record.getCheckInAt() == null || record.getCheckInAt().isBlank()
+          ? null
+          : Instant.parse(record.getCheckInAt()).atZone(KOLKATA_ZONE).toLocalDate();
+    } catch (DateTimeParseException ex) {
+      return null;
+    }
+  }
+
+  private String formatAttendanceDays(double days) {
+    return days == Math.rint(days) ? String.valueOf((long) days) : String.valueOf(days);
   }
 
   private int safeDays(Integer days) {

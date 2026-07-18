@@ -287,11 +287,52 @@ export function buildTaskAssignmentGroups(tasks = [], teamLeadIdentity = '') {
 
 export function getProjectAssigneeOptions(project, employees = [], teamLeadId = '') {
   const employeeDirectory = buildEmployeeDirectory(employees);
-  const teamLeadIdentity = resolveTeamLeadIdentity(teamLeadId);
-  const members = normalizeProjectTeamMembers(project, employeeDirectory)
-    .filter((employee) => !teamLeadIdentity.keys.includes(normalizeLookupValue(getEmployeeId(employee))));
+  const members = new Map();
 
-  return members.filter((employee) => isEligibleTeamMember(employee));
+  const addAssignedMember = (memberId, memberData = null) => {
+    const normalizedId = normalizeLookupValue(memberId);
+    if (!normalizedId || members.has(normalizedId)) {
+      return;
+    }
+
+    const directoryEmployee = employeeDirectory.get(normalizedId);
+    const source = directoryEmployee || memberData || {};
+    const resolvedId = getEmployeeId(source) || String(memberId || '').trim();
+    const displayName = getEmployeeName(memberData) || getEmployeeName(source) || resolvedId;
+    if (!resolvedId) {
+      return;
+    }
+
+    members.set(normalizedId, {
+      ...source,
+      ...(memberData || {}),
+      id: resolvedId,
+      employeeId: source.employeeId || resolvedId,
+      employeeCode: source.employeeCode || memberData?.employeeCode || resolvedId,
+      name: displayName,
+      displayName,
+      department: String(memberData?.department || source.department || source.departmentName || '-').trim() || '-',
+      role: String(memberData?.role || source.role || source.jobTitle || 'Employee').trim() || 'Employee',
+      avatar: String(memberData?.avatar || source.avatar || displayName.slice(0, 2).toUpperCase() || 'EM').trim(),
+      status: String(memberData?.status || source.status || '').trim(),
+    });
+  };
+
+  if (Array.isArray(project?.teamMemberDetails)) {
+    project.teamMemberDetails.forEach((member) => {
+      if (typeof member === 'string') {
+        addAssignedMember(member);
+      } else {
+        addAssignedMember(member?.id || member?.employeeCode || member?.employeeId, member);
+      }
+    });
+  }
+
+  if (Array.isArray(project?.teamMembers)) {
+    project.teamMembers.forEach((memberId) => addAssignedMember(memberId));
+  }
+
+  return Array.from(members.values());
 }
 
 export function buildEmployeeDirectory(employees = []) {

@@ -124,16 +124,21 @@ public class PayrollController {
       @RequestParam String employeeId,
       @RequestParam String month,
       @RequestParam String year,
+      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-Employee-Id", required = false) String sessionEmployeeId) {
+    String normalizedAccessRole = accessRole == null ? "" : accessRole.trim().toLowerCase();
+    boolean canManagePayroll = "admin".equals(normalizedAccessRole) || "hr".equals(normalizedAccessRole);
     String safeEmployeeId = normalizeEmployeeId(sessionEmployeeId);
     String requestedEmployeeId = normalizeEmployeeId(employeeId);
-    String effectiveEmployeeId = !safeEmployeeId.isBlank() ? safeEmployeeId : requestedEmployeeId;
+    String effectiveEmployeeId = canManagePayroll
+        ? requestedEmployeeId
+        : (!safeEmployeeId.isBlank() ? safeEmployeeId : requestedEmployeeId);
 
     if (effectiveEmployeeId.isBlank()) {
       return badRequest("Employee ID is required.");
     }
 
-    if (!requestedEmployeeId.isBlank() && !requestedEmployeeId.equals(effectiveEmployeeId)) {
+    if (!canManagePayroll && !requestedEmployeeId.isBlank() && !requestedEmployeeId.equals(effectiveEmployeeId)) {
       return forbidden("You can only generate your own payslip.");
     }
 
@@ -219,6 +224,5 @@ public class PayrollController {
   }
 
 }
-
 
 
