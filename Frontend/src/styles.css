@@ -2835,7 +2835,16 @@ button.attendance-summary-card.is-clickable:focus-visible {
 }
 
 .insight-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.insight-grid > .section-card,
+.wellbeing-section-card {
+  width: 100%;
+}
+
+.insight-grid > .wellbeing-section-card {
+  grid-column: 1 / -1;
 }
 
 .hr-dashboard-stack {

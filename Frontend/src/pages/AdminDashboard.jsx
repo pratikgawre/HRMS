@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
-import { dashboardStats, people, quickActions, todayFocus } from '../data/dummyData.js';
+import { dashboardStats, people, quickActions } from '../data/dummyData.js';
 import { getInitialLeaveRequests, setLeaveRequestsCache } from '../utils/leaveStorage.js';
 import { getStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
 import { getStoredAnnouncements, setAnnouncementsCache } from '../utils/announcementStorage.js';
@@ -11,7 +11,6 @@ import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 
 const DASHBOARD_REFRESH_MS = 15000;
-let todayFocusCache = todayFocus;
 
 function normalizeDashboardEmployee(employee, index = 0) {
   const displayName = employee.displayName || employee.name || employee.employeeName || 'Employee';
@@ -720,49 +719,12 @@ export function QuickActions({ detailOverrides = {}, labelOverrides = {}, pathOv
   );
 }
 
-export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, wellnessAnnouncements = [] }) {
-  const [focusItems, setFocusItems] = useState(todayFocusCache);
-  const [isPlanDayOpen, setIsPlanDayOpen] = useState(false);
+export function InsightGrid({ wellnessAnnouncements = [] }) {
   const [selectedReminder, setSelectedReminder] = useState(null);
-
-  const saveFocusItems = (next) => {
-    todayFocusCache = next;
-    setFocusItems(next);
-  };
-
-  const planFromRealtime = () => {
-    const next = [
-      { title: 'Leave approvals', meta: `${pendingLeaves} pending`, progress: Math.min(100, 40 + (pendingLeaves * 8)), tone: 'orange' },
-      { title: 'Hiring pipeline', meta: `${openRoles} open roles`, progress: Math.min(100, 35 + (openRoles * 10)), tone: 'blue' },
-      { title: 'Team coverage', meta: `${employees} employees`, progress: Math.min(100, 55 + (employees > 0 ? 20 : 0)), tone: 'green' },
-    ];
-    saveFocusItems(next);
-    setIsPlanDayOpen(false);
-  };
 
   return (
     <div className="insight-grid">
-      <section className="section-card">
-        <div className="section-heading">
-          <h3>Today Focus</h3>
-          <button type="button" onClick={() => setIsPlanDayOpen(true)}>Plan day</button>
-        </div>
-        <div className="focus-list">
-          {focusItems.map((item) => (
-            <article key={item.title}>
-              <div>
-                <strong>{item.title}</strong>
-                <span>{item.meta}</span>
-              </div>
-              <div className="focus-progress">
-                <span>{item.progress}%</span>
-                <div className={`mini-progress tone-${item.tone}`}><i style={{ width: `${item.progress}%` }} /></div>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-      <Section title="Wellbeing Reminders">
+      <Section title="Wellbeing Reminders" className="wellbeing-section-card">
         <div className="wellbeing-list">
           {wellnessAnnouncements.map((item) => (
             <button key={item.id} type="button" onClick={() => setSelectedReminder(item)}>
@@ -778,28 +740,6 @@ export function InsightGrid({ pendingLeaves = 0, openRoles = 0, employees = 0, w
           )}
         </div>
       </Section>
-      {isPlanDayOpen && (
-        <div className="smart-summary-backdrop" role="presentation" onClick={() => setIsPlanDayOpen(false)}>
-          <section className="open-roles-modal" role="dialog" aria-modal="true" aria-label="Plan day focus" onClick={(event) => event.stopPropagation()}>
-            <div className="open-roles-modal-head">
-              <div>
-                <p className="eyebrow">Today Focus</p>
-                <h3>Plan day</h3>
-              </div>
-              <button type="button" onClick={() => setIsPlanDayOpen(false)} aria-label="Close plan day">
-                <i className="ri-close-line" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="open-roles-modal-body">
-              <p className="notification-empty">Create focus plan from latest realtime stats.</p>
-              <div className="notification-actions">
-                <button type="button" onClick={planFromRealtime}>Generate Plan</button>
-                <button type="button" onClick={() => setIsPlanDayOpen(false)}>Cancel</button>
-              </div>
-            </div>
-          </section>
-        </div>
-      )}
       {selectedReminder && (
         <div className="smart-summary-backdrop" role="presentation" onClick={() => setSelectedReminder(null)}>
           <section className="open-roles-modal" role="dialog" aria-modal="true" aria-label="Reminder details" onClick={(event) => event.stopPropagation()}>

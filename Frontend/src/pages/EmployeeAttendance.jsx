@@ -466,6 +466,20 @@ function buildAttendanceCalendar({ monthValue, attendanceRows, leaveRequests, em
 }
 
 function resolveCalendarCell({ date, dateKey, attendanceRecord, leaveRecord, isToday, isFuture, currentDate }) {
+  if (isFuture) {
+    return {
+      date,
+      dateKey,
+      dayNumber: String(date.getDate()).padStart(2, '0'),
+      longLabel: formatLongDate(date),
+      statusLabel: 'Upcoming',
+      tone: 'upcoming',
+      detail: 'Future date',
+      isToday,
+      isFuture,
+    };
+  }
+
   if (leaveRecord) {
     const leaveType = leaveRecord.leaveType || leaveRecord.type || 'Leave';
     const leaveFromDate = parseDateValue(leaveRecord.fromDate || leaveRecord.from);
@@ -538,20 +552,6 @@ function resolveCalendarCell({ date, dateKey, attendanceRecord, leaveRecord, isT
       isToday,
       isFuture,
       record: attendanceRecord,
-    };
-  }
-
-  if (isFuture) {
-    return {
-      date,
-      dateKey,
-      dayNumber: String(date.getDate()).padStart(2, '0'),
-      longLabel: formatLongDate(date),
-      statusLabel: 'Upcoming',
-      tone: 'upcoming',
-      detail: 'Future date',
-      isToday,
-      isFuture,
     };
   }
 

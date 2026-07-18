@@ -61,6 +61,7 @@ public class SystemSettingsController {
     settings.setPayrollCutoff("25th of every month");
     settings.setDepartments(java.util.List.of("HR", "Engineering", "Finance", "Operations", "Sales", "Support"));
     settings.setDesignations(java.util.List.of("HR Manager", "Software Engineer", "Product Designer", "Accountant", "Sales Executive", "Support Executive"));
+    settings.setHolidays(new ArrayList<>());
     SystemSettings.LeaveTypeSetting casual = new SystemSettings.LeaveTypeSetting();
     casual.setName("Casual Leave");
     casual.setDays(12);
@@ -102,6 +103,7 @@ public class SystemSettingsController {
     next.setPayrollCutoff(editable(allowedSections, "company") ? fallback(incoming.getPayrollCutoff(), current.getPayrollCutoff()) : current.getPayrollCutoff());
     next.setDepartments(editable(allowedSections, "departments") ? copyListOrFallback(incoming.getDepartments(), current.getDepartments()) : copyList(current.getDepartments()));
     next.setDesignations(editable(allowedSections, "designations") ? copyListOrFallback(incoming.getDesignations(), current.getDesignations()) : copyList(current.getDesignations()));
+    next.setHolidays(editable(allowedSections, "company") ? copyListOrFallback(incoming.getHolidays(), current.getHolidays()) : copyList(current.getHolidays()));
     next.setLeaveTypes(editable(allowedSections, "leaveTypes") ? copyLeaveTypesOrFallback(incoming.getLeaveTypes(), current.getLeaveTypes()) : copyLeaveTypes(current.getLeaveTypes()));
     next.setPayrollSettings(editable(allowedSections, "payroll") ? copyStringMapOrFallback(incoming.getPayrollSettings(), current.getPayrollSettings()) : copyStringMap(current.getPayrollSettings()));
     next.setPermissionMatrix("Super Admin".equals(accessRole)

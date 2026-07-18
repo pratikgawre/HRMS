@@ -21,6 +21,11 @@ import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/le
 import { safeApiRequest } from '../utils/api.js';
 import { getEmployeeLeaveSummary, normalizeLeaveTypes, DEFAULT_LEAVE_TYPES } from '../utils/leaveBalance.js';
 
+function getCurrentMonthValue() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 function EmployeeDashboard() {
   const [attendance, setAttendance] = useState(getInitialAttendanceRows);
   const [leaveRequests, setLeaveRequests] = useState(getInitialLeaveRequests);
@@ -28,6 +33,8 @@ function EmployeeDashboard() {
   const [latestAnnouncements, setLatestAnnouncements] = useState([]);
   const [wellnessAnnouncements, setWellnessAnnouncements] = useState([]);
   const [dashboardSummary, setDashboardSummary] = useState(null);
+  const [monthlyAttendanceSummary, setMonthlyAttendanceSummary] = useState(null);
+  const [attendanceSummaryLoading, setAttendanceSummaryLoading] = useState(true);
   const [message, setMessage] = useState('');
   const attendanceEmployee = getAttendanceEmployee();
   const employeeIdentity = getCurrentEmployeeIdentity();
@@ -73,15 +80,32 @@ function EmployeeDashboard() {
 
   const attendanceRate = Math.min(100, Math.round((weightedPresence / daysInCurrentMonth) * 100));
   const employeeStats = useMemo(() => {
-    const fallbackStats = [
-      {
+    const attendanceCard = monthlyAttendanceSummary
+      ? {
+        label: 'Attendance',
+        value: attendanceSummaryLoading
+          ? '--'
+          : (monthlyAttendanceSummary.recordCount === 0
+            ? '0%'
+            : `${Number(monthlyAttendanceSummary.attendancePercentage || 0).toFixed(2)}%`),
+        delta: attendanceSummaryLoading
+          ? 'Loading monthly attendance summary...'
+          : `Working ${monthlyAttendanceSummary.totalWorkingDays} | Present ${monthlyAttendanceSummary.presentDays} | Half ${monthlyAttendanceSummary.halfDays} | Absent ${monthlyAttendanceSummary.absentDays} | Leave ${monthlyAttendanceSummary.leaveDays} | Worked ${Number(monthlyAttendanceSummary.workedDays || 0).toFixed(2)}`,
+        tone: 'blue',
+        icon: 'ri-time-line',
+        onClick: () => navigate('/employee/attendance'),
+      }
+      : {
         label: 'Attendance',
         value: `${attendanceRate}%`,
         delta: `${weightedPresence} present • ${absentDays} absent`,
         tone: 'blue',
         icon: 'ri-time-line',
         onClick: () => navigate('/employee/attendance'),
-      },
+      };
+
+    const fallbackStats = [
+      attendanceCard,
       {
         label: 'Leave Balance',
         value: String(leaveSummary.totalRemaining),
@@ -114,6 +138,10 @@ function EmployeeDashboard() {
       dashboardSummary.tasks,
       dashboardSummary.announcements,
     ] : fallbackStats;
+
+    if (summaryStats.length > 0) {
+      summaryStats[0] = attendanceCard;
+    }
 
     return summaryStats.map((stat, index) => ({
       ...stat,
@@ -158,12 +186,24 @@ function EmployeeDashboard() {
     };
 
     const refreshDashboardSummary = async () => {
-      const summary = await safeApiRequest(`/dashboard/employee/summary/${employeeIdentity.employeeId}`, null);
-      setDashboardSummary(summary);
+      const summary = await safeApiRequest('/dashboard/employee/summary', null);
+      if (active) {
+        setDashboardSummary(summary);
+      }
+    };
+
+    const refreshMonthlyAttendanceSummary = async () => {
+      setAttendanceSummaryLoading(true);
+      const summary = await safeApiRequest(`/dashboard/employee/monthly-attendance?month=${encodeURIComponent(getCurrentMonthValue())}`, null);
+      if (active) {
+        setMonthlyAttendanceSummary(summary);
+        setAttendanceSummaryLoading(false);
+      }
     };
 
     window.addEventListener('storage', refreshAttendance);
     window.addEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
+    window.addEventListener('kavyaAttendanceRowsChanged', refreshMonthlyAttendanceSummary);
     window.addEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
     window.addEventListener('kavyaSettingsChanged', refreshLeaveTypes);
     window.addEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
@@ -181,6 +221,7 @@ function EmployeeDashboard() {
       window.clearInterval(settingsIntervalId);
       window.removeEventListener('storage', refreshAttendance);
       window.removeEventListener('kavyaAttendanceRowsChanged', refreshAttendance);
+      window.removeEventListener('kavyaAttendanceRowsChanged', refreshMonthlyAttendanceSummary);
       window.removeEventListener('kavyaLeaveRequestsChanged', refreshLeaves);
       window.removeEventListener('kavyaSettingsChanged', refreshLeaveTypes);
       window.removeEventListener('kavyaAnnouncementsChanged', refreshAnnouncements);
