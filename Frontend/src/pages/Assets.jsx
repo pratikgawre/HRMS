@@ -23,7 +23,9 @@ function Assets() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const currentEmployee = getCurrentEmployeeIdentity();
   const isHrModule = location.pathname.startsWith('/hr/');
-  const isTeamScopedRole = role === 'projectManager' || role === 'teamLead';
+  const isTeamLead = role === 'teamLead';
+  const isProjectManager = role === 'projectManager';
+  const isTeamScopedRole = isProjectManager || isTeamLead;
   if (role === 'employee') {
     return <EmployeeAssetsView />;
   }
@@ -53,79 +55,89 @@ function Assets() {
   });
   const [assetMessage, setAssetMessage] = useState('');
   const hasLoadedInitialDataRef = useRef(false);
-  const hasVisibleAssetDataRef = useRef(false);
+  const isRefreshingRef = useRef(false);
+  const normalizeAssetStatus = (value) => String(value || '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+  const isRepairStatus = (status) => ['repair needed', 'under repair'].includes(normalizeAssetStatus(status));
+  const isReturnStatus = (status) => ['pending return', 'return requested'].includes(normalizeAssetStatus(status));
 
   useEffect(() => {
     let active = true;
 
     const refreshAssets = async () => {
-      if (!hasVisibleAssetDataRef.current) {
-        setIsLoading(true);
+      if (isRefreshingRef.current) {
+        return;
       }
+
+      isRefreshingRef.current = true;
+      setIsLoading(true);
       setLoadError('');
       try {
         const cachedAssets = readCachedJson(ADMIN_ASSET_CACHE_KEY, []);
         const cachedEmployees = readCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, []);
-        if (cachedAssets.length && !hasVisibleAssetDataRef.current) {
+        if (cachedAssets.length && assets.length === 0) {
           const normalizedCachedEmployees = normalizeAssetDirectoryEmployees(cachedEmployees);
           setAssets(normalizeAssetRows(cachedAssets, normalizedCachedEmployees));
           setEmployees(normalizedCachedEmployees);
-          hasVisibleAssetDataRef.current = true;
-          setIsLoading(false);
         }
 
-        let assetRows = [];
-        let employeeRows = [];
-        let projectRows = [];
-        const pageData = await apiRequest('/assets/page-data').catch(() => null);
-        if (
-          pageData
-          && (Array.isArray(pageData.assets) || Array.isArray(pageData.employees) || Array.isArray(pageData.projects))
-        ) {
-          assetRows = Array.isArray(pageData.assets) ? pageData.assets : [];
-          employeeRows = Array.isArray(pageData.employees) ? pageData.employees : [];
-          projectRows = Array.isArray(pageData.projects) ? pageData.projects : [];
-        } else {
-          [assetRows, employeeRows, projectRows] = await Promise.all([
-            apiRequest('/assets').catch(() => []),
-            apiRequest('/employees').catch(() => []),
-            apiRequest('/projects').catch(() => []),
-          ]);
-        }
+        const [assetResult, employeeResult, projectResult] = await Promise.allSettled([
+          apiRequest('/assets', { timeoutMs: 15000 }),
+          apiRequest('/employees', { timeoutMs: 15000 }),
+          apiRequest('/projects').catch(() => []),
+        ]);
 
         if (!active) {
           return;
         }
 
-        const normalizedEmployees = normalizeAssetDirectoryEmployees(Array.isArray(employeeRows) ? employeeRows : []);
+        const assetSucceeded = assetResult.status === 'fulfilled';
+        const employeeSucceeded = employeeResult.status === 'fulfilled';
+        const projectRows = projectResult.status === 'fulfilled' ? projectResult.value : [];
+        const assetRows = assetSucceeded && Array.isArray(assetResult.value)
+          ? assetResult.value
+          : assetSucceeded && assetResult.value && Array.isArray(assetResult.value.assets)
+            ? assetResult.value.assets
+            : [];
+        const employeeRows = employeeSucceeded && Array.isArray(employeeResult.value) ? employeeResult.value : [];
+
+        if (!assetSucceeded) {
+          console.error('[Assets] GET /api/assets failed:', assetResult.reason);
+        }
+
+        if (!employeeSucceeded) {
+          console.error('[Assets] GET /api/employees failed:', employeeResult.reason);
+        }
+
+        const normalizedEmployees = normalizeAssetDirectoryEmployees(employeeRows);
         const normalizedProjects = normalizeProjects(Array.isArray(projectRows) ? projectRows : []);
-        console.info('[Assets] fetch response', {
-          assetCount: Array.isArray(assetRows) ? assetRows.length : 0,
-          sampleDates: Array.isArray(assetRows)
-            ? assetRows.slice(0, 3).map((asset) => ({
-                id: asset?.id,
-                currentDate: asset?.currentDate || asset?.current_date || asset?.assignedDate || asset?.assignmentDate,
-                dueDate: asset?.dueDate || asset?.due_date || asset?.returnDate || asset?.return_date,
-              }))
-            : [],
-        });
-        const normalizedAssets = normalizeAssetRows(Array.isArray(assetRows) ? assetRows : [], normalizedEmployees);
-        setAssets(normalizedAssets);
-        setEmployees(normalizedEmployees);
+        const normalizedAssets = normalizeAssetRows(assetRows, normalizedEmployees);
+        if (assetSucceeded) {
+          setAssets(normalizedAssets);
+        } else {
+          if (cachedAssets.length) {
+            setAssets(normalizeAssetRows(cachedAssets, normalizedEmployees));
+          }
+          setLoadError('Unable to load assets. Please verify that the backend is running and try again.');
+        }
+        if (employeeSucceeded) {
+          setEmployees(normalizedEmployees);
+        }
         setProjects(normalizedProjects);
-        hasVisibleAssetDataRef.current = true;
-        writeCachedJson(ADMIN_ASSET_CACHE_KEY, Array.isArray(assetRows) ? assetRows : []);
-        writeCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, Array.isArray(employeeRows) ? employeeRows : []);
-      } catch {
-        if (active && !hasVisibleAssetDataRef.current) {
-          setAssets([]);
-          setEmployees([]);
-          setLoadError('Unable to load assets right now.');
+        if (assetSucceeded) {
+          writeCachedJson(ADMIN_ASSET_CACHE_KEY, assetRows);
+        }
+        if (employeeSucceeded) {
+          writeCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, employeeRows);
+        }
+      } catch (error) {
+        if (active) {
+          setLoadError('Unable to load asset data. Please try again.');
         }
       } finally {
         if (active) {
           setIsLoading(false);
         }
+        isRefreshingRef.current = false;
       }
     };
 
@@ -204,12 +216,12 @@ function Assets() {
   }, [assets, isTeamScopedRole, teamMemberIds]);
   const scopedSummary = useMemo(() => ({
     total: scopedAssets.length,
-    assigned: scopedAssets.filter((asset) => asset.status === 'Assigned').length,
-    needsAttention: scopedAssets.filter((asset) => ['Replacement Requested', 'Repair Needed', 'Pending Return'].includes(asset.status)).length,
-    available: scopedAssets.filter((asset) => asset.status === 'Available').length,
-    replacementRequested: scopedAssets.filter((asset) => asset.status === 'Replacement Requested').length,
-    repairNeeded: scopedAssets.filter((asset) => asset.status === 'Repair Needed').length,
-    pendingReturn: scopedAssets.filter((asset) => asset.status === 'Pending Return').length,
+    assigned: scopedAssets.filter((asset) => normalizeAssetStatus(asset.status) === 'assigned').length,
+    needsAttention: scopedAssets.filter((asset) => ['replacement requested', 'repair needed', 'pending return', 'under repair', 'return requested'].includes(normalizeAssetStatus(asset.status))).length,
+    available: scopedAssets.filter((asset) => normalizeAssetStatus(asset.status) === 'available').length,
+    replacementRequested: scopedAssets.filter((asset) => normalizeAssetStatus(asset.status) === 'replacement requested').length,
+    repairNeeded: scopedAssets.filter((asset) => isRepairStatus(asset.status)).length,
+    pendingReturn: scopedAssets.filter((asset) => isReturnStatus(asset.status)).length,
   }), [scopedAssets]);
 
   const activeSummary = isTeamScopedRole ? scopedSummary : summary;
@@ -218,13 +230,13 @@ function Assets() {
     const matchingAssets = scopedAssets.filter(matchFn);
     if (matchingAssets.length === 1) {
       setSelectedAsset(matchingAssets[0]);
-      navigate('/hr/assets?section=manage-assets');
+      navigate(`${location.pathname}?section=manage-assets`);
       return;
     }
 
     setSelectedAsset(null);
     setAssetView(view);
-    navigate('/hr/assets?section=manage-assets');
+    navigate(`${location.pathname}?section=manage-assets`);
   };
 
   const stats = useMemo(() => ([
@@ -234,7 +246,7 @@ function Assets() {
       delta: 'Tracked items',
       tone: 'blue',
       icon: 'ri-briefcase-4-line',
-      onClick: isHrModule ? () => handleSummaryCardClick('all', () => true) : undefined,
+      onClick: (isHrModule || isTeamLead || isProjectManager) ? () => handleSummaryCardClick('all', () => true) : undefined,
     },
     {
       label: 'Assigned',
@@ -242,7 +254,7 @@ function Assets() {
       delta: 'In use',
       tone: 'green',
       icon: 'ri-user-follow-line',
-      onClick: isHrModule ? () => handleSummaryCardClick('assigned', (asset) => asset.status === 'Assigned') : undefined,
+      onClick: (isHrModule || isTeamLead || isProjectManager) ? () => handleSummaryCardClick('assigned', (asset) => normalizeAssetStatus(asset.status) === 'assigned') : undefined,
     },
     {
       label: 'Needs Attention',
@@ -250,7 +262,7 @@ function Assets() {
       delta: 'Replacement or repair',
       tone: 'orange',
       icon: 'ri-alert-line',
-      onClick: isHrModule ? () => handleSummaryCardClick('needs-attention', (asset) => ['Replacement Requested', 'Repair Needed', 'Pending Return'].includes(asset.status)) : undefined,
+      onClick: (isHrModule || isTeamLead || isProjectManager) ? () => handleSummaryCardClick('needs-attention', (asset) => ['replacement requested', 'repair needed', 'pending return', 'under repair', 'return requested'].includes(normalizeAssetStatus(asset.status))) : undefined,
     },
     {
       label: 'Available',
@@ -258,7 +270,7 @@ function Assets() {
       delta: 'Ready to assign',
       tone: 'pink',
       icon: 'ri-checkbox-circle-line',
-      onClick: isHrModule ? () => handleSummaryCardClick('available', (asset) => asset.status === 'Available') : undefined,
+      onClick: (isHrModule || isTeamLead || isProjectManager) ? () => handleSummaryCardClick('available', (asset) => normalizeAssetStatus(asset.status) === 'available') : undefined,
     },
   ]), [activeSummary, isHrModule]);
 
@@ -703,10 +715,10 @@ function Assets() {
     });
   }, [assetView, scopedAssets, searchText]);
 
-  const assignedAssets = filteredAssets.filter((asset) => asset.status === 'Assigned');
-  const replacementRequests = filteredAssets.filter((asset) => asset.status === 'Replacement Requested');
-  const repairAssets = filteredAssets.filter((asset) => asset.status === 'Repair Needed');
-  const returnAssets = filteredAssets.filter((asset) => asset.status === 'Pending Return');
+  const assignedAssets = filteredAssets.filter((asset) => normalizeAssetStatus(asset.status) === 'assigned');
+  const replacementRequests = filteredAssets.filter((asset) => normalizeAssetStatus(asset.status) === 'replacement requested');
+  const repairAssets = scopedAssets.filter((asset) => isRepairStatus(asset.status));
+  const returnAssets = scopedAssets.filter((asset) => isReturnStatus(asset.status));
   const displayedAssets = filteredAssets.map((asset) => ({
     ...asset,
     employeeName: asset.assignedToEmployeeId
@@ -879,7 +891,11 @@ function Assets() {
             />
           </label>
         </div>
-        <DataTable columns={assetColumns} rows={displayedAssets} emptyMessage="No assets found." />
+        {!isLoading && !loadError && assets.length === 0 ? (
+          <p className="notification-empty">No asset records found.</p>
+        ) : (
+          <DataTable columns={assetColumns} rows={displayedAssets} emptyMessage="No assets found." />
+        )}
       </Section>
 
       <div className="assets-stack">
@@ -893,7 +909,7 @@ function Assets() {
         <Section id="replacement-request" title="Replacement Request">
           <DataTable columns={requestColumns} rows={replacementRequests} emptyMessage="No replacement requests." />
         </Section>
-        {!isTeamScopedRole && (
+        {(role === 'admin' || role === 'hr' || isTeamLead) && (
           <>
             <Section id="repair-status" title="Repair Status">
               <DataTable columns={requestColumns} rows={repairAssets} emptyMessage="No repair requests." />

@@ -7,7 +7,12 @@ export async function apiRequest(path, options = {}) {
   const employeeId = getSessionValue('kavyaEmployeeId');
   const authToken = getSessionValue('kavyaAuthToken');
   const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
-  const { headers: optionHeaders, ...requestOptions } = options;
+  const {
+    headers: optionHeaders,
+    signal: externalSignal,
+    timeoutMs = isFormDataBody ? 30000 : 15000,
+    ...requestOptions
+  } = options;
   const headers = {
     ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
     ...(accessRole ? { 'X-Kavya-Access-Role': accessRole } : {}),
@@ -16,29 +21,64 @@ export async function apiRequest(path, options = {}) {
     ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     ...(optionHeaders || {}),
   };
+  const controller = new AbortController();
+  let timedOut = false;
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...requestOptions,
-    credentials: 'include',
-    headers,
-  });
+  const onExternalAbort = () => controller.abort();
 
-  if (!response.ok) {
-    const text = await response.text();
-    if (response.status === 401 && getSessionValue('kavyaAuthMode') !== 'local') {
-      clearSessionValues();
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true });
     }
-    throw buildApiError(text, response.status);
   }
 
-  markSessionActivity();
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    const payload = await response.json();
-    return normalizeApiPayload(payload);
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...requestOptions,
+      credentials: 'include',
+      headers,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      if (response.status === 401 && getSessionValue('kavyaAuthMode') !== 'local') {
+        clearSessionValues();
+      }
+      throw buildApiError(text, response.status);
+    }
+
+    markSessionActivity();
+
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const payload = await response.json();
+      return normalizeApiPayload(payload);
+    }
+    return null;
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds`);
+    }
+
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+    if (externalSignal) {
+      externalSignal.removeEventListener('abort', onExternalAbort);
+    }
   }
-  return null;
 }
 
 function normalizeApiPayload(value) {

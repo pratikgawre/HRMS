@@ -9,10 +9,7 @@ import { bootstrapData } from './utils/bootstrapData.js';
 import { bootstrapSessionFromBackend, getSessionSnapshot } from './utils/appSession.js';
 
 const cachedSession = getSessionSnapshot();
-const hasCachedSession = Boolean(cachedSession.kavyaRole || cachedSession.kavyaAccessRole);
-const sessionBootstrap = hasCachedSession
-  ? bootstrapSessionFromBackend()
-  : Promise.resolve(cachedSession);
+const sessionBootstrap = bootstrapSessionFromBackend().catch(() => cachedSession);
 
 sessionBootstrap
   .then((session) => {

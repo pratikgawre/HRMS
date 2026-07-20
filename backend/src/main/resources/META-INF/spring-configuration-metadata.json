@@ -4,6 +4,36 @@
       "name": "app.mail.from",
       "type": "java.lang.String",
       "description": "Default sender address used for outgoing mail."
+    },
+    {
+      "name": "app.mail.provider",
+      "type": "java.lang.String",
+      "description": "Email delivery provider to use, such as smtp or sendgrid."
+    },
+    {
+      "name": "sendgrid.api-key",
+      "type": "java.lang.String",
+      "description": "SendGrid API key used to authenticate requests."
+    },
+    {
+      "name": "sendgrid.from",
+      "type": "java.lang.String",
+      "description": "SendGrid sender email address."
+    },
+    {
+      "name": "sendgrid.from-name",
+      "type": "java.lang.String",
+      "description": "Display name used for SendGrid sender identity."
+    },
+    {
+      "name": "sendgrid.api-url",
+      "type": "java.lang.String",
+      "description": "SendGrid API endpoint for sending mail."
+    },
+    {
+      "name": "sendgrid.timeout-ms",
+      "type": "java.lang.Integer",
+      "description": "Timeout in milliseconds for SendGrid requests."
     }
   ]
 }
