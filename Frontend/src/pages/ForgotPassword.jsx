@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
+import loginLogo from '../assets/logo.png';
 import { requestPasswordReset, resetPassword } from '../utils/auth.js';
 
 function ForgotPasswordToast({ toast, onClose }) {
@@ -151,9 +152,11 @@ function ForgotPassword() {
       <section className="login-hero reset-hero">
         <div className="login-pattern pattern-top" />
         <div className="login-pattern pattern-bottom" />
-        <div className="login-brand">
-          <span>K</span>
-          <strong>Kavya HRMS</strong>
+        <div className="login-brand login-brand--logo">
+          <div className="login-brand-logo-frame" aria-hidden="true">
+            <img className="login-brand-logo" src={loginLogo} alt="" />
+          </div>
+          <strong>Kavya HR 360</strong>
         </div>
 
         <div className="login-visual reset-visual" aria-hidden="true">
