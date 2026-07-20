@@ -28,6 +28,8 @@ export const employeeTaskColumns = [
 const priorityOptions = ['Low', 'Medium', 'High', 'Urgent'];
 const taskStatusOptions = ['Pending', 'Active', 'Approved', 'Completed'];
 const taskAssignableRoles = ['admin', 'projectManager', 'teamLead'];
+const TASK_ATTACHMENT_ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf';
+const MAX_TASK_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const TASK_TABS = [
   { id: 'list', label: 'List', icon: 'ri-list-check-3' },
   { id: 'assign', label: 'Assign', icon: 'ri-add-circle-line', roles: taskAssignableRoles },
@@ -248,7 +250,7 @@ function Tasks() {
       ...getEmptyTaskForm(),
       status: task.status || 'Pending',
       summary: task.taskSummary || '',
-      attachmentFile: null,
+      attachmentFiles: [],
     });
     setMessage('');
     setIsStatusModalOpen(true);
@@ -591,14 +593,6 @@ function Tasks() {
     };
 
     try {
-      if (form.attachmentFile) {
-        const attachmentData = new FormData();
-        attachmentData.append('file', form.attachmentFile);
-        await apiRequest(`/tasks/${selectedTask.id}/attachment`, {
-          method: 'POST',
-          body: attachmentData,
-        });
-      }
       const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: nextTask.status, summary: form.summary || '' }),
@@ -610,8 +604,8 @@ function Tasks() {
       setIsStatusModalOpen(false);
       setSelectedTask(null);
       setMessage('Task status updated successfully.');
-    } catch {
-      setMessage('Task status could not be updated right now.');
+    } catch (error) {
+      setMessage(formatTaskStatusError(error));
     }
   };
 
@@ -741,6 +735,14 @@ function Tasks() {
             setSelectedTask(null);
           }}
           onSubmit={updateTaskStatus}
+          onUploadAttachments={() => uploadSelectedTaskAttachmentFiles({
+            selectedTask,
+            form,
+            setForm,
+            setTaskRows,
+            setSelectedTask,
+            setMessage,
+          })}
         />
       )}
       {selectedDetailsTask && (
@@ -863,7 +865,7 @@ function EmployeeTasksView() {
       ...getEmptyTaskForm(),
       status: task.status || 'Pending',
       summary: task.taskSummary || '',
-      attachmentFile: null,
+      attachmentFiles: [],
     });
     setMessage('');
     setIsStatusModalOpen(true);
@@ -960,14 +962,6 @@ function EmployeeTasksView() {
     };
 
     try {
-      if (form.attachmentFile) {
-        const attachmentData = new FormData();
-        attachmentData.append('file', form.attachmentFile);
-        await apiRequest(`/tasks/${selectedTask.id}/attachment`, {
-          method: 'POST',
-          body: attachmentData,
-        });
-      }
       const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: nextTask.status, summary: form.summary || '' }),
@@ -979,11 +973,11 @@ function EmployeeTasksView() {
       setSelectedTask(null);
       setMessage('Task status updated successfully.');
       setToast({
-        message: 'Task status, summary and attachment saved successfully.',
+        message: 'Task status and summary saved successfully.',
         type: 'success',
       });
     } catch (error) {
-      const errorMessage = error?.message || 'Task update could not be saved right now.';
+      const errorMessage = formatTaskStatusError(error);
       setMessage(errorMessage);
       setToast({ message: errorMessage, type: 'error' });
     }
@@ -1007,7 +1001,7 @@ function EmployeeTasksView() {
             <i className={toast.type === 'error' ? 'ri-error-warning-fill' : 'ri-checkbox-circle-fill'} />
           </span>
           <div className="project-toast__copy">
-            <span>{toast.type === 'error' ? 'Unable to save' : 'Saved successfully'}</span>
+            <span>{toast.title || (toast.type === 'error' ? 'Unable to save' : 'Saved successfully')}</span>
             <strong>{toast.message}</strong>
           </div>
           <button type="button" className="project-toast__close" onClick={() => setToast(null)} aria-label="Dismiss notification">
@@ -1091,6 +1085,15 @@ function EmployeeTasksView() {
             setSelectedTask(null);
           }}
           onSubmit={updateTaskStatus}
+          onUploadAttachments={() => uploadSelectedTaskAttachmentFiles({
+            selectedTask,
+            form,
+            setForm,
+            setTaskRows,
+            setSelectedTask,
+            setMessage,
+            setToast,
+          })}
         />
       )}
       {selectedDetailsTask && (
@@ -1250,6 +1253,158 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
   );
 }
 
+async function uploadTaskAttachments(taskId, files) {
+  const attachmentData = new FormData();
+  files.forEach((file) => attachmentData.append('files', file));
+  return apiRequest(`/tasks/${taskId}/attachment`, {
+    method: 'POST',
+    body: attachmentData,
+  });
+}
+
+async function uploadSelectedTaskAttachmentFiles({ selectedTask, form, setForm, setTaskRows, setSelectedTask, setMessage, setToast }) {
+  if (!selectedTask?.id) {
+    const message = 'Please select a task before uploading attachments.';
+    setMessage(message);
+    setToast?.({ message, type: 'error', title: 'Unable to upload' });
+    return;
+  }
+
+  const attachmentFiles = getSelectedAttachmentFiles(form);
+  const attachmentError = validateTaskAttachments(attachmentFiles);
+  if (attachmentError) {
+    setMessage(attachmentError);
+    setToast?.({ message: attachmentError, type: 'error', title: 'Unable to upload' });
+    return;
+  }
+
+  if (attachmentFiles.length === 0) {
+    const message = 'Please choose at least one image or PDF file.';
+    setMessage(message);
+    setToast?.({ message, type: 'error', title: 'Unable to upload' });
+    return;
+  }
+
+  setForm((current) => ({ ...current, isUploadingAttachments: true }));
+
+  try {
+    const saved = await uploadTaskAttachments(selectedTask.id, attachmentFiles);
+    const normalized = normalizeTaskRow(saved || selectedTask);
+    setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
+    setSelectedTask(normalized);
+    setForm((current) => ({
+      ...current,
+      attachmentFiles: [],
+      attachmentInputKey: (current.attachmentInputKey || 0) + 1,
+      isUploadingAttachments: false,
+    }));
+    window.dispatchEvent(new Event('kavyaTasksChanged'));
+    window.dispatchEvent(new Event('kavyaProjectsChanged'));
+    const message = 'Attachments uploaded successfully.';
+    setMessage(message);
+    setToast?.({ message, type: 'success', title: 'Uploaded successfully' });
+  } catch (error) {
+    const message = formatAttachmentUploadError(error);
+    setForm((current) => ({ ...current, isUploadingAttachments: false }));
+    setMessage(message);
+    setToast?.({ message, type: 'error', title: 'Unable to upload' });
+  }
+}
+
+function formatTaskStatusError(error) {
+  const rawMessage = String(error?.message || '').trim();
+  const lowerMessage = rawMessage.toLowerCase();
+  if (error?.status === 404 || lowerMessage.includes('not found')) {
+    return 'Task was not found on the backend. Please refresh the page and try again.';
+  }
+
+  if (error?.status === 400 || lowerMessage === 'bad request') {
+    return 'Task status could not be saved. Please refresh the task and try again.';
+  }
+
+  return rawMessage || 'Task update could not be saved right now.';
+}
+function formatAttachmentUploadError(error) {
+  const rawMessage = String(error?.message || '').trim();
+  if (error?.status === 404 || rawMessage.toLowerCase().includes('not found')) {
+    return 'Task was not found on the backend. Please refresh the page and try again.';
+  }
+
+  if (error?.status === 400 || rawMessage.toLowerCase() === 'bad request') {
+    return 'Attachment upload failed. Please choose PNG, JPG, WEBP or PDF files up to 10 MB each.';
+  }
+
+  return rawMessage || 'Attachments could not be uploaded right now.';
+}
+function getSelectedAttachmentFiles(form) {
+  if (Array.isArray(form?.attachmentFiles)) {
+    return form.attachmentFiles.filter(Boolean);
+  }
+
+  return form?.attachmentFile ? [form.attachmentFile] : [];
+}
+
+function validateTaskAttachments(files) {
+  const selectedFiles = Array.isArray(files) ? files : [];
+  for (const file of selectedFiles) {
+    if (!file) {
+      continue;
+    }
+
+    const name = String(file.name || 'Attachment');
+    const type = String(file.type || '').toLowerCase();
+    const lowerName = name.toLowerCase();
+    const hasAllowedExtension = ['.png', '.jpg', '.jpeg', '.webp', '.pdf'].some((extension) => lowerName.endsWith(extension));
+    const hasAllowedType = type === 'application/pdf' || type.startsWith('image/');
+
+    if (!hasAllowedType && !hasAllowedExtension) {
+      return 'Only PNG, JPG, WEBP images or PDF files are allowed.';
+    }
+
+    if (file.size > MAX_TASK_ATTACHMENT_BYTES) {
+      return `${name} must be 10 MB or smaller.`;
+    }
+  }
+
+  return '';
+}
+
+function getTaskAttachments(task) {
+  const storedAttachments = Array.isArray(task?.attachments)
+    ? task.attachments.map(normalizeTaskAttachment).filter((attachment) => attachment.url)
+    : [];
+
+  if (storedAttachments.length > 0) {
+    return storedAttachments;
+  }
+
+  const legacyAttachment = normalizeTaskAttachment({
+    url: task?.attachmentUrl,
+    name: task?.attachmentName,
+    type: task?.attachmentType,
+  });
+
+  return legacyAttachment.url ? [legacyAttachment] : [];
+}
+
+function normalizeTaskAttachment(attachment) {
+  return {
+    id: attachment?.id || attachment?.attachmentId || '',
+    url: attachment?.url || attachment?.attachmentUrl || '',
+    name: attachment?.name || attachment?.attachmentName || 'Task attachment',
+    type: attachment?.type || attachment?.attachmentType || '',
+    size: Number(attachment?.size || 0),
+  };
+}
+
+function getAttachmentIcon(attachment) {
+  return String(attachment?.type || '').toLowerCase().includes('pdf') ? 'ri-file-pdf-2-line' : 'ri-image-line';
+}
+
+function getAttachmentKind(attachment) {
+  return String(attachment?.type || '').toLowerCase().includes('pdf') ? 'PDF document' : 'Image attachment';
+}
+
 function TaskDetailsModal({ task, onClose }) {
   if (!task) {
     return null;
@@ -1260,6 +1415,7 @@ function TaskDetailsModal({ task, onClose }) {
     : '-';
   const statusTone = String(task.status || 'Pending').toLowerCase().replace(/\s+/g, '-');
   const priorityTone = String(task.priority || 'Medium').toLowerCase();
+  const attachments = getTaskAttachments(task);
 
   return (
     <div className="payroll-modal-backdrop" role="presentation">
@@ -1294,12 +1450,16 @@ function TaskDetailsModal({ task, onClose }) {
           </section>
 
           <section className="task-detail-attachment-box">
-            <h4><i className="ri-attachment-2" aria-hidden="true" />Attachment</h4>
-            {task.attachmentUrl ? (
-              <div className="task-detail-file-row">
-                <span className="task-detail-file-icon"><i className={task.attachmentType?.includes('pdf') ? 'ri-file-pdf-2-line' : 'ri-image-line'} /></span>
-                <div><strong>{task.attachmentName || 'Task attachment'}</strong><small>{task.attachmentType?.includes('pdf') ? 'PDF document' : 'Image attachment'}</small></div>
-                <a href={task.attachmentUrl} download={task.attachmentName || true} target="_blank" rel="noreferrer" aria-label="Download attachment"><i className="ri-download-line" /></a>
+            <h4><i className="ri-attachment-2" aria-hidden="true" />Attachments</h4>
+            {attachments.length > 0 ? (
+              <div className="task-detail-file-list">
+                {attachments.map((attachment, index) => (
+                  <div className="task-detail-file-row" key={`${attachment.url}-${index}`}>
+                    <span className="task-detail-file-icon"><i className={getAttachmentIcon(attachment)} /></span>
+                    <div><strong>{attachment.name || 'Task attachment'}</strong><small>{getAttachmentKind(attachment)}</small></div>
+                    <a href={attachment.url} download={attachment.name || true} target="_blank" rel="noreferrer" aria-label="Download attachment"><i className="ri-download-line" /></a>
+                  </div>
+                ))}
               </div>
             ) : <p>No attachment submitted yet.</p>}
           </section>
@@ -1322,13 +1482,17 @@ function TaskDetailItem({ icon, label, value, accent = false }) {
   );
 }
 
-function TaskStatusModal({ task, form, setForm, canEditStatus, onClose, onSubmit }) {
+function TaskStatusModal({ task, form, setForm, canEditStatus, onClose, onSubmit, onUploadAttachments }) {
   const statusOptions = taskStatusOptions.filter((item) => item !== 'Approved');
   const handleSubmit = (event) => {
     event?.preventDefault?.();
     onSubmit(event);
   };
   const title = canEditStatus ? 'Update Task Status' : 'Review Task Status';
+  const existingAttachments = getTaskAttachments(task);
+  const selectedAttachments = getSelectedAttachmentFiles(form);
+  const isUploadingAttachments = Boolean(form.isUploadingAttachments);
+  const hasSelectedAttachments = selectedAttachments.length > 0;
 
   return (
     <div className="payroll-modal-backdrop" role="presentation">
@@ -1367,23 +1531,51 @@ function TaskStatusModal({ task, form, setForm, canEditStatus, onClose, onSubmit
             />
           </label>
           <label className="field">
-            <span>Attachment (Image or PDF)</span>
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,application/pdf"
-              disabled={!canEditStatus}
-              onChange={(event) => setForm((current) => ({ ...current, attachmentFile: event.target.files?.[0] || null }))}
-            />
-            <small>PNG, JPG, WEBP or PDF up to 10 MB.</small>
-            {task.attachmentUrl && (
-              <a href={task.attachmentUrl} target="_blank" rel="noreferrer">
-                <i className="ri-attachment-2" aria-hidden="true" />
-                {task.attachmentName || 'View current attachment'}
-              </a>
+            <span>Attachments (Images or PDFs)</span>
+            <div className="task-attachment-upload-row">
+              <input
+                key={form.attachmentInputKey || 0}
+                type="file"
+                accept={TASK_ATTACHMENT_ACCEPT}
+                multiple
+                disabled={!canEditStatus || isUploadingAttachments}
+                onChange={(event) => setForm((current) => ({
+                  ...current,
+                  attachmentFiles: Array.from(event.target.files || []),
+                }))}
+              />
+              {canEditStatus && (
+                <button
+                  type="button"
+                  className={`task-upload-button ${isUploadingAttachments ? 'is-uploading' : ''}`}
+                  disabled={!hasSelectedAttachments || isUploadingAttachments}
+                  aria-busy={isUploadingAttachments}
+                  onClick={onUploadAttachments}
+                >
+                  {isUploadingAttachments ? <span className="task-upload-spinner" aria-hidden="true" /> : <i className="ri-upload-cloud-2-line" aria-hidden="true" />}
+                  <span>{isUploadingAttachments ? 'Uploading...' : 'Upload'}</span>
+                </button>
+              )}
+            </div>
+            <small>PNG, JPG, WEBP or PDF up to 10 MB each.</small>
+            {selectedAttachments.length > 0 && (
+              <div className="task-selected-attachments">
+                {selectedAttachments.map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}
+              </div>
+            )}
+            {existingAttachments.length > 0 && (
+              <div className="task-current-attachments">
+                {existingAttachments.map((attachment, index) => (
+                  <a href={attachment.url} key={`${attachment.url}-${index}`} target="_blank" rel="noreferrer">
+                    <i className="ri-attachment-2" aria-hidden="true" />
+                    {attachment.name || 'View attachment'}
+                  </a>
+                ))}
+              </div>
             )}
           </label>
           <div className="salary-form-actions">
-            {canEditStatus && <button className="payroll-primary" type="submit">Save Status</button>}
+            {canEditStatus && <button className="payroll-primary" type="submit" disabled={isUploadingAttachments}>Save Status</button>}
             <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
           </div>
         </form>
@@ -1406,7 +1598,9 @@ function getEmptyTaskForm(defaultEmployee = null) {
     status: 'Pending',
     description: '',
     summary: '',
-    attachmentFile: null,
+    attachmentFiles: [],
+    attachmentInputKey: 0,
+    isUploadingAttachments: false,
   };
 }
 
@@ -1516,6 +1710,11 @@ function buildTaskAssignmentPayload({
     projectName: resolvedProjectName,
     projectCode: resolvedProjectCode,
     createdDateTime: existingTask?.createdDateTime || '',
+    taskSummary: existingTask?.taskSummary || '',
+    attachmentUrl: existingTask?.attachmentUrl || '',
+    attachmentName: existingTask?.attachmentName || '',
+    attachmentType: existingTask?.attachmentType || '',
+    attachments: getTaskAttachments(existingTask),
   };
 }
 
@@ -1551,6 +1750,7 @@ function normalizeTaskRow(task) {
     attachmentUrl: task.attachmentUrl || '',
     attachmentName: task.attachmentName || '',
     attachmentType: task.attachmentType || '',
+    attachments: getTaskAttachments(task),
   };
 }
 

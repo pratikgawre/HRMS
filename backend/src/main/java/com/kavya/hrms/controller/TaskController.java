@@ -12,13 +12,12 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.List;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.io.IOException;
 import java.util.Locale;
-import java.util.UUID;
+import org.bson.types.ObjectId;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.data.mongodb.gridfs.GridFsTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,22 +35,24 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
-  private static final Path TASK_ATTACHMENT_DIRECTORY = Paths.get("uploads", "task-attachments");
   private static final long MAX_ATTACHMENT_SIZE = 10L * 1024L * 1024L;
   private final TaskRepository taskRepository;
   private final ProjectRepository projectRepository;
   private final EmployeeRepository employeeRepository;
   private final NotificationService notificationService;
+  private final GridFsTemplate gridFsTemplate;
 
   public TaskController(
       TaskRepository taskRepository,
       ProjectRepository projectRepository,
       EmployeeRepository employeeRepository,
-      NotificationService notificationService) {
+      NotificationService notificationService,
+      GridFsTemplate gridFsTemplate) {
     this.taskRepository = taskRepository;
     this.projectRepository = projectRepository;
     this.employeeRepository = employeeRepository;
     this.notificationService = notificationService;
+    this.gridFsTemplate = gridFsTemplate;
   }
 
   @GetMapping
@@ -165,38 +166,98 @@ public class TaskController {
     return saved;
   }
 
-  @PostMapping("/{id}/attachment")
-  public TaskItem uploadAttachment(@PathVariable("id") String id, @RequestParam("file") MultipartFile file) {
+  @PostMapping(value = "/{id}/attachment", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public TaskItem uploadAttachment(
+      @PathVariable("id") String id,
+      @RequestParam(value = "files", required = false) MultipartFile[] files,
+      @RequestParam(value = "file", required = false) MultipartFile file) {
     TaskItem current = taskRepository.findById(id)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
-    if (file == null || file.isEmpty()) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please choose an image or PDF file.");
+    List<MultipartFile> uploadFiles = collectAttachmentFiles(files, file);
+    if (uploadFiles.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please choose one or more image or PDF files.");
     }
-    if (file.getSize() > MAX_ATTACHMENT_SIZE) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Attachment must be 10 MB or smaller.");
-    }
-    String contentType = firstNonBlank(file.getContentType()).toLowerCase(Locale.ROOT);
-    if (!(contentType.equals("application/pdf") || contentType.startsWith("image/"))) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only image and PDF attachments are allowed.");
-    }
-    String originalName = firstNonBlank(file.getOriginalFilename(), "attachment");
-    String extension = originalName.contains(".") ? originalName.substring(originalName.lastIndexOf('.')).replaceAll("[^A-Za-z0-9.]", "") : "";
-    String storedName = UUID.randomUUID() + extension;
-    Path directory = TASK_ATTACHMENT_DIRECTORY.toAbsolutePath().normalize();
-    Path target = directory.resolve(storedName).normalize();
-    if (!target.startsWith(directory)) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid attachment name.");
-    }
+
+    uploadFiles.forEach(this::validateAttachment);
+
+    List<TaskItem.Attachment> savedAttachments = new ArrayList<>();
     try {
-      Files.createDirectories(directory);
-      file.transferTo(target);
+      for (MultipartFile uploadFile : uploadFiles) {
+        savedAttachments.add(storeAttachment(uploadFile));
+      }
     } catch (IOException exception) {
       throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Attachment could not be stored.", exception);
     }
-    current.setAttachmentUrl("/uploads/task-attachments/" + storedName);
-    current.setAttachmentName(originalName);
-    current.setAttachmentType(contentType);
+
+    List<TaskItem.Attachment> attachments = new ArrayList<>(
+        current.getAttachments() == null ? List.of() : current.getAttachments());
+    attachments.addAll(savedAttachments);
+    current.setAttachments(attachments);
+
+    TaskItem.Attachment latestAttachment = savedAttachments.get(savedAttachments.size() - 1);
+    current.setAttachmentUrl(latestAttachment.getUrl());
+    current.setAttachmentName(latestAttachment.getName());
+    current.setAttachmentType(latestAttachment.getType());
     return taskRepository.save(current);
+  }
+
+  private List<MultipartFile> collectAttachmentFiles(MultipartFile[] files, MultipartFile file) {
+    List<MultipartFile> uploadFiles = new ArrayList<>();
+    if (files != null) {
+      for (MultipartFile candidate : files) {
+        if (candidate != null && !candidate.isEmpty()) {
+          uploadFiles.add(candidate);
+        }
+      }
+    }
+    if (file != null && !file.isEmpty()) {
+      uploadFiles.add(file);
+    }
+    return uploadFiles;
+  }
+
+  private void validateAttachment(MultipartFile file) {
+    if (file == null || file.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please choose one or more image or PDF files.");
+    }
+    if (file.getSize() > MAX_ATTACHMENT_SIZE) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Each attachment must be 10 MB or smaller.");
+    }
+    String contentType = getAttachmentContentType(file);
+    if (!(contentType.equals("application/pdf") || contentType.startsWith("image/"))) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only image and PDF attachments are allowed.");
+    }
+  }
+
+  private TaskItem.Attachment storeAttachment(MultipartFile file) throws IOException {
+    String originalName = firstNonBlank(file.getOriginalFilename(), "attachment");
+    String contentType = getAttachmentContentType(file);
+    ObjectId storedId = gridFsTemplate.store(file.getInputStream(), originalName, contentType);
+    String attachmentId = storedId.toHexString();
+    String url = "/uploads/task-attachments/" + attachmentId;
+    return new TaskItem.Attachment(attachmentId, url, originalName, contentType, file.getSize());
+  }
+
+  private String getAttachmentContentType(MultipartFile file) {
+    String contentType = firstNonBlank(file == null ? null : file.getContentType()).toLowerCase(Locale.ROOT);
+    if (!contentType.isBlank()) {
+      return contentType;
+    }
+
+    String originalName = firstNonBlank(file == null ? null : file.getOriginalFilename()).toLowerCase(Locale.ROOT);
+    if (originalName.endsWith(".pdf")) {
+      return "application/pdf";
+    }
+    if (originalName.endsWith(".png")) {
+      return "image/png";
+    }
+    if (originalName.endsWith(".jpg") || originalName.endsWith(".jpeg")) {
+      return "image/jpeg";
+    }
+    if (originalName.endsWith(".webp")) {
+      return "image/webp";
+    }
+    return contentType;
   }
 
   @DeleteMapping("/{id}")

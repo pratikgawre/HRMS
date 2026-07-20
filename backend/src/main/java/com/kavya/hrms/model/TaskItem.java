@@ -1,5 +1,7 @@
 package com.kavya.hrms.model;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -29,6 +31,7 @@ public class TaskItem {
   private String attachmentUrl;
   private String attachmentName;
   private String attachmentType;
+  private List<Attachment> attachments = new ArrayList<>();
 
   public String getId() { return id; }
   public void setId(String id) { this.id = id; }
@@ -76,4 +79,37 @@ public class TaskItem {
   public void setAttachmentName(String attachmentName) { this.attachmentName = attachmentName; }
   public String getAttachmentType() { return attachmentType; }
   public void setAttachmentType(String attachmentType) { this.attachmentType = attachmentType; }
+  public List<Attachment> getAttachments() { return attachments; }
+  public void setAttachments(List<Attachment> attachments) {
+    this.attachments = attachments == null ? new ArrayList<>() : attachments;
+  }
+
+  public static class Attachment {
+    private String id;
+    private String url;
+    private String name;
+    private String type;
+    private long size;
+
+    public Attachment() {}
+
+    public Attachment(String id, String url, String name, String type, long size) {
+      this.id = id;
+      this.url = url;
+      this.name = name;
+      this.type = type;
+      this.size = size;
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getUrl() { return url; }
+    public void setUrl(String url) { this.url = url; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+    public long getSize() { return size; }
+    public void setSize(long size) { this.size = size; }
+  }
 }
