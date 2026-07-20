@@ -53,27 +53,45 @@ function Assets() {
   });
   const [assetMessage, setAssetMessage] = useState('');
   const hasLoadedInitialDataRef = useRef(false);
+  const hasVisibleAssetDataRef = useRef(false);
 
   useEffect(() => {
     let active = true;
 
     const refreshAssets = async () => {
-      setIsLoading(true);
+      if (!hasVisibleAssetDataRef.current) {
+        setIsLoading(true);
+      }
       setLoadError('');
       try {
         const cachedAssets = readCachedJson(ADMIN_ASSET_CACHE_KEY, []);
         const cachedEmployees = readCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, []);
-        if (cachedAssets.length && assets.length === 0) {
+        if (cachedAssets.length && !hasVisibleAssetDataRef.current) {
           const normalizedCachedEmployees = normalizeAssetDirectoryEmployees(cachedEmployees);
           setAssets(normalizeAssetRows(cachedAssets, normalizedCachedEmployees));
           setEmployees(normalizedCachedEmployees);
+          hasVisibleAssetDataRef.current = true;
+          setIsLoading(false);
         }
 
-        const [assetRows, employeeRows, projectRows] = await Promise.all([
-          apiRequest('/assets').catch(() => []),
-          apiRequest('/employees').catch(() => []),
-          apiRequest('/projects').catch(() => []),
-        ]);
+        let assetRows = [];
+        let employeeRows = [];
+        let projectRows = [];
+        const pageData = await apiRequest('/assets/page-data').catch(() => null);
+        if (
+          pageData
+          && (Array.isArray(pageData.assets) || Array.isArray(pageData.employees) || Array.isArray(pageData.projects))
+        ) {
+          assetRows = Array.isArray(pageData.assets) ? pageData.assets : [];
+          employeeRows = Array.isArray(pageData.employees) ? pageData.employees : [];
+          projectRows = Array.isArray(pageData.projects) ? pageData.projects : [];
+        } else {
+          [assetRows, employeeRows, projectRows] = await Promise.all([
+            apiRequest('/assets').catch(() => []),
+            apiRequest('/employees').catch(() => []),
+            apiRequest('/projects').catch(() => []),
+          ]);
+        }
 
         if (!active) {
           return;
@@ -95,12 +113,18 @@ function Assets() {
         setAssets(normalizedAssets);
         setEmployees(normalizedEmployees);
         setProjects(normalizedProjects);
+        hasVisibleAssetDataRef.current = true;
         writeCachedJson(ADMIN_ASSET_CACHE_KEY, Array.isArray(assetRows) ? assetRows : []);
         writeCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, Array.isArray(employeeRows) ? employeeRows : []);
       } catch {
-        if (active) {
+        if (active && !hasVisibleAssetDataRef.current) {
           setAssets([]);
           setEmployees([]);
+          setLoadError('Unable to load assets right now.');
+        }
+      } finally {
+        if (active) {
+          setIsLoading(false);
         }
       }
     };
