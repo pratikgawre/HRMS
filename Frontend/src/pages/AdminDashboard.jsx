@@ -311,21 +311,52 @@ export const checkedInColumns = [
   { key: 'status', label: 'Status' },
 ];
 
-export function Hero({ title, copy, actions }) {
+export function Hero({
+  title,
+  copy,
+  actions = null,
+  reportData = null,
+  onExportReport = null,
+}) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
 
+  const queryAllSafe = (root, selector) => {
+    if (!root || typeof root.querySelectorAll !== 'function') {
+      return [];
+    }
+
+    return Array.from(root.querySelectorAll(selector));
+  };
+
+  const getSnapshotRoot = () => {
+    if (typeof document === 'undefined') {
+      return null;
+    }
+
+    return document.querySelector('.content-panel')
+      || document.querySelector('#root')
+      || document.body
+      || null;
+  };
+
   const getPageSnapshot = () => {
-    const fallbackExportData = window.__kavyaAttendanceExportData;
-    if (reportData) {
-      return reportData;
+    const fallbackExportData = typeof window !== 'undefined' ? window.__kavyaAttendanceExportData : null;
+    if (reportData && typeof reportData === 'object') {
+      return {
+        rows: Array.isArray(reportData.rows) ? reportData.rows : [],
+        metrics: Array.isArray(reportData.metrics) ? reportData.metrics : [],
+        tables: Array.isArray(reportData.tables) ? reportData.tables : [],
+        controls: Array.isArray(reportData.controls) ? reportData.controls : [],
+        cards: Array.isArray(reportData.cards) ? reportData.cards : [],
+      };
     }
 
     if (fallbackExportData) {
       return fallbackExportData;
     }
 
-    const root = document.querySelector('.content-panel');
+    const root = getSnapshotRoot();
     const rows = [
       ['Page', title],
       ['Description', copy],
@@ -333,7 +364,7 @@ export function Hero({ title, copy, actions }) {
       [''],
     ];
 
-    const metrics = [...root.querySelectorAll('.dashboard-card')].map((card) => ({
+    const metrics = queryAllSafe(root, '.dashboard-card').map((card) => ({
       label: card.querySelector('p')?.textContent?.trim() || 'Metric',
       value: card.querySelector('strong')?.textContent?.trim() || '-',
       delta: card.querySelector('span')?.textContent?.trim() || '-',
@@ -348,9 +379,9 @@ export function Hero({ title, copy, actions }) {
 
     const isActionColumn = (label) => /^(actions?|action)$/i.test(String(label || '').trim());
 
-    const tables = [...root.querySelectorAll('table')].map((table, index) => {
+    const tables = queryAllSafe(root, 'table').map((table, index) => {
       const sectionTitle = table.closest('.section-card')?.querySelector('h3')?.textContent?.trim() || `Table ${index + 1}`;
-      const headerCells = [...table.querySelectorAll('thead th')];
+      const headerCells = queryAllSafe(table, 'thead th');
       const headers = headerCells
         .map((head, index) => ({ text: head.textContent?.trim() || '', index }))
         .filter((head) => !isActionColumn(head.text))
@@ -359,8 +390,8 @@ export function Hero({ title, copy, actions }) {
         .map((head, index) => ({ text: head.textContent?.trim() || '', index }))
         .filter((head) => isActionColumn(head.text))
         .map((head) => head.index);
-      const bodyRows = [...table.querySelectorAll('tbody tr')]
-        .map((tr) => [...tr.querySelectorAll('td')]
+      const bodyRows = queryAllSafe(table, 'tbody tr')
+        .map((tr) => queryAllSafe(tr, 'td')
           .map((td, index) => ({ text: td.textContent?.replace(/\s+/g, ' ').trim() || '', index }))
           .filter((cell) => !actionColumnIndexes.includes(cell.index))
           .map((cell) => cell.text))
@@ -375,11 +406,11 @@ export function Hero({ title, copy, actions }) {
       rows.push(['']);
     });
 
-    const cards = [...root.querySelectorAll('.content-panel .announcement-list article, .content-panel .record-card, .content-panel .data-card, .content-panel .dashboard-card')]
+    const cards = queryAllSafe(root, '.announcement-list article, .record-card, .data-card, .dashboard-card')
       .filter((card) => !card.closest('.smart-summary-modal') && !card.closest('.announcement-delete-modal'))
       .map((card) => {
         const heading = card.querySelector('strong, h3, h4')?.textContent?.trim() || 'Record';
-        const bodyText = [...card.querySelectorAll('p, span, small')]
+        const bodyText = queryAllSafe(card, 'p, span, small')
           .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() || '')
           .filter(Boolean)
           .join(' | ');
@@ -397,7 +428,7 @@ export function Hero({ title, copy, actions }) {
       rows.push(['']);
     }
 
-    const controls = [...root.querySelectorAll('input, select, textarea')]
+    const controls = queryAllSafe(root, 'input, select, textarea')
       .filter((control) => control.type !== 'hidden' && control.type !== 'file' && !control.disabled)
       .map((control, index) => {
         const labelNode = control.closest('label');
@@ -425,67 +456,73 @@ export function Hero({ title, copy, actions }) {
   };
 
   const exportReport = () => {
-    if (typeof onExportReport === 'function') {
-      onExportReport();
-      return;
-    }
-
-    const { metrics, tables, controls } = getPageSnapshot();
-    const role = getSessionValue('kavyaRole') || 'employee';
-    const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
-    const exportControls = shouldHideFormFields ? [] : controls;
-    const escapeCell = (cell) => String(cell || '-')
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;');
-    const leaveExportHeadersToOmit = new Set(['leave details', 'action', 'actions']);
-    const normalizeHeader = (value) => String(value || '').trim().toLowerCase();
-    const filterLeaveExportTable = (table) => {
-      const omitIndexes = table.headers
-        .map((header, index) => (leaveExportHeadersToOmit.has(normalizeHeader(header)) ? index : -1))
-        .filter((index) => index >= 0);
-
-      if (omitIndexes.length === 0) {
-        return table;
+    try {
+      if (typeof onExportReport === 'function') {
+        onExportReport();
+        return;
       }
 
-      const omitIndexSet = new Set(omitIndexes);
-      return {
-        ...table,
-        headers: table.headers.filter((_, index) => !omitIndexSet.has(index)),
-        bodyRows: table.bodyRows.map((row) => row.filter((_, index) => !omitIndexSet.has(index))),
+      const {
+        metrics = [],
+        tables = [],
+        controls = [],
+        cards = [],
+      } = getPageSnapshot() || {};
+      const role = getSessionValue('kavyaRole') || 'employee';
+      const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
+      const exportControls = shouldHideFormFields ? [] : controls;
+      const escapeCell = (cell) => String(cell || '-')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+      const leaveExportHeadersToOmit = new Set(['leave details', 'action', 'actions']);
+      const normalizeHeader = (value) => String(value || '').trim().toLowerCase();
+      const filterLeaveExportTable = (table) => {
+        const omitIndexes = table.headers
+          .map((header, index) => (leaveExportHeadersToOmit.has(normalizeHeader(header)) ? index : -1))
+          .filter((index) => index >= 0);
+
+        if (omitIndexes.length === 0) {
+          return table;
+        }
+
+        const omitIndexSet = new Set(omitIndexes);
+        return {
+          ...table,
+          headers: table.headers.filter((_, index) => !omitIndexSet.has(index)),
+          bodyRows: table.bodyRows.map((row) => row.filter((_, index) => !omitIndexSet.has(index))),
+        };
       };
-    };
-    const metricCells = metrics.slice(0, 4).map((item) => `
+      const metricCells = metrics.slice(0, 4).map((item) => `
       <td class="metric-card" colspan="2">
         <span>${escapeCell(item.label)}</span>
         <strong>${escapeCell(item.value)}</strong>
         <small>${escapeCell(item.delta)}</small>
       </td>
     `).join('');
-    const tableSections = tables.map((table) => {
-      const exportTable = filterLeaveExportTable(table);
-      const columnCount = Math.max(exportTable.headers.length, 1);
-      const bodyRows = exportTable.bodyRows.length
-        ? exportTable.bodyRows.map((tableRow) => `<tr>${tableRow.map((cell) => `<td>${escapeCell(cell)}</td>`).join('')}</tr>`).join('')
-        : `<tr><td colspan="${columnCount}" class="empty-row">No records available.</td></tr>`;
+      const tableSections = tables.map((table) => {
+        const exportTable = filterLeaveExportTable(table);
+        const columnCount = Math.max(exportTable.headers.length, 1);
+        const bodyRows = exportTable.bodyRows.length
+          ? exportTable.bodyRows.map((tableRow) => `<tr>${tableRow.map((cell) => `<td>${escapeCell(cell)}</td>`).join('')}</tr>`).join('')
+          : `<tr><td colspan="${columnCount}" class="empty-row">No records available.</td></tr>`;
 
-      return `
+        return `
         <tr><td colspan="8" class="section-gap"></td></tr>
         <tr><td colspan="8" class="section-title">${escapeCell(table.sectionTitle)}</td></tr>
         <tr>${exportTable.headers.map((head) => `<th>${escapeCell(head)}</th>`).join('')}</tr>
         ${bodyRows}
       `;
-    }).join('');
-    const controlsRows = exportControls.length
-      ? `
+      }).join('');
+      const controlsRows = exportControls.length
+        ? `
         <tr><td colspan="8" class="section-gap"></td></tr>
         <tr><td colspan="8" class="section-title">Visible Form Fields</td></tr>
         <tr><th>Field</th><th colspan="7">Value</th></tr>
         ${exportControls.map((item) => `<tr><td>${escapeCell(item.label)}</td><td colspan="7">${escapeCell(item.value)}</td></tr>`).join('')}
       `
-      : '';
-    const excelHtml = `
+        : '';
+      const excelHtml = `
       <html>
         <head>
           <meta charset="UTF-8" />
@@ -533,23 +570,37 @@ export function Hero({ title, copy, actions }) {
         </body>
       </html>
     `;
-    const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const safeTitle = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    const stamp = new Date().toISOString().slice(0, 10);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${safeTitle || 'page'}-report-${stamp}.xls`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+      const blob = new Blob([excelHtml], {
+        type: 'application/vnd.ms-excel;charset=utf-8;',
+      });
+
+      const url = URL.createObjectURL(blob);
+      const safeTitle = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const stamp = new Date().toISOString().slice(0, 10);
+      const link = document.createElement('a');
+
+      link.href = url;
+      link.download = `${safeTitle || 'page'}-report-${stamp}.xls`;
+      link.style.display = 'none';
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 1000);
+    } catch (error) {
+      console.error('Export Report failed:', error);
+      window.alert('Unable to download the report. Please check the browser console.');
+    }
   };
 
   const openSummary = () => {
     const { metrics, tables, controls, cards } = getPageSnapshot();
     const totalRows = tables.reduce((acc, table) => acc + table.bodyRows.length, 0);
-    const sections = [...document.querySelectorAll('.content-panel .section-card h3')]
+    const root = getSnapshotRoot();
+    const sections = queryAllSafe(root, '.section-card h3')
       .map((node) => node.textContent?.trim())
       .filter(Boolean);
     const statusColumn = tables.flatMap((table) => {
