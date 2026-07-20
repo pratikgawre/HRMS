@@ -3,7 +3,10 @@ package com.kavya.hrms.controller;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Locale;
@@ -27,6 +30,7 @@ import com.kavya.hrms.model.Employee;
 import com.kavya.hrms.repository.AssetAssignmentRepository;
 import com.kavya.hrms.repository.AssetRepository;
 import com.kavya.hrms.repository.EmployeeRepository;
+import com.kavya.hrms.repository.ProjectRepository;
 import com.kavya.hrms.service.NotificationAudience;
 import com.kavya.hrms.service.NotificationService;
 
@@ -37,6 +41,7 @@ public class AssetController {
   private final AssetRepository assetRepository;
   private final AssetAssignmentRepository assetAssignmentRepository;
   private final EmployeeRepository employeeRepository;
+  private final ProjectRepository projectRepository;
   private final NotificationService notificationService;
   private final MongoTemplate mongoTemplate;
 
@@ -44,11 +49,13 @@ public class AssetController {
       AssetRepository assetRepository,
       AssetAssignmentRepository assetAssignmentRepository,
       EmployeeRepository employeeRepository,
+      ProjectRepository projectRepository,
       NotificationService notificationService,
       MongoTemplate mongoTemplate) {
     this.assetRepository = assetRepository;
     this.assetAssignmentRepository = assetAssignmentRepository;
     this.employeeRepository = employeeRepository;
+    this.projectRepository = projectRepository;
     this.notificationService = notificationService;
     this.mongoTemplate = mongoTemplate;
   }
@@ -56,9 +63,8 @@ public class AssetController {
   @GetMapping
   public List<Asset> list() {
     List<AssetAssignment> assignments = loadAssignments();
-    List<Asset> assets = loadAssets().stream()
-        .map((asset) -> normalizeAssetResponse(mergeAssignmentDates(asset, assignments)))
-        .toList();
+    List<Employee> employees = employeeRepository.findAll();
+    List<Asset> assets = buildAssetList(assignments, employees);
     long assetsWithDates = assets.stream()
         .filter((asset) -> !normalize(asset.getCurrentDate()).isBlank() || !normalize(asset.getDueDate()).isBlank())
         .count();
@@ -66,6 +72,17 @@ public class AssetController {
     return assets;
   }
 
+
+  @GetMapping("/page-data")
+  public Map<String, Object> pageData() {
+    List<AssetAssignment> assignments = loadAssignments();
+    List<Employee> employees = employeeRepository.findAll();
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("assets", buildAssetList(assignments, employees));
+    response.put("employees", employees);
+    response.put("projects", projectRepository.findAll());
+    return response;
+  }
   @GetMapping("/my-assets")
   public List<Asset> myAssets(
       @RequestParam(required = false) String employeeId,
@@ -78,7 +95,8 @@ public class AssetController {
       return List.of();
     }
 
-    String resolvedEmployeeName = resolveEmployeeName(resolvedEmployeeId);
+    List<Employee> employees = employeeRepository.findAll();
+    String resolvedEmployeeName = resolveEmployeeName(resolvedEmployeeId, employees);
 
     List<Asset> allAssets = loadAssets();
     List<AssetAssignment> matchingAssignments = loadAssignments().stream()
@@ -88,12 +106,12 @@ public class AssetController {
     List<Asset> response = allAssets.stream()
         .filter((asset) -> isAssignedToEmployee(asset, resolvedEmployeeId, resolvedEmployeeName)
             || hasMatchingAssignment(asset, matchingAssignments))
-        .map((asset) -> mergeAssignment(asset, matchingAssignments))
+        .map((asset) -> normalizeAssetResponse(mergeAssignment(asset, matchingAssignments), employees))
         .toList();
 
     List<Asset> assignmentOnlyAssets = matchingAssignments.stream()
         .filter((assignment) -> !containsAsset(response, assignment))
-        .map(this::toAsset)
+        .map((assignment) -> normalizeAssetResponse(toAsset(assignment), employees))
         .toList();
 
     List<Asset> finalResponse = java.util.stream.Stream.concat(response.stream(), assignmentOnlyAssets.stream())
@@ -114,7 +132,8 @@ public class AssetController {
       + ", dueDate=" + safeAsset.getDueDate()
       + ", assignedToEmployeeId=" + safeAsset.getAssignedToEmployeeId()
       + ", assignedTo=" + safeAsset.getAssignedTo());
-    Asset saved = assetRepository.save(Objects.requireNonNull(normalizeAssetResponse(safeAsset)));
+    List<Employee> employees = employeeRepository.findAll();
+    Asset saved = assetRepository.save(Objects.requireNonNull(normalizeAssetResponse(safeAsset, employees)));
     LOGGER.info(() -> "[AssetController] create saved id=" + saved.getId()
         + ", currentDate=" + saved.getCurrentDate()
         + ", dueDate=" + saved.getDueDate()
@@ -129,7 +148,7 @@ public class AssetController {
         accessRole,
         "System",
         userId);
-    return normalizeAssetResponse(saved);
+    return normalizeAssetResponse(saved, employees);
   }
 
   @PostMapping("/bulk")
@@ -140,8 +159,9 @@ public class AssetController {
     List<Asset> safeAssets = assets == null ? List.of() : assets;
     long existingCount = assetRepository.count();
     assetRepository.deleteAll();
+    List<Employee> employees = employeeRepository.findAll();
     List<Asset> normalizedAssets = safeAssets.stream()
-        .map(this::normalizeAssetResponse)
+        .map((asset) -> normalizeAssetResponse(asset, employees))
         .filter(Objects::nonNull)
         .toList();
     List<Asset> saved = assetRepository.saveAll(Objects.requireNonNull(normalizedAssets));
@@ -156,7 +176,7 @@ public class AssetController {
           "System",
           userId);
     }
-    return saved.stream().map(this::normalizeAssetResponse).toList();
+    return saved.stream().map((asset) -> normalizeAssetResponse(asset, employees)).toList();
   }
 
   @PutMapping("/{id}")
@@ -174,7 +194,8 @@ public class AssetController {
       + ", assignedToEmployeeId=" + safeAsset.getAssignedToEmployeeId()
       + ", assignedTo=" + safeAsset.getAssignedTo()
       + ", status=" + safeAsset.getStatus());
-    Asset saved = assetRepository.save(Objects.requireNonNull(normalizeAssetResponse(safeAsset)));
+    List<Employee> employees = employeeRepository.findAll();
+    Asset saved = assetRepository.save(Objects.requireNonNull(normalizeAssetResponse(safeAsset, employees)));
     LOGGER.info(() -> "[AssetController] update saved id=" + saved.getId()
         + ", currentDate=" + saved.getCurrentDate()
         + ", dueDate=" + saved.getDueDate()
@@ -190,7 +211,7 @@ public class AssetController {
         accessRole,
         "System",
         userId);
-    return normalizeAssetResponse(saved);
+    return normalizeAssetResponse(saved, employees);
   }
 
   @DeleteMapping("/{id}")
@@ -212,6 +233,13 @@ public class AssetController {
         userId);
   }
 
+
+  private List<Asset> buildAssetList(List<AssetAssignment> assignments, List<Employee> employees) {
+    Map<String, AssetAssignment> latestAssignments = indexLatestAssignmentsByAsset(assignments);
+    return loadAssets().stream()
+        .map((asset) -> normalizeAssetResponse(mergeAssignmentDates(asset, latestAssignments), employees))
+        .toList();
+  }
   private String buildAssetMessage(Asset asset, String action) {
     String name = asset != null && asset.getAssetName() != null ? asset.getAssetName() : "Asset";
     String assignedTo = asset != null && asset.getAssignedTo() != null ? asset.getAssignedTo() : "team";
@@ -254,6 +282,35 @@ public class AssetController {
     return fallbackAssignments;
   }
 
+
+  private Map<String, AssetAssignment> indexLatestAssignmentsByAsset(List<AssetAssignment> assignments) {
+    Map<String, AssetAssignment> latestAssignments = new HashMap<>();
+    if (assignments == null || assignments.isEmpty()) {
+      return latestAssignments;
+    }
+
+    for (AssetAssignment assignment : assignments) {
+      if (assignment == null) {
+        continue;
+      }
+      indexLatestAssignment(latestAssignments, assignment.getAssetId(), assignment);
+      indexLatestAssignment(latestAssignments, assignment.getAssetCode(), assignment);
+    }
+
+    return latestAssignments;
+  }
+
+  private void indexLatestAssignment(Map<String, AssetAssignment> latestAssignments, String key, AssetAssignment assignment) {
+    String normalizedKey = normalize(key);
+    if (normalizedKey.isBlank()) {
+      return;
+    }
+
+    AssetAssignment current = latestAssignments.get(normalizedKey);
+    if (current == null || compareAssignments(assignment, current) > 0) {
+      latestAssignments.put(normalizedKey, assignment);
+    }
+  }
   private Asset mapDocumentToAsset(Document document) {
     if (document == null) {
       return null;
@@ -322,7 +379,8 @@ public class AssetController {
     return "";
   }
 
-  private Asset normalizeAssetResponse(Asset asset) {
+
+  private Asset normalizeAssetResponse(Asset asset, List<Employee> employees) {
     if (asset == null) {
       return null;
     }
@@ -336,10 +394,10 @@ public class AssetController {
     currentDate = firstNonBlank(currentDate, assignedDate, assignmentDate);
     dueDate = firstNonBlank(dueDate, returnDate);
     String assignedToEmployeeId = firstNonBlank(asset.getAssignedToEmployeeId(),
-        resolveEmployeeId(asset.getAssignedTo()));
+        resolveEmployeeId(asset.getAssignedTo(), employees));
     String assignedTo = firstNonBlank(
-        resolveEmployeeName(assignedToEmployeeId),
-        resolveEmployeeName(asset.getAssignedTo()),
+        resolveEmployeeName(assignedToEmployeeId, employees),
+        resolveEmployeeName(asset.getAssignedTo(), employees),
         asset.getAssignedTo());
 
     asset.setCurrentDate(formatDisplayDate(currentDate));
@@ -352,26 +410,28 @@ public class AssetController {
     return asset;
   }
 
-  private String resolveEmployeeId(String value) {
+
+  private String resolveEmployeeId(String value, List<Employee> employees) {
     String normalizedValue = normalize(value);
     if (normalizedValue.isBlank() || "-".equals(normalizedValue)) {
       return "";
     }
 
-    return employeeRepository.findAll().stream()
+    return safeEmployees(employees).stream()
         .filter(employee -> matchesEmployee(employee, normalizedValue))
         .map(employee -> firstNonBlank(employee.getEmployeeCode(), employee.getEmployeeId(), employee.getId()))
         .findFirst()
         .orElse(normalizedValue);
   }
 
-  private String resolveEmployeeName(String employeeId) {
+
+  private String resolveEmployeeName(String employeeId, List<Employee> employees) {
     String normalizedEmployeeId = normalize(employeeId);
     if (normalizedEmployeeId.isBlank() || "-".equals(normalizedEmployeeId)) {
       return "";
     }
 
-    return employeeRepository.findAll().stream()
+    return safeEmployees(employees).stream()
         .filter(employee -> matchesEmployee(employee, normalizedEmployeeId))
         .map(this::buildEmployeeDisplayName)
         .filter(name -> !name.isBlank())
@@ -379,6 +439,9 @@ public class AssetController {
         .orElse(normalizedEmployeeId);
   }
 
+  private List<Employee> safeEmployees(List<Employee> employees) {
+    return employees == null ? List.of() : employees;
+  }
   private boolean matchesEmployee(Employee employee, String value) {
     if (employee == null || value == null || value.isBlank()) {
       return false;
@@ -513,14 +576,18 @@ public class AssetController {
     return asset;
   }
 
-  private Asset mergeAssignmentDates(Asset asset, List<AssetAssignment> assignments) {
-    if (asset == null || assignments == null || assignments.isEmpty()) {
+
+  private Asset mergeAssignmentDates(Asset asset, Map<String, AssetAssignment> latestAssignments) {
+    if (asset == null || latestAssignments == null || latestAssignments.isEmpty()) {
       return asset;
     }
 
     String assetId = normalize(asset.getId());
     String assetCode = normalize(asset.getAssetCode());
-    AssetAssignment matched = resolveLatestAssignment(assetId, assetCode, assignments);
+    AssetAssignment matched = !assetId.isBlank() ? latestAssignments.get(assetId) : null;
+    if (matched == null && !assetCode.isBlank()) {
+      matched = latestAssignments.get(assetCode);
+    }
 
     if (matched == null) {
       return asset;
@@ -555,7 +622,6 @@ public class AssetController {
 
     return asset;
   }
-
   private AssetAssignment resolveLatestAssignment(String assetId, String assetCode, List<AssetAssignment> assignments) {
     if (assignments == null || assignments.isEmpty()) {
       return null;

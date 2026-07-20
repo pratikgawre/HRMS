@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authenticateUser, startSession } from '../utils/auth.js';
+import { normalizeBackendAssetUrl } from '../utils/runtime-config.js';
+
+const loginLogoUrl = normalizeBackendAssetUrl('/uploads/profile-photos/ADMIN-001-ec285d7c-33ae-47cc-91e3-0ef24ad3accb.png');
 
 function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
@@ -49,9 +52,11 @@ function Login() {
       <section className="login-hero">
         <div className="login-pattern pattern-top" />
         <div className="login-pattern pattern-bottom" />
-        <div className="login-brand">
-          <span>K</span>
-          <strong>Kavya HRMS</strong>
+        <div className="login-brand login-brand--logo">
+          <div className="login-brand-logo-frame" aria-hidden="true">
+            <img className="login-brand-logo" src={loginLogoUrl} alt="" />
+          </div>
+          <strong>Kavya HR 360</strong>
         </div>
 
         <div className="login-visual" aria-hidden="true">
