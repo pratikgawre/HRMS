@@ -195,14 +195,14 @@ public class AttendanceController {
   }
 
   private String requireTeamLeadIdentity(String accessRole, String userId, String employeeId) {
-    if (!isTeamLeadRole(accessRole)) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team Lead access is required.");
+    if (!isTeamAttendanceRole(accessRole)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team attendance access is required.");
     }
     AppUser user = appUserRepository.findByUserId(userId == null ? "" : userId)
         .or(() -> appUserRepository.findByEmployeeId(userId == null ? "" : userId))
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Logged-in user was not found."));
-    if (!isTeamLeadRole(user.getRole())) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team Lead access is required.");
+    if (!isTeamAttendanceRole(user.getRole())) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team attendance access is required.");
     }
     String resolvedEmployeeId = firstNonBlank(user.getEmployeeId(), employeeId);
     if (resolvedEmployeeId.isBlank()) {
@@ -282,6 +282,11 @@ public class AttendanceController {
 
   private boolean isTeamLeadRole(String role) {
     return "teamlead".equals(normalize(role).replace("_", "").replace("-", "").replace(" ", ""));
+  }
+
+  private boolean isTeamAttendanceRole(String role) {
+    String normalizedRole = normalize(role).replace("_", "").replace("-", "").replace(" ", "");
+    return "teamlead".equals(normalizedRole) || "projectmanager".equals(normalizedRole);
   }
 
   private String normalize(String value) {

@@ -386,6 +386,11 @@ function Tasks() {
       ),
     },
     {
+      key: 'due',
+      label: 'Due Date',
+      render: (row) => row.dueDate || row.due || '-',
+    },
+    {
       key: 'status',
       label: 'Status',
       render: (row) => {
@@ -421,16 +426,7 @@ function Tasks() {
     },
   ];
   const hrTaskListColumns = role === 'hr'
-    ? [
-      ...taskListColumns
-        .filter((column) => column.key !== 'status' && column.key !== 'actions'),
-      {
-        key: 'due',
-        label: 'Due Date',
-        render: (row) => row.dueDate || row.due || '-',
-      },
-      taskListColumns.find((column) => column.key === 'status'),
-    ].filter(Boolean)
+    ? taskListColumns.filter((column) => column.key !== 'actions')
     : taskListColumns;
   const taskAssignmentColumns = [
     taskListColumns.find((column) => column.key === 'owner'),

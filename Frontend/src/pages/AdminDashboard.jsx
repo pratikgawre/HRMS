@@ -322,6 +322,20 @@ export function Hero({
 }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
+  const isProjectManager = String(getSessionValue('kavyaRole') || '')
+    .replace(/[\s_-]+/g, '')
+    .toLowerCase() === 'projectmanager';
+  const currentRoute = typeof window === 'undefined'
+    ? ''
+    : window.location.hash.replace(/^#/, '').split('?')[0].replace(/\/$/, '');
+  const managerRoutesWithoutExport = new Set([
+    '/project-manager/dashboard',
+    '/project-manager/announcements',
+    '/project-manager/my-attendance',
+    '/project-manager/payroll',
+    '/project-manager/profile',
+  ]);
+  const shouldShowExport = !isProjectManager || !managerRoutesWithoutExport.has(currentRoute);
 
   const queryAllSafe = (root, selector) => {
     if (!root || typeof root.querySelectorAll !== 'function') {
@@ -472,11 +486,7 @@ export function Hero({
       } = getPageSnapshot() || {};
       const role = getSessionValue('kavyaRole') || 'employee';
       const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
-      const shouldHideFormFieldsForLeaveRequests = title === 'Leave Requests';
-      const shouldHideFormFieldsForMyTasks = title === 'My Tasks';
-      const shouldHideFormFieldsForMyAssets = title === 'My Assets';
-      const exportControls = (shouldHideFormFields || shouldHideFormFieldsForLeaveRequests || shouldHideFormFieldsForMyTasks || shouldHideFormFieldsForMyAssets) ? [] : controls;
-      const exportCards = (title === 'My Tasks' || title === 'Leave Requests' || title === 'My Assets') ? [] : cards;
+      const exportControls = shouldHideFormFields ? [] : controls;
       const escapeCell = (cell) => String(cell || '-')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
@@ -567,7 +577,7 @@ export function Hero({
         </body>
       </html>
     `;
-      const blob = new Blob([excelHtml], {
+      const blob = new Blob(['\ufeff', excelHtml], {
         type: 'application/vnd.ms-excel;charset=utf-8;',
       });
 
