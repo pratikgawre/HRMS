@@ -520,14 +520,6 @@ export function Hero({
         ${bodyRows}
       `;
       }).join('');
-      const controlsRows = exportControls.length
-        ? `
-        <tr><td colspan="8" class="section-gap"></td></tr>
-        <tr><td colspan="8" class="section-title">Visible Form Fields</td></tr>
-        <tr><th>Field</th><th colspan="7">Value</th></tr>
-        ${exportControls.map((item) => `<tr><td>${escapeCell(item.label)}</td><td colspan="7">${escapeCell(item.value)}</td></tr>`).join('')}
-      `
-        : '';
       const excelHtml = `
       <html>
         <head>
@@ -569,7 +561,6 @@ export function Hero({
               ${exportCards.map((card) => `<tr><td>${escapeCell(card.heading)}</td><td colspan="7">${escapeCell(card.bodyText || '-')}</td></tr>`).join('')}
             ` : ''}
             ${tableSections}
-            ${controlsRows}
             <tr><td colspan="8" class="section-gap"></td></tr>
             <tr><td colspan="8" class="footer">Generated from Kavya HRMS dashboard snapshot.</td></tr>
           </table>
@@ -648,7 +639,7 @@ export function Hero({
           )}
         </div>
       </div>
-      {isSummaryOpen && summaryData && (
+      {showSmartSummary && isSummaryOpen && summaryData && (
         <div className="smart-summary-backdrop" role="presentation" onClick={() => setIsSummaryOpen(false)}>
           <section className="smart-summary-modal" role="dialog" aria-modal="true" aria-label={`${title} smart summary`} onClick={(event) => event.stopPropagation()}>
             <div className="smart-summary-head">

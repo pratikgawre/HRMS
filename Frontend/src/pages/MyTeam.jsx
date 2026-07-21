@@ -294,6 +294,8 @@ function TeamLeadMyTeamView() {
         copy={role === 'projectManager'
           ? 'View the employees, projects, and task assignments connected to your management scope.'
           : 'View only the employees assigned to you through team assignment records, grouped by project and counted from live mapping data.'}
+        showSmartSummary={role !== 'teamLead'}
+        omitRecordCardsInExport={role === 'teamLead'}
       />
       <section className="dashboard-card-grid">
         {cards.map((card) => (
@@ -696,4 +698,3 @@ function getMemberTaskStatus(memberTasks = [], fallback = '-') {
   return normalized[0];
 }
 export default MyTeam;
-
