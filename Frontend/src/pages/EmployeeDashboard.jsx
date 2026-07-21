@@ -259,7 +259,7 @@ function EmployeeDashboard() {
 
   return (
     <>
-      <Hero title="My Dashboard" copy="Your attendance snapshot, leave balance, upcoming notices, and profile activity in one personal workspace." />
+      <Hero title="My Dashboard" copy="Your attendance snapshot, leave balance, upcoming notices, and profile activity in one personal workspace." showExportButton={false} showSmartSummaryButton={false} />
       <CardGrid stats={employeeStats} className="employee-card-row" />
 
       {message && (

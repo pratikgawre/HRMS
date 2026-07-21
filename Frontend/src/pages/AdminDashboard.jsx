@@ -317,6 +317,8 @@ export function Hero({
   actions = null,
   reportData = null,
   onExportReport = null,
+  showExportButton = true,
+  showSmartSummaryButton = true,
 }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
@@ -470,7 +472,11 @@ export function Hero({
       } = getPageSnapshot() || {};
       const role = getSessionValue('kavyaRole') || 'employee';
       const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
-      const exportControls = shouldHideFormFields ? [] : controls;
+      const shouldHideFormFieldsForLeaveRequests = title === 'Leave Requests';
+      const shouldHideFormFieldsForMyTasks = title === 'My Tasks';
+      const shouldHideFormFieldsForMyAssets = title === 'My Assets';
+      const exportControls = (shouldHideFormFields || shouldHideFormFieldsForLeaveRequests || shouldHideFormFieldsForMyTasks || shouldHideFormFieldsForMyAssets) ? [] : controls;
+      const exportCards = (title === 'My Tasks' || title === 'Leave Requests' || title === 'My Assets') ? [] : cards;
       const escapeCell = (cell) => String(cell || '-')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
@@ -556,11 +562,11 @@ export function Hero({
             <tr><td colspan="2" class="meta">Exported At</td><td colspan="6" class="meta">${escapeCell(new Date().toLocaleString('en-IN'))}</td></tr>
             <tr><td colspan="8" class="section-gap"></td></tr>
             <tr>${metricCells || '<td colspan="8" class="empty-row">No dashboard metrics found.</td>'}</tr>
-            ${cards.length ? `
+            ${exportCards.length ? `
               <tr><td colspan="8" class="section-gap"></td></tr>
               <tr><td colspan="8" class="section-title">Record Cards</td></tr>
               <tr><th>Title</th><th colspan="7">Details</th></tr>
-              ${cards.map((card) => `<tr><td>${escapeCell(card.heading)}</td><td colspan="7">${escapeCell(card.bodyText || '-')}</td></tr>`).join('')}
+              ${exportCards.map((card) => `<tr><td>${escapeCell(card.heading)}</td><td colspan="7">${escapeCell(card.bodyText || '-')}</td></tr>`).join('')}
             ` : ''}
             ${tableSections}
             ${controlsRows}
@@ -634,8 +640,12 @@ export function Hero({
         </div>
         <div className="hero-actions">
           {actions}
-          <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
-          <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
+          {showExportButton && (
+            <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
+          )}
+          {showSmartSummaryButton && (
+            <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
+          )}
         </div>
       </div>
       {isSummaryOpen && summaryData && (

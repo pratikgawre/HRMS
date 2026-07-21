@@ -616,6 +616,7 @@ function Tasks() {
         copy={role === 'employee'
           ? 'Track your assigned tasks, update the current status, and stay on top of due dates.'
           : 'Assign tasks, track priority and due date, and keep delivery moving across the team.'}
+        showSmartSummaryButton={false}
       />
       {message && (
         <div className="user-alert" role="status">
@@ -988,6 +989,7 @@ function EmployeeTasksView() {
       <Hero
         title="My Tasks"
         copy="Track your assigned work, update the current status, and keep an eye on due dates from one place."
+        showSmartSummaryButton={false}
       />
       {message && (
         <div className="user-alert" role="status">
