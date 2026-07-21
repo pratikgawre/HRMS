@@ -309,7 +309,7 @@ function SupportTickets() {
       <Hero
         title="Support Tickets"
         copy="Raise workplace, attendance, payroll, login, or technical issues and track every support request from one place."
-        showSmartSummary={role !== 'teamLead'}
+        showSmartSummaryButton={false}
       />
 
       <div className="support-layout">

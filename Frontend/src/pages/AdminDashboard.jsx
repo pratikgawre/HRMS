@@ -317,9 +317,8 @@ export function Hero({
   actions = null,
   reportData = null,
   onExportReport = null,
-  showReportActions = true,
-  showSmartSummary = true,
-  omitRecordCardsInExport = false,
+  showExportButton = true,
+  showSmartSummaryButton = true,
 }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
@@ -471,7 +470,13 @@ export function Hero({
         controls = [],
         cards = [],
       } = getPageSnapshot() || {};
-      const exportCards = omitRecordCardsInExport ? [] : cards;
+      const role = getSessionValue('kavyaRole') || 'employee';
+      const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
+      const shouldHideFormFieldsForLeaveRequests = title === 'Leave Requests';
+      const shouldHideFormFieldsForMyTasks = title === 'My Tasks';
+      const shouldHideFormFieldsForMyAssets = title === 'My Assets';
+      const exportControls = (shouldHideFormFields || shouldHideFormFieldsForLeaveRequests || shouldHideFormFieldsForMyTasks || shouldHideFormFieldsForMyAssets) ? [] : controls;
+      const exportCards = (title === 'My Tasks' || title === 'Leave Requests' || title === 'My Assets') ? [] : cards;
       const escapeCell = (cell) => String(cell || '-')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
@@ -626,12 +631,10 @@ export function Hero({
         </div>
         <div className="hero-actions">
           {actions}
-          {showReportActions && (
-            <>
-              <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
-            </>
+          {showExportButton && (
+            <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
           )}
-          {showSmartSummary && (
+          {showSmartSummaryButton && (
             <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
           )}
         </div>

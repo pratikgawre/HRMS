@@ -511,12 +511,7 @@ function LeaveRequests() {
 
   return (
     <>
-      <Hero
-        title="Leave Requests"
-        copy="Track pending approvals, approved leaves, work-from-home requests, and upcoming planned absences."
-        showSmartSummary={role !== 'teamLead'}
-        omitRecordCardsInExport={role === 'teamLead'}
-      />
+      <Hero title="Leave Requests" copy="Track pending approvals, approved leaves, work-from-home requests, and upcoming planned absences." showSmartSummaryButton={false} />
 
       {message && (
         <div className="user-alert" role="status">

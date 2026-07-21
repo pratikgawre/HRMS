@@ -249,7 +249,7 @@ function Profile() {
   }, []);
 
   const profileStats = [
-    { label: 'Employee ID', value: employee.employeeCode || employee.id || '-' },
+    { label: 'Employee ID', value: employee.employeeCode || employee.employeeId || employee.id || '-' },
     { label: 'Department', value: employee.department || '-' },
     { label: 'Access Role', value: employee.accessRole || '-' },
     { label: 'Location', value: employee.workingLocation || '-' },
@@ -612,12 +612,7 @@ function Profile() {
 
   return (
     <div className="profile-page">
-      <Hero
-        title="Profile Management"
-        copy="Edit your personal details, contact information, profile photo, and password in one place."
-        showReportActions={normalizedAccessRole !== 'Team Lead'}
-        showSmartSummary={normalizedAccessRole !== 'Team Lead'}
-      />
+      <Hero title="Profile Management" copy="Edit your personal details, contact information, profile photo, and password in one place." showExportButton={false} showSmartSummaryButton={false} />
 
       <section className="dashboard-card-grid">
         {profileStats.map((item) => (
@@ -682,7 +677,7 @@ function Profile() {
           <h3>{form.displayName || employee.displayName || employee.name}</h3>
           <span>{form.jobTitle || employee.jobTitle}</span>
           <div className="profile-tags">
-            <strong>{employee.employeeCode || employee.id}</strong>
+            <strong>{employee.employeeCode || employee.employeeId || employee.id}</strong>
             <strong>{employee.department || 'General'}</strong>
             <strong>{employee.accessRole || 'Employee'}</strong>
           </div>
@@ -1307,7 +1302,7 @@ function buildStoredProfileDetails(employee, canManagePackageAmount) {
     ['Working Location', employee.workingLocation],
     ['Employment Type', employee.employmentType],
     ['Joining Date', employee.joiningDate],
-    ['Employee ID', employee.managerId],
+    ['Employee ID', employee.employeeCode || employee.employeeId || employee.id],
     ['Grade', employee.grade],
     ['Email', employee.email],
     ['Mobile No.', employee.mobileNo],
