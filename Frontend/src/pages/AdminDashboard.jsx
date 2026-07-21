@@ -317,6 +317,8 @@ export function Hero({
   actions = null,
   reportData = null,
   onExportReport = null,
+  showExportButton = true,
+  showSmartSummaryButton = true,
 }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
@@ -483,24 +485,8 @@ export function Hero({
         cards = [],
       } = getPageSnapshot() || {};
       const role = getSessionValue('kavyaRole') || 'employee';
-      const isManagerLeaveReview = isProjectManager && currentRoute === '/project-manager/leave-review';
-      const isManagerProjects = isProjectManager && currentRoute === '/project-manager/projects';
-      const isManagerSupport = isProjectManager && currentRoute === '/project-manager/support';
-      const isManagerTaskAssignment = isProjectManager && currentRoute === '/project-manager/tasks';
-      const isManagerTeamAttendance = isProjectManager && currentRoute === '/project-manager/team-attendance';
-      const shouldHideRecordCards = isProjectManager && [
-        '/project-manager/leave-review',
-        '/project-manager/team',
-        '/project-manager/projects',
-      ].includes(currentRoute);
-      const shouldHideFormFields = (title === 'Support Tickets' && role === 'hr')
-        || isManagerLeaveReview
-        || isManagerProjects
-        || isManagerSupport
-        || isManagerTaskAssignment
-        || isManagerTeamAttendance;
+      const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
       const exportControls = shouldHideFormFields ? [] : controls;
-      const exportCards = shouldHideRecordCards ? [] : cards;
       const escapeCell = (cell) => String(cell || '-')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
@@ -544,14 +530,6 @@ export function Hero({
         ${bodyRows}
       `;
       }).join('');
-      const controlsRows = exportControls.length
-        ? `
-        <tr><td colspan="8" class="section-gap"></td></tr>
-        <tr><td colspan="8" class="section-title">Visible Form Fields</td></tr>
-        <tr><th>Field</th><th colspan="7">Value</th></tr>
-        ${exportControls.map((item) => `<tr><td>${escapeCell(item.label)}</td><td colspan="7">${escapeCell(item.value)}</td></tr>`).join('')}
-      `
-        : '';
       const excelHtml = `
       <html>
         <head>
@@ -593,7 +571,6 @@ export function Hero({
               ${exportCards.map((card) => `<tr><td>${escapeCell(card.heading)}</td><td colspan="7">${escapeCell(card.bodyText || '-')}</td></tr>`).join('')}
             ` : ''}
             ${tableSections}
-            ${controlsRows}
             <tr><td colspan="8" class="section-gap"></td></tr>
             <tr><td colspan="8" class="footer">Generated from Kavya HRMS dashboard snapshot.</td></tr>
           </table>
@@ -664,15 +641,15 @@ export function Hero({
         </div>
         <div className="hero-actions">
           {actions}
-          {shouldShowExport && (
+          {showExportButton && (
             <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
           )}
-          {!isProjectManager && (
+          {showSmartSummaryButton && (
             <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
           )}
         </div>
       </div>
-      {!isProjectManager && isSummaryOpen && summaryData && (
+      {showSmartSummary && isSummaryOpen && summaryData && (
         <div className="smart-summary-backdrop" role="presentation" onClick={() => setIsSummaryOpen(false)}>
           <section className="smart-summary-modal" role="dialog" aria-modal="true" aria-label={`${title} smart summary`} onClick={(event) => event.stopPropagation()}>
             <div className="smart-summary-head">

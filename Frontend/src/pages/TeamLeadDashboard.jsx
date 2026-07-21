@@ -280,6 +280,8 @@ function TeamLeadDashboard() {
       <Hero
         title="Team Lead Dashboard"
         copy="Coordinate team attendance, task ownership, leave requests, and day-to-day delivery updates."
+        showReportActions={false}
+        showSmartSummary={false}
       />
       <QuickActions
         detailOverrides={quickActionDetails}

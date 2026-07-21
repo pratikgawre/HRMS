@@ -8,6 +8,7 @@ function Login() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const navigate = useNavigate();
 
   const updateField = (field, value) => {
@@ -54,7 +55,7 @@ function Login() {
           <div className="login-brand-logo-frame" aria-hidden="true">
             <img className="login-brand-logo" src={loginLogo} alt="" />
           </div>
-          <strong>Kavya HR 360</strong>
+          <strong>Kavya <em>HR 360</em></strong>
         </div>
 
         <div className="login-visual" aria-hidden="true">
@@ -63,7 +64,6 @@ function Login() {
           <div className="visual-card visual-chart">
             <div className="visual-card-head">
               <span>Active Users</span>
-              <strong>24k</strong>
             </div>
             <div className="chart-lines">
               <i />
@@ -78,6 +78,7 @@ function Login() {
             <span>Program</span>
             <div className="donut-chart" />
             <small>Daily active users</small>
+            <strong className="visual-stat">248</strong>
           </div>
         </div>
 
@@ -88,6 +89,9 @@ function Login() {
       </section>
 
       <section className="login-card">
+        <div className="login-card-decor decor-ring" aria-hidden="true" />
+        <div className="login-card-decor decor-dots" aria-hidden="true" />
+        <div className="login-skyline" aria-hidden="true" />
         <div className="login-panel">
           <h2>Welcome back</h2>
           <p className="login-copy">Login with email, employee ID, or user ID</p>
@@ -122,10 +126,25 @@ function Login() {
                 <i className={showPassword ? 'ri-eye-off-line' : 'ri-eye-line'} aria-hidden="true" />
               </button>
             </label>
+            <div className="login-options">
+              <label className="login-check">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                />
+                <span>Remember me</span>
+              </label>
+              <span>Keep me signed in</span>
+            </div>
             {error && <p className="login-error" role="alert">{error}</p>}
             <button className="primary-btn" type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>
-              {isSubmitting ? 'Signing in...' : 'Login'}
+              <span>{isSubmitting ? 'Signing in...' : 'Login'}</span>
+              <i className="ri-arrow-right-line" aria-hidden="true" />
             </button>
+            <div className="login-divider" aria-hidden="true">
+              <span>or</span>
+            </div>
             <Link className="login-link" to="/forgot-password">Forgot Password?</Link>
           </form>
         </div>

@@ -720,6 +720,7 @@ function Assets() {
           : role === 'employee'
             ? 'Employees can view assigned assets and raise replacement or repair requests.'
             : 'HR and Admin can manage company assets, assignments, replacement requests, repair cases, and return tracking.'}
+        showSmartSummaryButton={false}
       />
 
       <div id="asset-overview" className="card-grid">
@@ -1293,6 +1294,7 @@ function EmployeeAssetsView() {
       <Hero
         title="My Assets"
         copy="View your assigned assets, raise service requests, and follow each request through the full workflow."
+        showSmartSummaryButton={false}
       />
 
       <section className="dashboard-card-grid" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
