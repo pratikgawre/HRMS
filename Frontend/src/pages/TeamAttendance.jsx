@@ -455,6 +455,7 @@ function TeamAttendance() {
           reportData={isMyAttendanceView ? heroReportData : null}
           showReportActions={!location.pathname.startsWith('/team-lead/my-attendance')}
           showSmartSummary={!(role === 'teamLead' && !isMyAttendanceView)}
+          showExportButton={!isMyAttendanceView}
         />
 
         {message && (
@@ -1201,6 +1202,5 @@ function getWorkbookDateKey(date) {
 }
 
 export default TeamAttendance;
-
 
 
