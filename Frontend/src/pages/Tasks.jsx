@@ -616,6 +616,7 @@ function Tasks() {
         copy={role === 'employee'
           ? 'Track your assigned tasks, update the current status, and stay on top of due dates.'
           : 'Assign tasks, track priority and due date, and keep delivery moving across the team.'}
+        showSmartSummary={role !== 'teamLead'}
       />
       {message && (
         <div className="user-alert" role="status">

@@ -317,6 +317,9 @@ export function Hero({
   actions = null,
   reportData = null,
   onExportReport = null,
+  showReportActions = true,
+  showSmartSummary = true,
+  omitRecordCardsInExport = false,
 }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
@@ -468,9 +471,7 @@ export function Hero({
         controls = [],
         cards = [],
       } = getPageSnapshot() || {};
-      const role = getSessionValue('kavyaRole') || 'employee';
-      const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
-      const exportControls = shouldHideFormFields ? [] : controls;
+      const exportCards = omitRecordCardsInExport ? [] : cards;
       const escapeCell = (cell) => String(cell || '-')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
@@ -514,14 +515,6 @@ export function Hero({
         ${bodyRows}
       `;
       }).join('');
-      const controlsRows = exportControls.length
-        ? `
-        <tr><td colspan="8" class="section-gap"></td></tr>
-        <tr><td colspan="8" class="section-title">Visible Form Fields</td></tr>
-        <tr><th>Field</th><th colspan="7">Value</th></tr>
-        ${exportControls.map((item) => `<tr><td>${escapeCell(item.label)}</td><td colspan="7">${escapeCell(item.value)}</td></tr>`).join('')}
-      `
-        : '';
       const excelHtml = `
       <html>
         <head>
@@ -556,14 +549,13 @@ export function Hero({
             <tr><td colspan="2" class="meta">Exported At</td><td colspan="6" class="meta">${escapeCell(new Date().toLocaleString('en-IN'))}</td></tr>
             <tr><td colspan="8" class="section-gap"></td></tr>
             <tr>${metricCells || '<td colspan="8" class="empty-row">No dashboard metrics found.</td>'}</tr>
-            ${cards.length ? `
+            ${exportCards.length ? `
               <tr><td colspan="8" class="section-gap"></td></tr>
               <tr><td colspan="8" class="section-title">Record Cards</td></tr>
               <tr><th>Title</th><th colspan="7">Details</th></tr>
-              ${cards.map((card) => `<tr><td>${escapeCell(card.heading)}</td><td colspan="7">${escapeCell(card.bodyText || '-')}</td></tr>`).join('')}
+              ${exportCards.map((card) => `<tr><td>${escapeCell(card.heading)}</td><td colspan="7">${escapeCell(card.bodyText || '-')}</td></tr>`).join('')}
             ` : ''}
             ${tableSections}
-            ${controlsRows}
             <tr><td colspan="8" class="section-gap"></td></tr>
             <tr><td colspan="8" class="footer">Generated from Kavya HRMS dashboard snapshot.</td></tr>
           </table>
@@ -634,11 +626,17 @@ export function Hero({
         </div>
         <div className="hero-actions">
           {actions}
-          <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
-          <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
+          {showReportActions && (
+            <>
+              <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
+            </>
+          )}
+          {showSmartSummary && (
+            <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
+          )}
         </div>
       </div>
-      {isSummaryOpen && summaryData && (
+      {showSmartSummary && isSummaryOpen && summaryData && (
         <div className="smart-summary-backdrop" role="presentation" onClick={() => setIsSummaryOpen(false)}>
           <section className="smart-summary-modal" role="dialog" aria-modal="true" aria-label={`${title} smart summary`} onClick={(event) => event.stopPropagation()}>
             <div className="smart-summary-head">
