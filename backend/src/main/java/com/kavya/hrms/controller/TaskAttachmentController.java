@@ -26,6 +26,7 @@ public class TaskAttachmentController {
   }
 
   @GetMapping("/uploads/task-attachments/{id}")
+  @SuppressWarnings("SPRING_DATA_STRING_PROPERTY_REFERENCE")
   public ResponseEntity<Resource> getTaskAttachment(@PathVariable String id) {
     ObjectId objectId = parseObjectId(id);
     GridFSFile file = gridFsTemplate.findOne(Query.query(Criteria.where("_id").is(objectId)));

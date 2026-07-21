@@ -74,64 +74,48 @@ function Assets() {
       try {
         const cachedAssets = readCachedJson(ADMIN_ASSET_CACHE_KEY, []);
         const cachedEmployees = readCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, []);
-        if (cachedAssets.length && assets.length === 0) {
+        if (cachedAssets.length) {
           const normalizedCachedEmployees = normalizeAssetDirectoryEmployees(cachedEmployees);
           setAssets(normalizeAssetRows(cachedAssets, normalizedCachedEmployees));
           setEmployees(normalizedCachedEmployees);
+          setIsLoading(false);
         }
 
-        const [assetResult, employeeResult, projectResult] = await Promise.allSettled([
-          apiRequest('/assets', { timeoutMs: 15000 }),
-          apiRequest('/employees', { timeoutMs: 15000 }),
-          apiRequest('/projects').catch(() => []),
-        ]);
+        let pageData;
+        try {
+          pageData = await apiRequest('/assets/page-data', { timeoutMs: 10000 });
+        } catch (pageDataError) {
+          console.warn('[Assets] GET /api/assets/page-data failed; using compatible requests.', pageDataError);
+          const [assetRows, employeeRows, projectRows] = await Promise.all([
+            apiRequest('/assets', { timeoutMs: 10000 }),
+            apiRequest('/employees', { timeoutMs: 10000 }),
+            apiRequest('/projects', { timeoutMs: 10000 }).catch(() => []),
+          ]);
+          pageData = { assets: assetRows, employees: employeeRows, projects: projectRows };
+        }
 
         if (!active) {
           return;
         }
 
-        const assetSucceeded = assetResult.status === 'fulfilled';
-        const employeeSucceeded = employeeResult.status === 'fulfilled';
-        const projectRows = projectResult.status === 'fulfilled' ? projectResult.value : [];
-        const assetRows = assetSucceeded && Array.isArray(assetResult.value)
-          ? assetResult.value
-          : assetSucceeded && assetResult.value && Array.isArray(assetResult.value.assets)
-            ? assetResult.value.assets
-            : [];
-        const employeeRows = employeeSucceeded && Array.isArray(employeeResult.value) ? employeeResult.value : [];
-
-        if (!assetSucceeded) {
-          console.error('[Assets] GET /api/assets failed:', assetResult.reason);
-        }
-
-        if (!employeeSucceeded) {
-          console.error('[Assets] GET /api/employees failed:', employeeResult.reason);
-        }
+        const assetRows = Array.isArray(pageData?.assets) ? pageData.assets : [];
+        const employeeRows = Array.isArray(pageData?.employees) ? pageData.employees : [];
+        const projectRows = Array.isArray(pageData?.projects) ? pageData.projects : [];
 
         const normalizedEmployees = normalizeAssetDirectoryEmployees(employeeRows);
-        const normalizedProjects = normalizeProjects(Array.isArray(projectRows) ? projectRows : []);
+        const normalizedProjects = normalizeProjects(projectRows);
         const normalizedAssets = normalizeAssetRows(assetRows, normalizedEmployees);
-        if (assetSucceeded) {
-          setAssets(normalizedAssets);
-        } else {
-          if (cachedAssets.length) {
-            setAssets(normalizeAssetRows(cachedAssets, normalizedEmployees));
-          }
-          setLoadError('Unable to load assets. Please verify that the backend is running and try again.');
-        }
-        if (employeeSucceeded) {
-          setEmployees(normalizedEmployees);
-        }
+        setAssets(normalizedAssets);
+        setEmployees(normalizedEmployees);
         setProjects(normalizedProjects);
-        if (assetSucceeded) {
-          writeCachedJson(ADMIN_ASSET_CACHE_KEY, assetRows);
-        }
-        if (employeeSucceeded) {
-          writeCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, employeeRows);
-        }
+        writeCachedJson(ADMIN_ASSET_CACHE_KEY, assetRows);
+        writeCachedJson(ADMIN_EMPLOYEE_CACHE_KEY, employeeRows);
       } catch (error) {
         if (active) {
-          setLoadError('Unable to load asset data. Please try again.');
+          const cachedAssets = readCachedJson(ADMIN_ASSET_CACHE_KEY, []);
+          if (!cachedAssets.length) {
+            setLoadError('Unable to load asset data. Please verify that the backend is running and try again.');
+          }
         }
       } finally {
         if (active) {
@@ -211,7 +195,8 @@ function Assets() {
     return assets.filter((asset) => {
       const assignedToEmployeeId = String(asset.assignedToEmployeeId || '').trim().toLowerCase();
       const assignedTo = String(asset.assignedTo || '').trim();
-      return teamMemberIds.has(assignedToEmployeeId) || (assignedTo && assignedTo !== '-');
+      const isAvailable = normalizeAssetStatus(asset.status) === 'available';
+      return isAvailable || teamMemberIds.has(assignedToEmployeeId) || (assignedTo && assignedTo !== '-');
     });
   }, [assets, isTeamScopedRole, teamMemberIds]);
   const scopedSummary = useMemo(() => ({

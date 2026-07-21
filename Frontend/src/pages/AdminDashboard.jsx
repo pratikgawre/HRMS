@@ -320,6 +320,20 @@ export function Hero({
 }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
+  const isProjectManager = String(getSessionValue('kavyaRole') || '')
+    .replace(/[\s_-]+/g, '')
+    .toLowerCase() === 'projectmanager';
+  const currentRoute = typeof window === 'undefined'
+    ? ''
+    : window.location.hash.replace(/^#/, '').split('?')[0].replace(/\/$/, '');
+  const managerRoutesWithoutExport = new Set([
+    '/project-manager/dashboard',
+    '/project-manager/announcements',
+    '/project-manager/my-attendance',
+    '/project-manager/payroll',
+    '/project-manager/profile',
+  ]);
+  const shouldShowExport = !isProjectManager || !managerRoutesWithoutExport.has(currentRoute);
 
   const queryAllSafe = (root, selector) => {
     if (!root || typeof root.querySelectorAll !== 'function') {
@@ -469,8 +483,24 @@ export function Hero({
         cards = [],
       } = getPageSnapshot() || {};
       const role = getSessionValue('kavyaRole') || 'employee';
-      const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
+      const isManagerLeaveReview = isProjectManager && currentRoute === '/project-manager/leave-review';
+      const isManagerProjects = isProjectManager && currentRoute === '/project-manager/projects';
+      const isManagerSupport = isProjectManager && currentRoute === '/project-manager/support';
+      const isManagerTaskAssignment = isProjectManager && currentRoute === '/project-manager/tasks';
+      const isManagerTeamAttendance = isProjectManager && currentRoute === '/project-manager/team-attendance';
+      const shouldHideRecordCards = isProjectManager && [
+        '/project-manager/leave-review',
+        '/project-manager/team',
+        '/project-manager/projects',
+      ].includes(currentRoute);
+      const shouldHideFormFields = (title === 'Support Tickets' && role === 'hr')
+        || isManagerLeaveReview
+        || isManagerProjects
+        || isManagerSupport
+        || isManagerTaskAssignment
+        || isManagerTeamAttendance;
       const exportControls = shouldHideFormFields ? [] : controls;
+      const exportCards = shouldHideRecordCards ? [] : cards;
       const escapeCell = (cell) => String(cell || '-')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
@@ -556,11 +586,11 @@ export function Hero({
             <tr><td colspan="2" class="meta">Exported At</td><td colspan="6" class="meta">${escapeCell(new Date().toLocaleString('en-IN'))}</td></tr>
             <tr><td colspan="8" class="section-gap"></td></tr>
             <tr>${metricCells || '<td colspan="8" class="empty-row">No dashboard metrics found.</td>'}</tr>
-            ${cards.length ? `
+            ${exportCards.length ? `
               <tr><td colspan="8" class="section-gap"></td></tr>
               <tr><td colspan="8" class="section-title">Record Cards</td></tr>
               <tr><th>Title</th><th colspan="7">Details</th></tr>
-              ${cards.map((card) => `<tr><td>${escapeCell(card.heading)}</td><td colspan="7">${escapeCell(card.bodyText || '-')}</td></tr>`).join('')}
+              ${exportCards.map((card) => `<tr><td>${escapeCell(card.heading)}</td><td colspan="7">${escapeCell(card.bodyText || '-')}</td></tr>`).join('')}
             ` : ''}
             ${tableSections}
             ${controlsRows}
@@ -570,7 +600,7 @@ export function Hero({
         </body>
       </html>
     `;
-      const blob = new Blob([excelHtml], {
+      const blob = new Blob(['\ufeff', excelHtml], {
         type: 'application/vnd.ms-excel;charset=utf-8;',
       });
 
@@ -634,11 +664,15 @@ export function Hero({
         </div>
         <div className="hero-actions">
           {actions}
-          <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
-          <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
+          {shouldShowExport && (
+            <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
+          )}
+          {!isProjectManager && (
+            <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
+          )}
         </div>
       </div>
-      {isSummaryOpen && summaryData && (
+      {!isProjectManager && isSummaryOpen && summaryData && (
         <div className="smart-summary-backdrop" role="presentation" onClick={() => setIsSummaryOpen(false)}>
           <section className="smart-summary-modal" role="dialog" aria-modal="true" aria-label={`${title} smart summary`} onClick={(event) => event.stopPropagation()}>
             <div className="smart-summary-head">
