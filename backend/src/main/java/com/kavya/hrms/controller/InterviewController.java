@@ -2,11 +2,19 @@ package com.kavya.hrms.controller;
 
 import com.kavya.hrms.model.Interview;
 import com.kavya.hrms.repository.InterviewRepository;
+import com.kavya.hrms.service.InterviewNotificationEmailService;
+import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,10 +29,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/interviews")
 public class InterviewController {
-  private final InterviewRepository repository;
+  private static final Logger log = LoggerFactory.getLogger(InterviewController.class);
+  private static final Pattern TEXT_ONLY_PATTERN = Pattern.compile("^[^0-9]+$");
+  private static final Pattern NUMBER_ONLY_PATTERN = Pattern.compile("^\\d+$");
 
-  public InterviewController(InterviewRepository repository) {
+  private final InterviewRepository repository;
+  private final InterviewNotificationEmailService interviewNotificationEmailService;
+
+  public InterviewController(
+      InterviewRepository repository,
+      InterviewNotificationEmailService interviewNotificationEmailService) {
     this.repository = repository;
+    this.interviewNotificationEmailService = interviewNotificationEmailService;
   }
 
   @GetMapping
@@ -56,6 +72,13 @@ public class InterviewController {
     if (safe.getCandidateName().isBlank() || safe.getPosition().isBlank()) {
       return ResponseEntity.badRequest().body("Candidate name and position are required");
     }
+    ResponseEntity<?> validation = validateInterview(safe);
+    if (validation != null) {
+      return validation;
+    }
+    if (repository.findByEmailIgnoreCase(safe.getEmail()).isPresent()) {
+      return duplicateEmailResponse();
+    }
     if (repository.findByCandidateNameIgnoreCaseAndEmailIgnoreCaseAndPositionIgnoreCase(
         safe.getCandidateName(), safe.getEmail(), safe.getPosition()).isPresent()) {
       return ResponseEntity.badRequest().body("Duplicate interview record already exists");
@@ -68,16 +91,31 @@ public class InterviewController {
     if (safe.getPriority().isBlank()) {
       safe.setPriority("Medium");
     }
-    return ResponseEntity.ok(repository.save(safe));
+    Interview saved = repository.save(safe);
+    sendCandidateScheduleEmail(saved);
+    return ResponseEntity.ok(saved);
   }
 
   @PutMapping("/{id}")
   public ResponseEntity<?> update(@PathVariable String id, @RequestBody Interview interview) {
     Interview safe = sanitize(interview);
-    return repository.findById(id).map((existing) -> {
+    ResponseEntity<?> validation = validateInterview(safe);
+    if (validation != null) {
+      return validation;
+    }
+
+    return repository.findById(id).<ResponseEntity<?>>map((existing) -> {
+      if (repository.findByEmailIgnoreCase(safe.getEmail())
+          .filter((emailOwner) -> !Objects.equals(emailOwner.getId(), id))
+          .isPresent()) {
+        return duplicateEmailResponse();
+      }
+
       copy(existing, safe);
       existing.setUpdatedDate(now());
-      return ResponseEntity.ok(repository.save(existing));
+      Interview saved = repository.save(existing);
+      sendCandidateUpdateEmail(saved);
+      return ResponseEntity.ok(saved);
     }).orElse(ResponseEntity.notFound().build());
   }
 
@@ -105,6 +143,70 @@ public class InterviewController {
         .filter((interview) -> Objects.equals(interview.getInterviewDate(), nowDate()))
         .count();
     return ResponseEntity.ok(java.util.Map.of("count", count));
+  }
+
+  private ResponseEntity<?> validateInterview(Interview interview) {
+    Map<String, String> fieldErrors = new LinkedHashMap<>();
+    addTextOnlyError(fieldErrors, "position", interview == null ? "" : interview.getPosition(), "Position applied");
+    addTextOnlyError(fieldErrors, "department", interview == null ? "" : interview.getDepartment(), "Department");
+    addTextOnlyError(fieldErrors, "currentCompany", interview == null ? "" : interview.getCurrentCompany(), "Current company");
+    addTextOnlyError(fieldErrors, "interviewer", interview == null ? "" : interview.getInterviewer(), "Interviewer name");
+    addTextOnlyError(fieldErrors, "createdBy", interview == null ? "" : interview.getCreatedBy(), "Created by");
+    addNumberOnlyError(fieldErrors, "currentCTC", interview == null ? "" : interview.getCurrentCTC(), "Current CTC");
+    addNumberOnlyError(fieldErrors, "expectedCTC", interview == null ? "" : interview.getExpectedCTC(), "Expected CTC");
+    addInterviewDateError(fieldErrors, interview == null ? "" : interview.getInterviewDate());
+
+    if (fieldErrors.isEmpty()) {
+      return null;
+    }
+
+    return ResponseEntity.badRequest().body(Map.of(
+        "message", "Please fix the highlighted interview fields.",
+        "fieldErrors", fieldErrors));
+  }
+
+  private void addTextOnlyError(Map<String, String> fieldErrors, String field, String value, String label) {
+    String safeValue = businessValue(value);
+    if (!safeValue.isBlank() && !TEXT_ONLY_PATTERN.matcher(safeValue).matches()) {
+      fieldErrors.put(field, label + " should contain text only.");
+    }
+  }
+
+  private void addNumberOnlyError(Map<String, String> fieldErrors, String field, String value, String label) {
+    String safeValue = businessValue(value);
+    if (!safeValue.isBlank() && !NUMBER_ONLY_PATTERN.matcher(safeValue).matches()) {
+      fieldErrors.put(field, label + " should contain numbers only.");
+    }
+  }
+
+  private void addInterviewDateError(Map<String, String> fieldErrors, String value) {
+    String safeValue = businessValue(value);
+    if (safeValue.isBlank()) {
+      return;
+    }
+
+    try {
+      LocalDate interviewDate = LocalDate.parse(safeValue);
+      if (interviewDate.isBefore(LocalDate.now())) {
+        fieldErrors.put("interviewDate", "Past interview dates are not allowed.");
+      }
+    } catch (DateTimeParseException ignored) {
+      fieldErrors.put("interviewDate", "Use a valid interview date.");
+    }
+  }
+
+  private ResponseEntity<?> duplicateEmailResponse() {
+    return ResponseEntity.badRequest().body(Map.of(
+        "message", "Candidate email already exists.",
+        "fieldErrors", Map.of("email", "This email already exists in the interview database.")));
+  }
+
+  private String businessValue(String value) {
+    if (value == null) {
+      return "";
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() || "-".equals(trimmed) ? "" : trimmed;
   }
 
   private static Interview sanitize(Interview interview) {
@@ -161,6 +263,36 @@ public class InterviewController {
     target.setStatus(source.getStatus());
     target.setRemarks(source.getRemarks());
     target.setCreatedBy(source.getCreatedBy());
+  }
+
+  private void sendCandidateScheduleEmail(Interview interview) {
+    InterviewNotificationEmailService.DeliveryResult delivery =
+        interviewNotificationEmailService.sendInterviewScheduleEmail(interview);
+    if (delivery.isSent()) {
+      log.info("Interview schedule email sent for interview {} to {}.",
+          interview == null ? "<unknown>" : interview.getId(),
+          interview == null ? "<unknown>" : interview.getEmail());
+      return;
+    }
+
+    log.warn("Interview schedule email was not sent for interview {}: {}",
+        interview == null ? "<unknown>" : interview.getId(),
+        delivery.getMessage());
+  }
+
+  private void sendCandidateUpdateEmail(Interview interview) {
+    InterviewNotificationEmailService.DeliveryResult delivery =
+        interviewNotificationEmailService.sendInterviewUpdateEmail(interview);
+    if (delivery.isSent()) {
+      log.info("Interview update email sent for interview {} to {}.",
+          interview == null ? "<unknown>" : interview.getId(),
+          interview == null ? "<unknown>" : interview.getEmail());
+      return;
+    }
+
+    log.warn("Interview update email was not sent for interview {}: {}",
+        interview == null ? "<unknown>" : interview.getId(),
+        delivery.getMessage());
   }
 
   private static String blankToDash(String value) {

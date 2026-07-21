@@ -168,12 +168,12 @@ public class EmployeeController {
   }
 
   private void ensureNoDuplicateEmployees(List<Employee> candidates, List<Employee> existingEmployees, String excludedEmployeeKey) {
+    List<Employee> seenCandidates = new ArrayList<>();
     for (Employee candidate : candidates == null ? java.util.Collections.<Employee>emptyList() : candidates) {
-      ensureNoDuplicateEmployee(candidate, existingEmployees, excludedEmployeeKey);
-      if (existingEmployees == null) {
-        existingEmployees = new ArrayList<>();
-      }
-      existingEmployees.add(candidate);
+      String candidateKey = firstNonBlank(excludedEmployeeKey, employeeKey(candidate));
+      ensureNoDuplicateEmployee(candidate, existingEmployees, candidateKey);
+      ensureNoDuplicateEmployee(candidate, seenCandidates, null);
+      seenCandidates.add(candidate);
     }
   }
 
