@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
@@ -10,6 +11,7 @@ const PRIORITY_OPTIONS = ['High', 'Medium', 'Low'];
 const RESUME_SOURCES = ['LinkedIn', 'Naukri', 'Indeed', 'Email', 'Reference', 'Phone Call', 'Walk-in', 'Company Website', 'Other'];
 const INTERVIEW_MODES = ['Offline', 'Online', 'Phone Call'];
 const INTERVIEW_ROUNDS = ['HR Round', 'Technical Round', 'Manager Round', 'Final Round'];
+const INTERVIEWS_PER_PAGE = 4;
 
 function ScheduledInterviews() {
   const location = useLocation();
@@ -28,6 +30,11 @@ function ScheduledInterviews() {
   const [modalMode, setModalMode] = useState('create');
   const [showModal, setShowModal] = useState(false);
   const [formErrors, setFormErrors] = useState({ email: '', phone: '' });
+  const [isSavingCandidate, setIsSavingCandidate] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [toast, setToast] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDeletingCandidate, setIsDeletingCandidate] = useState(false);
   const showReferenceColumn = rows.some((row) => String(row.resumeSource || '').trim() === 'Reference');
 
   useEffect(() => {
@@ -49,6 +56,32 @@ function ScheduledInterviews() {
     const matchesPosition = !filters.position || row.position === filters.position;
     return matchesQuery && matchesStatus && matchesPriority && matchesDate && matchesSource && matchesDepartment && matchesPosition;
   }), [filters, rows]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / INTERVIEWS_PER_PAGE));
+  const visiblePage = Math.min(currentPage, totalPages);
+  const pageStartIndex = filteredRows.length === 0 ? 0 : (visiblePage - 1) * INTERVIEWS_PER_PAGE;
+  const pageEndIndex = Math.min(pageStartIndex + INTERVIEWS_PER_PAGE, filteredRows.length);
+  const paginatedRows = useMemo(() => filteredRows.slice(pageStartIndex, pageEndIndex), [filteredRows, pageEndIndex, pageStartIndex]);
+  const pageNumbers = useMemo(() => Array.from({ length: totalPages }, (_, index) => index + 1), [totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setToast(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const summary = useMemo(() => ({
     today: rows.filter((row) => row.interviewDate === todayStamp()).length,
@@ -174,7 +207,7 @@ function ScheduledInterviews() {
         ) : (
           <div className="scheduled-table-shell">
             <div className="scheduled-table-toolbar">
-              <span>Showing {filteredRows.length} of {rows.length} entries</span>
+              <span>Showing {pageStartIndex + 1} to {pageEndIndex} of {filteredRows.length} entries</span>
               <div className="scheduled-table-controls">
                 <label className="scheduled-sort">
                   <span>Sort by:</span>
@@ -189,22 +222,28 @@ function ScheduledInterviews() {
                 <button className="table-view-toggle" type="button" aria-label="Grid view"><i className="ri-layout-grid-line" aria-hidden="true" /></button>
               </div>
             </div>
-            <DataTable columns={columns({ onEdit: openEdit, onDelete: removeInterview, onSchedule: scheduleInterview, onReschedule: rescheduleInterview, onShare: shareWithAdmin, onView: viewInterview, onDownload: downloadResume, showReferenceColumn })} rows={filteredRows.map(normalizeRow)} emptyMessage="No interviews found." className="scheduled-interviews-table" />
+            <DataTable columns={columns({ onEdit: openEdit, onDelete: removeInterview, onSchedule: scheduleInterview, onReschedule: rescheduleInterview, onShare: shareWithAdmin, onView: viewInterview, onDownload: downloadResume, showReferenceColumn })} rows={paginatedRows.map(normalizeRow)} emptyMessage="No interviews found." className="scheduled-interviews-table" />
             <div className="scheduled-table-footer">
-              <span>Showing 1 to {Math.min(5, filteredRows.length)} of {filteredRows.length} entries</span>
+              <span>Showing {pageStartIndex + 1} to {pageEndIndex} of {filteredRows.length} entries</span>
               <div className="pagination-pill">
-                <button type="button" disabled aria-label="Previous page"><i className="ri-arrow-left-s-line" /></button>
-                <button type="button" className="active">1</button>
-                <button type="button">2</button>
-                <button type="button">3</button>
-                <button type="button">4</button>
-                <button type="button">5</button>
-                <button type="button" aria-label="Next page"><i className="ri-arrow-right-s-line" /></button>
+                <button type="button" disabled={visiblePage === 1} aria-label="Previous page" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}><i className="ri-arrow-left-s-line" /></button>
+                {pageNumbers.map((page) => (
+                  <button key={page} type="button" className={page === visiblePage ? 'active' : ''} onClick={() => setCurrentPage(page)}>{page}</button>
+                ))}
+                <button type="button" disabled={visiblePage === totalPages} aria-label="Next page" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}><i className="ri-arrow-right-s-line" /></button>
               </div>
             </div>
           </div>
         )}
       </Section>
+
+      <InterviewToast toast={toast} onClose={() => setToast(null)} />
+      <CandidateDeleteConfirm
+        candidate={deleteTarget}
+        isDeleting={isDeletingCandidate}
+        onCancel={closeDeleteConfirm}
+        onConfirm={confirmDeleteInterview}
+      />
 
       {showModal && (
         <InterviewModal
@@ -214,8 +253,9 @@ function ScheduledInterviews() {
           setErrors={setFormErrors}
           editingId={editingId}
           mode={modalMode}
+          isSaving={isSavingCandidate}
           onClose={() => setShowModal(false)}
-          onSave={() => saveCandidate({ form, editingId, rows, setRows, setForm, setEditingId, setShowModal, setErrors: setFormErrors })}
+          onSave={() => saveCandidate({ form, editingId, rows, setRows, setForm, setEditingId, setShowModal, setErrors: setFormErrors, setIsSaving: setIsSavingCandidate, setToast })}
         />
       )}
     </>
@@ -247,14 +287,46 @@ function ScheduledInterviews() {
   }
 
   function removeInterview(row) {
-    const shouldDelete = window.confirm(`Are you want to delete ${row.candidateName || 'this candidate'}?`);
-    if (!shouldDelete) {
+    setDeleteTarget(row);
+  }
+
+  function closeDeleteConfirm() {
+    if (!isDeletingCandidate) {
+      setDeleteTarget(null);
+    }
+  }
+
+  async function confirmDeleteInterview() {
+    const row = deleteTarget;
+    if (!row) {
       return;
+    }
+
+    setIsDeletingCandidate(true);
+    try {
+      await apiRequest(`/interviews/${encodeURIComponent(row.id)}`, { method: 'DELETE' });
+    } catch (error) {
+      if (error?.status !== 404) {
+        setToast({
+          tone: 'error',
+          label: 'Delete failed',
+          text: `Candidate could not be deleted from the database. ${error?.message || 'Please try again.'}`,
+        });
+        setIsDeletingCandidate(false);
+        return;
+      }
     }
 
     const next = rows.filter((item) => item.id !== row.id);
     setRows(next);
     saveStoredRows(next);
+    setDeleteTarget(null);
+    setIsDeletingCandidate(false);
+    setToast({
+      tone: 'success',
+      label: 'Deleted',
+      text: 'Candidate deleted successfully.',
+    });
   }
 
   function scheduleInterview(row) {
@@ -295,7 +367,7 @@ function ScheduledInterviews() {
   }
 }
 
-function InterviewModal({ form, setForm, errors, setErrors, editingId, mode, onClose, onSave }) {
+function InterviewModal({ form, setForm, errors, setErrors, editingId, mode, isSaving = false, onClose, onSave }) {
   const isViewOnly = mode === 'view';
   return (
     <div className="interview-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -349,12 +421,12 @@ function InterviewModal({ form, setForm, errors, setErrors, editingId, mode, onC
                   setForm((current) => ({ ...current, email: value }));
                 }}
               />
-              <InputField label="Position Applied" value={form.position} error={errors.position} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, position: '' })); setForm((current) => ({ ...current, position: value })); }} />
-              <InputField label="Department" value={form.department} error={errors.department} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, department: '' })); setForm((current) => ({ ...current, department: value })); }} />
+              <InputField label="Position Applied" value={form.position} error={errors.position} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, position: '' })); setForm((current) => ({ ...current, position: stripNumbers(value) })); }} />
+              <InputField label="Department" value={form.department} error={errors.department} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, department: '' })); setForm((current) => ({ ...current, department: stripNumbers(value) })); }} />
               <InputField label="Years of Experience" value={form.experience} error={errors.experience} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, experience: '' })); setForm((current) => ({ ...current, experience: value })); }} />
-              <InputField label="Current Company" value={form.currentCompany} error={errors.currentCompany} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, currentCompany: '' })); setForm((current) => ({ ...current, currentCompany: value })); }} />
-              <InputField label="Current CTC" value={form.currentCTC} error={errors.currentCTC} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, currentCTC: '' })); setForm((current) => ({ ...current, currentCTC: value })); }} />
-              <InputField label="Expected CTC" value={form.expectedCTC} error={errors.expectedCTC} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, expectedCTC: '' })); setForm((current) => ({ ...current, expectedCTC: value })); }} />
+              <InputField label="Current Company" value={form.currentCompany} error={errors.currentCompany} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, currentCompany: '' })); setForm((current) => ({ ...current, currentCompany: stripNumbers(value) })); }} />
+              <InputField label="Current CTC" value={form.currentCTC} error={errors.currentCTC} inputMode="numeric" readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, currentCTC: '' })); setForm((current) => ({ ...current, currentCTC: digitsOnly(value) })); }} />
+              <InputField label="Expected CTC" value={form.expectedCTC} error={errors.expectedCTC} inputMode="numeric" readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, expectedCTC: '' })); setForm((current) => ({ ...current, expectedCTC: digitsOnly(value) })); }} />
               <SelectInput
                 label="Resume Source"
                 value={form.resumeSource}
@@ -393,16 +465,16 @@ function InterviewModal({ form, setForm, errors, setErrors, editingId, mode, onC
 
           <ModalSection title="Interview Details">
             <TwoColumnGrid>
-              <InputField label="Interview Date" type="date" value={form.interviewDate} error={errors.interviewDate} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, interviewDate: '' })); setForm((current) => ({ ...current, interviewDate: value })); }} />
+              <InputField label="Interview Date" type="date" min={todayStamp()} value={form.interviewDate} error={errors.interviewDate} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, interviewDate: '' })); setForm((current) => ({ ...current, interviewDate: value })); }} />
               <InputField label="Interview Time" type="time" value={form.interviewTime} error={errors.interviewTime} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, interviewTime: '' })); setForm((current) => ({ ...current, interviewTime: value })); }} />
               <SelectInput label="Interview Mode" value={form.interviewMode} error={errors.interviewMode} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, interviewMode: '' })); setForm((current) => ({ ...current, interviewMode: value })); }} options={INTERVIEW_MODES} />
               <SelectInput label="Interview Round" value={form.interviewRound} error={errors.interviewRound} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, interviewRound: '' })); setForm((current) => ({ ...current, interviewRound: value })); }} options={INTERVIEW_ROUNDS} />
-              <InputField label="Interviewer Name" value={form.interviewer} error={errors.interviewer} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, interviewer: '' })); setForm((current) => ({ ...current, interviewer: value })); }} />
+              <InputField label="Interviewer Name" value={form.interviewer} error={errors.interviewer} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, interviewer: '' })); setForm((current) => ({ ...current, interviewer: stripNumbers(value) })); }} />
               <InputField label="Meeting Link" value={form.meetingLink} error={errors.meetingLink} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, meetingLink: '' })); setForm((current) => ({ ...current, meetingLink: value })); }} />
               <InputField label="Interview Location" value={form.location} error={errors.location} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, location: '' })); setForm((current) => ({ ...current, location: value })); }} />
               <SelectInput label="Priority" value={form.priority} error={errors.priority} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, priority: '' })); setForm((current) => ({ ...current, priority: value })); }} options={PRIORITY_OPTIONS} />
               <SelectInput label="Status" value={form.status} error={errors.status} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, status: '' })); setForm((current) => ({ ...current, status: value })); }} options={['Pending', ...STATUS_OPTIONS]} />
-              <InputField label="Created By" value={form.createdBy} error={errors.createdBy} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, createdBy: '' })); setForm((current) => ({ ...current, createdBy: value })); }} />
+              <InputField label="Created By" value={form.createdBy} error={errors.createdBy} readOnly={isViewOnly} disabled={isViewOnly} onChange={(value) => { setErrors((current) => ({ ...current, createdBy: '' })); setForm((current) => ({ ...current, createdBy: stripNumbers(value) })); }} />
             </TwoColumnGrid>
           </ModalSection>
 
@@ -410,13 +482,18 @@ function InterviewModal({ form, setForm, errors, setErrors, editingId, mode, onC
             <div className="resume-panel">
               <label className="form-field">
                 <span>Resume File</span>
-                <input className="form-control" type="file" accept=".pdf,.doc,.docx" disabled={isViewOnly} onChange={(event) => handleResumeUpload(event, setForm)} />
+                <input key={form.resumeFileName || 'resume-empty'} className="form-control" type="file" accept=".pdf,.doc,.docx" disabled={isViewOnly} onChange={(event) => handleResumeUpload(event, setForm, setErrors)} />
                 {errors.resumeFile ? <small className="field-error">{errors.resumeFile}</small> : null}
               </label>
               {form.resumeFileName && (
                 <div className="resume-chip">
                   <i className="ri-file-text-line" aria-hidden="true" />
                   <strong>{form.resumeFileName}</strong>
+                  {!isViewOnly && (
+                    <button className="resume-remove-btn" type="button" onClick={() => removeResume(setForm, setErrors)} aria-label="Remove uploaded resume" title="Remove uploaded resume">
+                      <i className="ri-close-line" aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -431,12 +508,19 @@ function InterviewModal({ form, setForm, errors, setErrors, editingId, mode, onC
           </ModalSection>
         </div>
 
+        {errors.submit ? (
+          <div className="interview-submit-error" role="alert">
+            <i className="ri-alert-line" aria-hidden="true" />
+            <span>{errors.submit}</span>
+          </div>
+        ) : null}
+
         <div className="interview-modal-actions">
-          <button className="ghost-btn" type="button" onClick={onClose}>Cancel</button>
+          <button className="ghost-btn" type="button" onClick={onClose} disabled={isSaving}>Cancel</button>
           {!isViewOnly && (
-            <button className="secondary-btn" type="button" onClick={onSave}>
-              <i className="ri-save-line" aria-hidden="true" />
-              {editingId ? 'Update Candidate' : 'Save Candidate'}
+            <button className="secondary-btn" type="button" onClick={onSave} disabled={isSaving}>
+              <i className={isSaving ? 'ri-loader-4-line' : 'ri-save-line'} aria-hidden="true" />
+              {isSaving ? 'Saving...' : editingId ? 'Update Candidate' : 'Save Candidate'}
             </button>
           )}
         </div>
@@ -508,7 +592,7 @@ function SelectField({ label, icon, value, onChange, options, emptyLabel }) {
   );
 }
 
-function InputField({ label, value, onChange, type = 'text', error = '', inputMode, maxLength, placeholder = '', readOnly = false, disabled = false }) {
+function InputField({ label, value, onChange, type = 'text', error = '', inputMode, maxLength, min, placeholder = '', readOnly = false, disabled = false }) {
   return (
     <label className="form-field">
       <span>{label}</span>
@@ -517,6 +601,7 @@ function InputField({ label, value, onChange, type = 'text', error = '', inputMo
         type={type}
         inputMode={inputMode}
         maxLength={maxLength}
+        min={min}
         placeholder={placeholder}
         value={value}
         readOnly={readOnly}
@@ -623,13 +708,80 @@ function IconAction({ label, icon, onClick }) {
   );
 }
 
+function CandidateDeleteConfirm({ candidate, isDeleting, onCancel, onConfirm }) {
+  if (!candidate) {
+    return null;
+  }
+
+  const candidateName = candidate.candidateName || 'this candidate';
+  return (
+    <div className="interview-delete-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !isDeleting && onCancel()}>
+      <section className="interview-delete-modal" role="dialog" aria-modal="true" aria-label="Delete candidate confirmation" onClick={(event) => event.stopPropagation()}>
+        <div className="interview-delete-icon" aria-hidden="true">
+          <i className="ri-delete-bin-line" />
+        </div>
+        <div className="interview-delete-copy">
+          <h3>Delete Candidate?</h3>
+          <p>Are you sure you want to delete {candidateName}? This action will remove the record from the database.</p>
+        </div>
+        <div className="interview-delete-actions">
+          <button type="button" className="interview-delete-cancel" onClick={onCancel} disabled={isDeleting}>
+            No, Keep It
+          </button>
+          <button type="button" className="interview-delete-confirm" onClick={onConfirm} disabled={isDeleting}>
+            {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function InterviewToast({ toast, onClose }) {
+  if (!toast) {
+    return null;
+  }
+
+  const tone = toast.tone || 'success';
+  const iconClassName = tone === 'error'
+    ? 'ri-error-warning-line'
+    : tone === 'notice'
+      ? 'ri-information-line'
+      : 'ri-checkbox-circle-fill';
+  const label = toast.label || (tone === 'error' ? 'Warning' : tone === 'notice' ? 'Notice' : 'Success');
+  const toastMarkup = (
+    <div className={`project-toast is-${tone}`} role="status" aria-live="polite">
+      <span className="project-toast__icon" aria-hidden="true">
+        <i className={iconClassName} />
+      </span>
+      <div className="project-toast__copy">
+        <span>{label}</span>
+        <strong>{toast.text}</strong>
+      </div>
+      <button type="button" className="project-toast__close" onClick={onClose} aria-label="Dismiss notification">
+        <i className="ri-close-line" aria-hidden="true" />
+      </button>
+      <span className="project-toast__accent" aria-hidden="true" />
+    </div>
+  );
+
+  let portalRoot = document.querySelector('.project-toast-portal');
+  if (!portalRoot) {
+    portalRoot = document.createElement('div');
+    portalRoot.className = 'project-toast-portal';
+    document.body.appendChild(portalRoot);
+  }
+
+  return createPortal(toastMarkup, portalRoot);
+}
+
 function openCreateModal(setShowModal, setForm, setEditingId) {
   setEditingId('');
   setForm(createEmptyForm());
   setShowModal(true);
 }
 
-function saveCandidate({ form, editingId, rows, setRows, setForm, setEditingId, setShowModal, setErrors }) {
+async function saveCandidate({ form, editingId, rows, setRows, setForm, setEditingId, setShowModal, setErrors, setIsSaving, setToast }) {
   const payload = {
     ...form,
     status: form.status || 'Pending',
@@ -637,35 +789,69 @@ function saveCandidate({ form, editingId, rows, setRows, setForm, setEditingId, 
     referenceName: String(form.resumeSource || '').trim() === 'Reference' ? form.referenceName : '',
   };
 
-  const nextErrors = validateCandidate(payload);
+  const nextErrors = validateCandidate(payload, rows, editingId);
   if (hasAnyError(nextErrors)) {
-    setErrors?.(nextErrors);
+    setErrors?.({ ...nextErrors, submit: '' });
     return;
   }
 
-  const next = editingId
-    ? rows.map((row) => (row.id === editingId ? { ...row, ...payload, id: editingId } : row))
-    : [{ ...payload, id: `IV-${Date.now()}` }, ...rows];
+  setErrors?.({ ...nextErrors, submit: '' });
+  setIsSaving?.(true);
 
-  setRows(next);
-  saveStoredRows(next);
-  setForm(createEmptyForm());
-  setEditingId('');
-  setErrors?.({ email: '', phone: '' });
-  setShowModal(false);
+  try {
+    const saved = await apiRequest(editingId ? `/interviews/${editingId}` : '/interviews', {
+      method: editingId ? 'PUT' : 'POST',
+      body: JSON.stringify(payload),
+    });
+    const savedRow = normalizeRow({
+      ...payload,
+      ...(saved || {}),
+      id: saved?.id || saved?._id || editingId || `IV-${Date.now()}`,
+    });
+    const next = editingId
+      ? rows.map((row) => (row.id === editingId ? savedRow : row))
+      : [savedRow, ...rows];
 
-  apiRequest(editingId ? `/interviews/${editingId}` : '/interviews', {
-    method: editingId ? 'PUT' : 'POST',
-    body: JSON.stringify(payload),
-  }).catch(() => {});
+    setRows(next);
+    saveStoredRows(next);
+    setForm(createEmptyForm());
+    setEditingId('');
+    setShowModal(false);
+    setToast?.({
+      tone: 'success',
+      label: editingId ? 'Updated' : 'Saved',
+      text: editingId ? 'Candidate updated successfully.' : 'Candidate saved successfully.',
+    });
+  } catch (error) {
+    const fieldErrors = error?.fieldErrors && typeof error.fieldErrors === 'object' ? error.fieldErrors : {};
+    const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+    setErrors?.((current) => ({
+      ...current,
+      ...fieldErrors,
+      submit: hasFieldErrors ? '' : buildSaveCandidateError(error),
+    }));
+  } finally {
+    setIsSaving?.(false);
+  }
 }
 
-function handleResumeUpload(event, setForm) {
+function buildSaveCandidateError(error) {
+  const detail = error?.message ? ` ${error.message}` : '';
+  return `Candidate details could not be saved on the server, so the interview email was not sent.${detail}`;
+}
+
+function handleResumeUpload(event, setForm, setErrors) {
   const file = event.target.files?.[0];
   if (!file) return;
+  setErrors?.((current) => ({ ...current, resumeFile: '' }));
   const reader = new FileReader();
   reader.onload = () => setForm((current) => ({ ...current, resumeFile: String(reader.result || ''), resumeFileName: file.name }));
   reader.readAsDataURL(file);
+}
+
+function removeResume(setForm, setErrors) {
+  setErrors?.((current) => ({ ...current, resumeFile: '' }));
+  setForm((current) => ({ ...current, resumeFile: '', resumeFileName: '' }));
 }
 
 function exportCsv() {
@@ -797,7 +983,30 @@ function escapeCsv(value) {
   return /[,"\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-function validateCandidate(payload) {
+function stripNumbers(value) {
+  return String(value || '').replace(/\d/g, '');
+}
+
+function digitsOnly(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function hasNumber(value) {
+  return /\d/.test(String(value || ''));
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isDuplicateEmail(email, rows, editingId) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    return false;
+  }
+  return (rows || []).some((row) => normalizeEmail(row.email) === normalizedEmail && String(row.id || row._id || '') !== String(editingId || ''));
+}
+function validateCandidate(payload, rows = [], editingId = '') {
   const errors = {
     candidateName: '',
     phone: '',
@@ -855,13 +1064,40 @@ function validateCandidate(payload) {
 
   const email = String(payload.email || '').trim();
   const phone = String(payload.phone || '').trim();
+  const textOnlyFields = [
+    ['position', 'Position applied'],
+    ['department', 'Department'],
+    ['currentCompany', 'Current company'],
+    ['interviewer', 'Interviewer name'],
+    ['createdBy', 'Created by'],
+  ];
 
   if (email && !/^[^\s@]+@gmail\.com$/i.test(email)) {
     errors.email = 'Use a valid @gmail.com address.';
+  } else if (isDuplicateEmail(email, rows, editingId)) {
+    errors.email = 'This email already exists in the interview database.';
   }
 
   if (phone && !/^\d{10}$/.test(phone)) {
     errors.phone = 'Mobile number must be exactly 10 digits.';
+  }
+
+  textOnlyFields.forEach(([field, label]) => {
+    if (!errors[field] && hasNumber(payload[field])) {
+      errors[field] = `${label} should contain text only.`;
+    }
+  });
+
+  if (!errors.currentCTC && !/^\d+$/.test(String(payload.currentCTC || '').trim())) {
+    errors.currentCTC = 'Current CTC should contain numbers only.';
+  }
+
+  if (!errors.expectedCTC && !/^\d+$/.test(String(payload.expectedCTC || '').trim())) {
+    errors.expectedCTC = 'Expected CTC should contain numbers only.';
+  }
+
+  if (!errors.interviewDate && payload.interviewDate < todayStamp()) {
+    errors.interviewDate = 'Past interview dates are not allowed.';
   }
 
   if (!payload.resumeFile && !String(payload.resumeFileName || '').trim()) {
