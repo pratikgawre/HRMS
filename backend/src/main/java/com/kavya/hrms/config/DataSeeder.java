@@ -45,6 +45,8 @@ public class DataSeeder {
       if (leaveRequestRepository.count() == 0) {
         LeaveRequest lr = new LeaveRequest();
         lr.setEmployee("Aarav Sharma");
+        lr.setEmployeeId("KV001");
+        lr.setOwnerRole("Employee");
         lr.setType("Sick Leave");
         lr.setFromDate("2026-05-25");
         lr.setToDate("2026-05-26");

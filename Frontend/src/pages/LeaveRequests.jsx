@@ -4,8 +4,9 @@ import DataTable from '../components/DataTable.jsx';
 import DashboardCard from '../components/DashboardCard.jsx';
 import { Hero, Section, leaveColumns } from './AdminDashboard.jsx';
 import { getCurrentEmployeeIdentity } from '../utils/employeeStorage.js';
-import { getInitialLeaveRequests, refreshStoredLeaveRequests } from '../utils/leaveStorage.js';
+import { getInitialLeaveRequests, refreshStoredLeaveRequests, resolveLeaveRequesterRole } from '../utils/leaveStorage.js';
 import { getSessionValue } from '../utils/appSession.js';
+import { normalizeAccessRole } from '../utils/role-access.js';
 import { apiRequest, safeApiRequest } from '../utils/api.js';
 import {
   DEFAULT_LEAVE_TYPES,
@@ -62,17 +63,22 @@ function LeaveRequests() {
   const [leaveMonth, setLeaveMonth] = useState(currentLeaveMonth);
   const [leaveYear, setLeaveYear] = useState(String(currentLeaveYear));
   const [reviewingRequestIds, setReviewingRequestIds] = useState(() => new Set());
+  const [accessVersion, setAccessVersion] = useState(0);
   const tableRef = useRef(null);
+  const roleResolvedRequests = useMemo(() => requests.map((request) => ({
+    ...request,
+    ownerRole: resolveLeaveRequesterRole(request),
+  })), [accessVersion, requests]);
   const leaveSummary = useMemo(
-    () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, requests, currentEmployee)),
-    [leaveTypes, requests, currentEmployee.employeeId, currentEmployee.employee],
+    () => buildLeaveSummary(getEmployeeLeaveSummary(leaveTypes, roleResolvedRequests, currentEmployee)),
+    [leaveTypes, roleResolvedRequests, currentEmployee.employeeId, currentEmployee.employee],
   );
   const leaveTypeOptions = useMemo(() => getLeaveTypeOptions(leaveTypes), [leaveTypes]);
   const showMyLeaveSection = role !== 'admin';
 
-  const ownRequests = useMemo(() => requests.filter((request) => (
+  const ownRequests = useMemo(() => roleResolvedRequests.filter((request) => (
     String(request.employeeId || '').trim() === String(currentEmployee.employeeId || '').trim()
-  )), [requests, currentEmployee.employeeId]);
+  )), [roleResolvedRequests, currentEmployee.employeeId]);
 
   const filteredOwnRequests = useMemo(() => ownRequests.filter((request) => {
     const requestType = String(request.type || '').trim().toLowerCase();
@@ -98,7 +104,7 @@ function LeaveRequests() {
     ));
   }, [leaveTypeOptions]);
 
-  const visibleRequests = useMemo(() => requests.filter((request) => {
+  const visibleRequests = useMemo(() => roleResolvedRequests.filter((request) => {
     const isSelfOwnedHrRequest = role === 'hr'
       && String(request.employeeId || '').trim() === String(currentEmployee.employeeId || '').trim();
 
@@ -115,7 +121,7 @@ function LeaveRequests() {
     }
 
     return request.employeeId === currentEmployee.employeeId;
-  }), [requests, role, currentEmployee.employeeId]);
+  }), [roleResolvedRequests, role, currentEmployee.employeeId]);
 
   const filteredLeaveRequests = useMemo(() => {
     const baseRows = visibleRequests.filter((request) => (
@@ -237,6 +243,18 @@ function LeaveRequests() {
       window.removeEventListener('kavyaSettingsChanged', refreshLeaveTypes);
       window.removeEventListener('storage', refreshLeaveTypes);
       window.removeEventListener('focus', refreshLeaveTypes);
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshRequesterRoles = () => setAccessVersion((current) => current + 1);
+
+    window.addEventListener('kavyaUsersChanged', refreshRequesterRoles);
+    window.addEventListener('kavyaEmployeesChanged', refreshRequesterRoles);
+
+    return () => {
+      window.removeEventListener('kavyaUsersChanged', refreshRequesterRoles);
+      window.removeEventListener('kavyaEmployeesChanged', refreshRequesterRoles);
     };
   }, []);
 
@@ -418,7 +436,7 @@ function LeaveRequests() {
       days: form.days,
       reason: form.reason,
       status: 'Pending',
-      ownerRole: role,
+      ownerRole: getSessionValue('kavyaAccessRole') || role,
       recommendationStatus: 'Pending',
       recommendedBy: selectedPerson?.name || form.employee,
       recommendedRole: 'hr',
@@ -464,7 +482,7 @@ function LeaveRequests() {
     });
 
     const next = requests.map((request) => (
-      request.id === requestId ? { ...request, status: nextStatus } : request
+      request.id === requestId ? { ...request, ownerRole: resolveLeaveRequesterRole(request), status: nextStatus } : request
     ));
     setRequests(next);
 
@@ -1144,18 +1162,7 @@ function formatRequesterRole(role) {
     return '-';
   }
 
-  const normalized = String(role).replace(/([a-z])([A-Z])/g, '$1 $2').trim();
-
-  if (/^hr$/i.test(normalized)) return 'HR';
-  if (/^admin$/i.test(normalized)) return 'Admin';
-  if (/^team lead$/i.test(normalized)) return 'Team Lead';
-  if (/^employee$/i.test(normalized)) return 'Employee';
-
-  return normalized
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part[0].toUpperCase() + part.slice(1).toLowerCase())
-    .join(' ');
+  return normalizeAccessRole(role);
 }
 
 function buildLeaveSummary(summary) {

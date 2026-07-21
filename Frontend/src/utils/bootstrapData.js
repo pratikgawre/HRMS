@@ -14,6 +14,14 @@ const defaultUsers = [
   { userId: 'USR-KV004', email: 'manager@gmail.com', password: 'manager123', role: 'projectmanager', employeeId: 'KV004', employeeName: 'Isha Patel', status: 'Active', lastLogin: '-', mustChangePassword: false, twoFactorEnabled: false, twoFactorSecret: '' },
 ];
 
+const seedAccessRoleLabels = {
+  admin: 'Super Admin',
+  hr: 'HR Manager',
+  employee: 'Employee',
+  teamlead: 'Team Lead',
+  projectmanager: 'Project Manager',
+};
+
 function mapFallbackLeaves() {
   return leaveRequests.map((request, index) => ({
     id: 101 + index,
@@ -52,6 +60,7 @@ function mapLeaves() {
     days: request.days || 1,
     reason: request.reason || 'Requested through HRMS.',
     status: request.status || 'Pending',
+    ownerRole: request.ownerRole || getSeedLeaveOwnerRole(request),
     recommendationStatus: 'Pending',
     recommendedBy: '',
     recommendedRole: '',
@@ -60,6 +69,17 @@ function mapLeaves() {
     finalActionRole: '',
     finalActionNote: '',
   }));
+}
+
+function getSeedLeaveOwnerRole(request) {
+  const employeeId = String(request?.employeeId || '').trim().toLowerCase();
+  const employeeName = String(request?.employee || request?.employeeName || '').trim().toLowerCase();
+  const matchedUser = defaultUsers.find((user) => (
+    String(user.employeeId || '').trim().toLowerCase() === employeeId
+    || String(user.employeeName || '').trim().toLowerCase() === employeeName
+  ));
+
+  return seedAccessRoleLabels[matchedUser?.role] || 'Employee';
 }
 
 function mapAnnouncements() {
