@@ -191,8 +191,7 @@ function EmployeeAttendance({ viewMode = 'auto' }) {
         title="Attendance"
         copy="Track your live check-in and check-out on a calendar, with approved leave, absent days, and half-day status pulled from the database."
         onExportReport={handleExportReport}
-        showReportActions={role !== 'teamLead'}
-        showSmartSummary={role !== 'teamLead'}
+        showSmartSummaryButton={false}
       />
 
       {message && (
