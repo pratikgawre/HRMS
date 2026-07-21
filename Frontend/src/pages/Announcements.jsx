@@ -328,6 +328,8 @@ function Announcements() {
         title="Announcements"
         copy="Only Admin and HR can post announcements. PM, TL, and Employee can view announcements only."
         reportData={exportReportData}
+        showReportActions={roleKey !== "teamlead"}
+        showSmartSummary={roleKey !== "teamlead"}
       />
 
       {message && (

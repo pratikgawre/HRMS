@@ -1271,7 +1271,12 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
 
   return (
     <>
-      <Hero title="My Payslip" copy="View your salary details, earnings, deductions, payment status, and download your monthly payslip." />
+      <Hero
+        title="My Payslip"
+        copy="View your salary details, earnings, deductions, payment status, and download your monthly payslip."
+        showReportActions={role !== 'teamLead'}
+        showSmartSummary={role !== 'teamLead'}
+      />
 
       {message && (
         <div className="payroll-alert" role="status">

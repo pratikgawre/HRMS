@@ -349,7 +349,7 @@ function TeamAttendance() {
 
   function downloadCsv() {
     const exportRows = rows.length ? rows : teamRows;
-    const reportHtml = buildAttendanceWorkbook({
+    const reportHtml = sanitizeWorkbookHtml(buildAttendanceWorkbook({
       title: 'List of Logs',
       subtitle: `${roleLabel} team attendance register`,
       rangeLabel,
@@ -358,7 +358,7 @@ function TeamAttendance() {
       selectedDate,
       selectedMonth,
       rows,
-    });
+    }));
     const blob = new Blob([reportHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -453,6 +453,8 @@ function TeamAttendance() {
           title="Attendance"
           copy={`${roleLabel} view. ${summaryText}`}
           reportData={isMyAttendanceView ? heroReportData : null}
+          showReportActions={!location.pathname.startsWith('/team-lead/my-attendance')}
+          showSmartSummary={!(role === 'teamLead' && !isMyAttendanceView)}
         />
 
         {message && (
@@ -918,6 +920,12 @@ function buildAttendanceWorkbook({ title, subtitle, rangeLabel, currentRangeValu
       </body>
     </html>
   `;
+}
+
+function sanitizeWorkbookHtml(html) {
+  return String(html || '')
+    .replace(/<img\b[^>]*>/gi, '')
+    .replace(/<svg\b[\s\S]*?<\/svg>/gi, '');
 }
 
 function getWorkbookDateEntries({ dateRange, selectedDate, selectedMonth, rows }) {

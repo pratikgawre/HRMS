@@ -3,6 +3,7 @@ package com.kavya.hrms.controller;
 import com.mongodb.client.gridfs.model.GridFSFile;
 import org.bson.types.ObjectId;
 import org.springframework.core.io.Resource;
+import org.springframework.data.mongodb.core.aggregation.Fields;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.gridfs.GridFsResource;
@@ -28,7 +29,7 @@ public class TaskAttachmentController {
   @GetMapping("/uploads/task-attachments/{id}")
   public ResponseEntity<Resource> getTaskAttachment(@PathVariable String id) {
     ObjectId objectId = parseObjectId(id);
-    GridFSFile file = gridFsTemplate.findOne(Query.query(Criteria.where("_id").is(objectId)));
+    GridFSFile file = gridFsTemplate.findOne(Query.query(Criteria.where(Fields.UNDERSCORE_ID).is(objectId)));
     if (file == null) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment not found");
     }

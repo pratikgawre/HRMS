@@ -612,7 +612,12 @@ function Profile() {
 
   return (
     <div className="profile-page">
-      <Hero title="Profile Management" copy="Edit your personal details, contact information, profile photo, and password in one place." />
+      <Hero
+        title="Profile Management"
+        copy="Edit your personal details, contact information, profile photo, and password in one place."
+        showReportActions={normalizedAccessRole !== 'Team Lead'}
+        showSmartSummary={normalizedAccessRole !== 'Team Lead'}
+      />
 
       <section className="dashboard-card-grid">
         {profileStats.map((item) => (

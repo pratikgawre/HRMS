@@ -735,6 +735,8 @@ function Assets() {
           : role === 'employee'
             ? 'Employees can view assigned assets and raise replacement or repair requests.'
             : 'HR and Admin can manage company assets, assignments, replacement requests, repair cases, and return tracking.'}
+        showSmartSummary={role !== 'teamLead'}
+        omitRecordCardsInExport={role === 'teamLead'}
       />
 
       <div id="asset-overview" className="card-grid">
