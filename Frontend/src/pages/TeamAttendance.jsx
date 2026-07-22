@@ -205,10 +205,23 @@ function TeamAttendance() {
       employees: normalizeEmployees(employees),
       projects: normalizeProjects(projects),
     });
-    return new Set([...visibleIds]
+    const scopedIds = new Set([...visibleIds]
       .map((employeeId) => String(employeeId || '').trim().toLowerCase())
       .filter(Boolean));
-  }, [attendanceEmployee.employee, attendanceEmployee.employeeId, employees, isMyAttendanceView, projects, role]);
+
+    // Keep valid attendance records visible even if an employee directory
+    // refresh is temporarily behind the attendance collection.
+    if (role === 'admin' || role === 'hr') {
+      attendance.forEach((row) => {
+        const employeeId = String(row.employeeId || row.employeeCode || '').trim().toLowerCase();
+        if (employeeId) {
+          scopedIds.add(employeeId);
+        }
+      });
+    }
+
+    return scopedIds;
+  }, [attendance, attendanceEmployee.employee, attendanceEmployee.employeeId, employees, isMyAttendanceView, projects, role]);
 
   const teamRows = useMemo(() => (
     isMyAttendanceView
