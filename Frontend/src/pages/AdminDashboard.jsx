@@ -337,6 +337,7 @@ export function Hero({
     '/project-manager/profile',
   ]);
   const shouldShowExport = !isProjectManager || !managerRoutesWithoutExport.has(currentRoute);
+  const canExportReport = showExportButton && shouldShowExport;
   const shouldShowSmartSummary = showSmartSummary == null
     ? showSmartSummaryButton
     : Boolean(showSmartSummary);

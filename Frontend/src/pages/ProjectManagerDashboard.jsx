@@ -160,7 +160,11 @@ function ProjectManagerDashboard() {
 
   return (
     <>
-      <Hero title="Project Manager Dashboard" copy="Track project progress, milestones, delivery tasks, and team capacity in one workspace." />
+      <Hero
+        title="Project Manager Dashboard"
+        copy="Track project progress, milestones, delivery tasks, and team capacity in one workspace."
+        showSmartSummaryButton={false}
+      />
       <QuickActions detailOverrides={quickActionDetails} labelOverrides={quickActionLabels} />
       <CardGrid stats={dashboardStats} />
       <div className="project-manager-stack">
