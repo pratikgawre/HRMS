@@ -680,7 +680,7 @@ export function Hero({
         </div>
         <div className="hero-actions">
           {actions}
-          {showExportButton && (
+          {canExportReport && (
             <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
           )}
           {shouldShowSmartSummary && (
