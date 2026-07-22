@@ -319,6 +319,8 @@ export function Hero({
   onExportReport = null,
   showExportButton = true,
   showSmartSummaryButton = true,
+  showReportActions,
+  showSmartSummary,
 }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
@@ -336,6 +338,8 @@ export function Hero({
     '/project-manager/profile',
   ]);
   const shouldShowExport = !isProjectManager || !managerRoutesWithoutExport.has(currentRoute);
+  const canExportReport = shouldShowExport && (showReportActions ?? showExportButton);
+  const canShowSmartSummary = showSmartSummary ?? showSmartSummaryButton;
 
   const queryAllSafe = (root, selector) => {
     if (!root || typeof root.querySelectorAll !== 'function') {
@@ -641,15 +645,15 @@ export function Hero({
         </div>
         <div className="hero-actions">
           {actions}
-          {showExportButton && (
+          {canExportReport && (
             <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
           )}
-          {showSmartSummaryButton && (
+          {canShowSmartSummary && (
             <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
           )}
         </div>
       </div>
-      {showSmartSummary && isSummaryOpen && summaryData && (
+      {canShowSmartSummary && isSummaryOpen && summaryData && (
         <div className="smart-summary-backdrop" role="presentation" onClick={() => setIsSummaryOpen(false)}>
           <section className="smart-summary-modal" role="dialog" aria-modal="true" aria-label={`${title} smart summary`} onClick={(event) => event.stopPropagation()}>
             <div className="smart-summary-head">
