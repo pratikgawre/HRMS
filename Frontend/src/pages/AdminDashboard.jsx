@@ -336,11 +336,18 @@ export function Hero({
     '/project-manager/payroll',
     '/project-manager/profile',
   ]);
-  const shouldShowExport = !isProjectManager || !managerRoutesWithoutExport.has(currentRoute);
+  const adminRoutesWithoutExport = new Set([
+    '/admin/dashboard',
+    '/admin/profile',
+    '/admin/settings',
+  ]);
+  const isAdminRoute = currentRoute.startsWith('/admin/');
+  const shouldShowExport = (!isProjectManager || !managerRoutesWithoutExport.has(currentRoute))
+    && !adminRoutesWithoutExport.has(currentRoute);
   const canExportReport = showExportButton && shouldShowExport;
-  const shouldShowSmartSummary = showSmartSummary == null
+  const shouldShowSmartSummary = !isAdminRoute && (showSmartSummary == null
     ? showSmartSummaryButton
-    : Boolean(showSmartSummary);
+    : Boolean(showSmartSummary));
 
   const queryAllSafe = (root, selector) => {
     if (!root || typeof root.querySelectorAll !== 'function') {
@@ -522,7 +529,12 @@ export function Hero({
         '/project-manager/team',
         '/project-manager/projects',
       ]);
-      const shouldHideRecordCards = managerRoutesWithoutExportCards.has(currentRoute);
+      const shouldHideRecordCards = managerRoutesWithoutExportCards.has(currentRoute)
+        || currentRoute === '/admin/assets'
+        || currentRoute === '/admin/employees'
+        || currentRoute === '/admin/leave-management'
+        || currentRoute === '/admin/projects'
+        || currentRoute === '/admin/users';
       const exportControls = shouldHideFormFields ? [] : controls;
       const exportCards = shouldHideRecordCards
         ? []
