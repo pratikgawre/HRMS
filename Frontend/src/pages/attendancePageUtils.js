@@ -64,6 +64,20 @@ export function getVisibleTeamEmployeeIds({ role, currentEmployeeId, currentEmpl
   const normalizedEmployees = normalizeEmployees(employees);
   const normalizedProjects = normalizeProjects(projects);
 
+  // Admin and HR attendance pages are organization-wide views. Previously
+  // these roles fell through to the manager-specific matching below, leaving
+  // the scope empty even though /attendance had returned records.
+  if (role === 'admin' || role === 'hr') {
+    normalizedEmployees.forEach((employee) => {
+      const employeeId = getEmployeeId(employee);
+      if (employeeId) {
+        ids.add(employeeId);
+      }
+    });
+
+    return ids;
+  }
+
   if (role === 'projectManager') {
     normalizedProjects.forEach((project) => {
       const projectManagerMatches = matchesIdentity(project.managerId, project.manager, normalizedEmployeeId, normalizedEmployeeName)
