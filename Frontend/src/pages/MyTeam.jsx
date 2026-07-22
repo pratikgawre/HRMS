@@ -630,6 +630,7 @@ function DefaultMyTeamView() {
         copy={isTeamLead
           ? 'View your assigned team, their attendance, and live workload summary.'
           : 'View team members, reporting hierarchy, attendance, and workload summary from the live database.'}
+        showSmartSummaryButton={role !== 'projectManager'}
       />
       <section className="dashboard-card-grid">
         {cards.map((card) => (
