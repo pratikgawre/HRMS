@@ -326,6 +326,12 @@ export function Hero({
   const isProjectManager = String(getSessionValue('kavyaRole') || '')
     .replace(/[\s_-]+/g, '')
     .toLowerCase() === 'projectmanager';
+  const isHR = String(getSessionValue('kavyaRole') || '')
+    .replace(/[\s_-]+/g, '')
+    .toLowerCase() === 'hr';
+  const isTeamLead = String(getSessionValue('kavyaRole') || '')
+    .replace(/[\s_-]+/g, '')
+    .toLowerCase() === 'teamlead';
   const currentRoute = typeof window === 'undefined'
     ? ''
     : window.location.hash.replace(/^#/, '').split('?')[0].replace(/\/$/, '');
@@ -341,11 +347,20 @@ export function Hero({
     '/admin/profile',
     '/admin/settings',
   ]);
-  const isAdminRoute = currentRoute.startsWith('/admin/');
+  const hrRoutesWithoutExport = new Set([
+    '/hr/dashboard',
+    '/hr/announcements',
+    '/hr/profile',
+    '/hr/profile/edit',
+    '/hr/profile/view',
+    '/hr/settings',
+  ]);
   const shouldShowExport = (!isProjectManager || !managerRoutesWithoutExport.has(currentRoute))
-    && !adminRoutesWithoutExport.has(currentRoute);
+    && !adminRoutesWithoutExport.has(currentRoute)
+    && (!isHR || !hrRoutesWithoutExport.has(currentRoute))
+    && (!isTeamLead || currentRoute !== '/team-lead/dashboard');
   const canExportReport = showExportButton && shouldShowExport;
-  const shouldShowSmartSummary = !isAdminRoute && (showSmartSummary == null
+  const shouldShowSmartSummary = !isHR && (showSmartSummary == null
     ? showSmartSummaryButton
     : Boolean(showSmartSummary));
 
@@ -523,18 +538,25 @@ export function Hero({
         cards = [],
       } = getPageSnapshot() || {};
       const role = getSessionValue('kavyaRole') || 'employee';
-      const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
+      const isHrExport = String(role).trim().toLowerCase() === 'hr';
+      const shouldHideFormFields = isHrExport;
       const managerRoutesWithoutExportCards = new Set([
         '/project-manager/leave-review',
         '/project-manager/team',
         '/project-manager/projects',
       ]);
-      const shouldHideRecordCards = managerRoutesWithoutExportCards.has(currentRoute)
+      const shouldHideRecordCards = isHrExport
+        || managerRoutesWithoutExportCards.has(currentRoute)
         || currentRoute === '/admin/assets'
         || currentRoute === '/admin/employees'
         || currentRoute === '/admin/leave-management'
         || currentRoute === '/admin/projects'
-        || currentRoute === '/admin/users';
+        || currentRoute === '/admin/users'
+        || currentRoute === '/team-lead/assets'
+        || currentRoute === '/team-lead/leave-review'
+        || currentRoute === '/team-lead/team'
+        || currentRoute === '/employee/leave-requests'
+        || currentRoute === '/employee/tasks';
       const exportControls = shouldHideFormFields ? [] : controls;
       const exportCards = shouldHideRecordCards
         ? []
