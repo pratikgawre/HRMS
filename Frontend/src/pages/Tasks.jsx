@@ -226,6 +226,26 @@ function Tasks() {
   const statusUpdateTasks = useMemo(() => (
     taskRows.filter((task) => role !== 'employee' || isTaskVisibleToEmployee(task, currentEmployeeId, employeeIdentity.employee))
   ), [currentEmployeeId, employeeIdentity.employee, role, taskRows]);
+  const managerTaskExportData = useMemo(() => ({
+    cards: [],
+    controls: [],
+    metrics: [],
+    tables: [{
+      sectionTitle: 'Task Assignments',
+      headers: ['Task ID', 'Task Title', 'Project', 'Assigned To', 'Employee ID', 'Assigned By', 'Priority', 'Due Date', 'Status'],
+      bodyRows: assignableTasks.map((task) => [
+        task.id || '-',
+        task.title || '-',
+        task.projectName || task.projectCode || '-',
+        task.assignedToName || task.owner || '-',
+        task.assignedToId || '-',
+        task.assignedByName || task.assignedBy || '-',
+        task.priority || '-',
+        task.dueDate || task.due || '-',
+        task.status || '-',
+      ]),
+    }],
+  }), [assignableTasks]);
   const openTaskModal = () => {
     setForm(getEmptyTaskForm({
       teamLeadMode: isTeamLead,
@@ -613,6 +633,7 @@ function Tasks() {
           ? 'Track your assigned tasks, update the current status, and stay on top of due dates.'
           : 'Assign tasks, track priority and due date, and keep delivery moving across the team.'}
         showSmartSummaryButton={false}
+        reportData={role === 'projectManager' ? managerTaskExportData : null}
       />
       {message && (
         <div className="user-alert" role="status">

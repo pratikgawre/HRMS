@@ -361,8 +361,31 @@ function TeamAttendance() {
     return rowsForPeriod;
   }, [dateRange, role, selectedDate, selectedMonth, teamMembers, teamRows, todayInputValue]);
 
+  const projectManagerTodayRows = useMemo(() => {
+    if (role !== 'projectManager') {
+      return [];
+    }
+
+    const uniqueRows = new Map();
+    teamRows
+      .filter((row) => isRowWithinSelectedRange(row, 'day', todayInputValue, selectedMonth))
+      .forEach((row) => {
+        const employeeKey = String(row.employeeId || row.employeeCode || row.employee || row.employeeName || '')
+          .trim()
+          .toLowerCase();
+        const dateKey = String(row.date || row.dateLabel || todayInputValue).trim().toLowerCase();
+        uniqueRows.set(`${employeeKey}__${dateKey}`, row);
+      });
+
+    return Array.from(uniqueRows.values());
+  }, [role, selectedMonth, teamRows, todayInputValue]);
+
   const rows = useMemo(() => (
-    (projectManagerPeriodRows || (dateRange === 'day' || teamRows.length === 0 ? selectedDateTeamRows : teamRows))
+    (projectManagerPeriodRows || (
+      role === 'projectManager' && dateRange === 'all'
+        ? projectManagerTodayRows
+        : (dateRange === 'day' || teamRows.length === 0 ? selectedDateTeamRows : teamRows)
+    ))
       .filter((row) => {
         const matchesStatus = status === 'All'
           || String(row.status || '').trim().toLowerCase() === String(status).trim().toLowerCase();
@@ -380,7 +403,7 @@ function TeamAttendance() {
         employee: row.employee || row.employeeName || row.name || 'Employee',
         employeeId: row.employeeId || row.employeeCode || '-',
       }))
-  ), [dateRange, projectManagerPeriodRows, searchText, selectedDate, selectedDateTeamRows, selectedMonth, status, teamRows]);
+  ), [dateRange, projectManagerPeriodRows, projectManagerTodayRows, role, searchText, selectedDate, selectedDateTeamRows, selectedMonth, status, teamRows]);
 
   const displayedRows = useMemo(() => {
     const query = searchText.trim().toLowerCase();
@@ -588,7 +611,7 @@ function TeamAttendance() {
           copy={`${roleLabel} view. ${summaryText}`}
           reportData={isMyAttendanceView ? heroReportData : null}
           showReportActions={!location.pathname.startsWith('/team-lead/my-attendance')}
-          showSmartSummary={!(role === 'teamLead' && !isMyAttendanceView)}
+          showSmartSummary={!((role === 'teamLead' || role === 'projectManager') && !isMyAttendanceView)}
           showExportButton={!isMyAttendanceView}
         />
 
@@ -638,8 +661,14 @@ function TeamAttendance() {
             </div>
           )}
           <div className="page-toolbar compact">
-            <select value={dateRange} onChange={(event) => setDateRange(event.target.value)}>
-              <option value="day">Day</option>
+            <select value={dateRange} onChange={(event) => {
+              const nextRange = event.target.value;
+              setDateRange(nextRange);
+              if (role === 'projectManager' && nextRange === 'all') {
+                setSelectedDate(todayInputValue);
+              }
+            }}>
+              {role !== 'projectManager' && <option value="day">Day</option>}
               <option value="last7">Last 7 Days</option>
               <option value="last15">Last 15 Days</option>
               <option value="month">Month</option>

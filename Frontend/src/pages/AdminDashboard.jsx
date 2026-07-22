@@ -319,6 +319,7 @@ export function Hero({
   onExportReport = null,
   showExportButton = true,
   showSmartSummaryButton = true,
+  showSmartSummary = null,
 }) {
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
@@ -336,6 +337,9 @@ export function Hero({
     '/project-manager/profile',
   ]);
   const shouldShowExport = !isProjectManager || !managerRoutesWithoutExport.has(currentRoute);
+  const shouldShowSmartSummary = showSmartSummary == null
+    ? showSmartSummaryButton
+    : Boolean(showSmartSummary);
 
   const queryAllSafe = (root, selector) => {
     if (!root || typeof root.querySelectorAll !== 'function') {
@@ -406,9 +410,35 @@ export function Hero({
         .map((head, index) => ({ text: head.textContent?.trim() || '', index }))
         .filter((head) => isActionColumn(head.text))
         .map((head) => head.index);
+      const employeeNameColumnIndexes = currentRoute === '/project-manager/team-attendance'
+        ? headerCells
+          .map((head, index) => ({ text: head.textContent?.trim().toLowerCase() || '', index }))
+          .filter((head) => head.text === 'employee name')
+          .map((head) => head.index)
+        : [];
+      const projectTeamMemberColumnIndexes = currentRoute === '/project-manager/team'
+        ? headerCells
+          .map((head, index) => ({ text: head.textContent?.trim().toLowerCase() || '', index }))
+          .filter((head) => head.text === 'team member')
+          .map((head) => head.index)
+        : [];
       const bodyRows = queryAllSafe(table, 'tbody tr')
         .map((tr) => queryAllSafe(tr, 'td')
-          .map((td, index) => ({ text: td.textContent?.replace(/\s+/g, ' ').trim() || '', index }))
+          .map((td, index) => ({
+            text: projectTeamMemberColumnIndexes.includes(index)
+              ? (queryAllSafe(td, '.employee-cell strong, .employee-cell small')
+                .map((node) => node.textContent?.replace(/\s+/g, ' ').trim() || '')
+                .filter(Boolean)
+                .join(' ')
+                || td.textContent?.replace(/\s+/g, ' ').trim()
+                || '')
+              : employeeNameColumnIndexes.includes(index)
+              ? (td.querySelector('strong')?.textContent?.replace(/\s+/g, ' ').trim()
+                || td.textContent?.replace(/\s+/g, ' ').trim()
+                || '')
+              : (td.textContent?.replace(/\s+/g, ' ').trim() || ''),
+            index,
+          }))
           .filter((cell) => !actionColumnIndexes.includes(cell.index))
           .map((cell) => cell.text))
         .filter((tableRow) => tableRow.some(Boolean));
@@ -486,7 +516,16 @@ export function Hero({
       } = getPageSnapshot() || {};
       const role = getSessionValue('kavyaRole') || 'employee';
       const shouldHideFormFields = title === 'Support Tickets' && role === 'hr';
+      const managerRoutesWithoutExportCards = new Set([
+        '/project-manager/leave-review',
+        '/project-manager/team',
+        '/project-manager/projects',
+      ]);
+      const shouldHideRecordCards = managerRoutesWithoutExportCards.has(currentRoute);
       const exportControls = shouldHideFormFields ? [] : controls;
+      const exportCards = shouldHideRecordCards
+        ? []
+        : (Array.isArray(cards) ? cards : []);
       const escapeCell = (cell) => String(cell || '-')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
@@ -644,12 +683,12 @@ export function Hero({
           {showExportButton && (
             <button className="secondary-btn" type="button" onClick={exportReport}><i className="ri-download-cloud-2-line" aria-hidden="true" />Export Report</button>
           )}
-          {showSmartSummaryButton && (
+          {shouldShowSmartSummary && (
             <button className="ghost-btn" type="button" onClick={openSummary}><i className="ri-sparkling-line" aria-hidden="true" />Smart Summary</button>
           )}
         </div>
       </div>
-      {showSmartSummary && isSummaryOpen && summaryData && (
+      {shouldShowSmartSummary && isSummaryOpen && summaryData && (
         <div className="smart-summary-backdrop" role="presentation" onClick={() => setIsSummaryOpen(false)}>
           <section className="smart-summary-modal" role="dialog" aria-modal="true" aria-label={`${title} smart summary`} onClick={(event) => event.stopPropagation()}>
             <div className="smart-summary-head">

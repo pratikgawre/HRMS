@@ -328,6 +328,55 @@ function Projects() {
   ], [projects, navigateProjectList]);
 
   const projectTableColumns = [...projectColumns];
+  const managerProjectExportData = useMemo(() => ({
+    cards: [],
+    controls: [],
+    metrics: [],
+    tables: [{
+      sectionTitle: 'Complete Project List',
+      headers: [
+        'Project Code',
+        'Project Name',
+        'Description',
+        'Manager',
+        'Manager ID',
+        'Team Leader',
+        'TL ID',
+        'Assigned Team Members',
+        'Milestone',
+        'Start Date',
+        'End Date',
+        'Progress',
+        'Status',
+      ],
+      bodyRows: projects.map((project) => {
+        const assignedMembers = getProjectTeamMemberDetails(project, employeeDirectory)
+          .map((member) => {
+            const name = member.displayName || member.name || member.id || '-';
+            const id = member.employeeCode || member.id || '-';
+            const assignment = [member.role, member.department].filter(Boolean).join(', ');
+            return `${name} (${id}${assignment ? `; ${assignment}` : ''})`;
+          })
+          .join(' | ');
+
+        return [
+          project.projectCode || '-',
+          project.name || '-',
+          project.description || '-',
+          project.manager || '-',
+          project.managerId || '-',
+          project.teamLeadName || '-',
+          project.teamLeadId || '-',
+          assignedMembers || project.teamLabel || '-',
+          project.milestone || '-',
+          project.startDate || '-',
+          project.endDate || '-',
+          `${project.progress ?? 0}%`,
+          project.status || '-',
+        ];
+      }),
+    }],
+  }), [employeeDirectory, projects]);
 
   if (canManage) {
     projectTableColumns.push({
@@ -801,6 +850,8 @@ function Projects() {
           : canManage
             ? 'Create projects, assign teams, and keep delivery on track from one workspace.'
             : 'Review project health, progress, milestones, and status.'}
+        showSmartSummaryButton={role !== 'projectManager'}
+        reportData={role === 'projectManager' ? managerProjectExportData : null}
       />
       <div className="card-grid">
         {projectStats.map((item) => <DashboardCard key={item.label} {...item} />)}
