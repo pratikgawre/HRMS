@@ -360,9 +360,7 @@ export function Hero({
     && (!isHR || !hrRoutesWithoutExport.has(currentRoute))
     && (!isTeamLead || currentRoute !== '/team-lead/dashboard');
   const canExportReport = showExportButton && shouldShowExport;
-  const shouldShowSmartSummary = !isHR && (showSmartSummary == null
-    ? showSmartSummaryButton
-    : Boolean(showSmartSummary));
+  const shouldShowSmartSummary = false;
 
   const queryAllSafe = (root, selector) => {
     if (!root || typeof root.querySelectorAll !== 'function') {
