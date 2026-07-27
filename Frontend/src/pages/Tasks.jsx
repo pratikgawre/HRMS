@@ -36,6 +36,13 @@ const TASK_TABS = [
   { id: 'status', label: 'Status Update', icon: 'ri-loop-left-line' },
 ];
 
+const isTextOnly = (value = '') => /^[\p{L}\s]+$/u.test(String(value).trim());
+
+function hasInvalidSummary(value) {
+  const normalized = String(value || '').trim();
+  return normalized !== '' && !isTextOnly(normalized);
+}
+
 function Tasks() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -857,7 +864,7 @@ function EmployeeTasksView() {
     }
 
     if (dueDate) {
-      rows = rows.filter((task) => normalizeDateValue(task.dueDate || task.due) === dueDate);
+      rows = rows.filter((task) => datesMatch(task.dueDate || task.due, dueDate));
     }
 
     if (searchQuery && String(searchQuery).trim() !== '') {
@@ -1503,8 +1510,20 @@ function TaskDetailItem({ icon, label, value, accent = false }) {
 
 function TaskStatusModal({ task, form, setForm, canEditStatus, onClose, onSubmit, onUploadAttachments }) {
   const statusOptions = taskStatusOptions.filter((item) => item !== 'Approved');
+  const [summaryError, setSummaryError] = useState('');
+
+  const validateSummary = (value) => {
+    const nextValue = String(value || '').trim();
+    const nextError = nextValue && !isTextOnly(nextValue) ? 'Summary can only include letters and spaces.' : '';
+    setSummaryError(nextError);
+    return !nextError;
+  };
+
   const handleSubmit = (event) => {
     event?.preventDefault?.();
+    if (!validateSummary(form.summary)) {
+      return;
+    }
     onSubmit(event);
   };
   const title = canEditStatus ? 'Update Task Status' : 'Review Task Status';
@@ -1545,9 +1564,19 @@ function TaskStatusModal({ task, form, setForm, canEditStatus, onClose, onSubmit
               maxLength="2000"
               value={form.summary || ''}
               disabled={!canEditStatus}
-              onChange={(event) => setForm((current) => ({ ...current, summary: event.target.value }))}
+              aria-describedby={summaryError ? 'task-summary-error' : undefined}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setForm((current) => ({ ...current, summary: nextValue }));
+                validateSummary(nextValue);
+              }}
               placeholder="Add a short update about the work completed, progress, or blockers..."
             />
+            {summaryError ? (
+              <p id="task-summary-error" style={{ color: '#d94d63', marginTop: '0.4rem', fontSize: '0.95rem' }} aria-live="polite">
+                {summaryError}
+              </p>
+            ) : null}
           </label>
           <label className="field">
             <span>Attachments (Images or PDFs)</span>
@@ -1594,7 +1623,15 @@ function TaskStatusModal({ task, form, setForm, canEditStatus, onClose, onSubmit
             )}
           </label>
           <div className="salary-form-actions">
-            {canEditStatus && <button className="payroll-primary" type="submit" disabled={isUploadingAttachments}>Save Status</button>}
+            {canEditStatus && (
+              <button
+                className="payroll-primary"
+                type="submit"
+                disabled={isUploadingAttachments || Boolean(summaryError)}
+              >
+                Save Status
+              </button>
+            )}
             <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
           </div>
         </form>
@@ -1773,17 +1810,78 @@ function normalizeTaskRow(task) {
   };
 }
 
-function normalizeDateValue(value) {
+function parseDateValue(value) {
   if (!value) {
-    return '';
+    return null;
   }
 
-  const date = new Date(value);
-  if (!Number.isNaN(date.getTime())) {
-    return date.toISOString().slice(0, 10);
+  const input = String(value).trim();
+  if (!input) {
+    return null;
   }
 
-  return String(value);
+  const isoMatch = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const parsedDate = new Date(input);
+  if (!Number.isNaN(parsedDate.getTime())) {
+    const year = parsedDate.getFullYear();
+    const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(parsedDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  const monthNames = {
+    jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+  };
+
+  const altMatch = input.match(/^(\d{1,2})[\s\-/](Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[\s\-/](\d{4})$/i);
+  if (altMatch) {
+    const day = String(Number(altMatch[1])).padStart(2, '0');
+    const monthKey = altMatch[2].slice(0, 3).toLowerCase();
+    const month = monthNames[monthKey] || '01';
+    return `${altMatch[3]}-${month}-${day}`;
+  }
+
+  const altMatch2 = input.match(/^(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})[\s\-/](\d{4})$/i);
+  if (altMatch2) {
+    const monthKey = altMatch2[1].slice(0, 3).toLowerCase();
+    const month = monthNames[monthKey] || '01';
+    const day = String(Number(altMatch2[2])).padStart(2, '0');
+    return `${altMatch2[3]}-${month}-${day}`;
+  }
+
+  const dmYMatch = input.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (dmYMatch) {
+    const part1 = Number(dmYMatch[1]);
+    const part2 = Number(dmYMatch[2]);
+    const year = dmYMatch[3];
+    if (part1 > 12) {
+      return `${year}-${String(part2).padStart(2, '0')}-${String(part1).padStart(2, '0')}`;
+    }
+    if (part2 > 12) {
+      return `${year}-${String(part1).padStart(2, '0')}-${String(part2).padStart(2, '0')}`;
+    }
+    return `${year}-${String(part2).padStart(2, '0')}-${String(part1).padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
+function datesMatch(value, selectedDate) {
+  if (!selectedDate) {
+    return true;
+  }
+
+  const dateValue = parseDateValue(value);
+  if (!dateValue) {
+    return false;
+  }
+
+  return dateValue === selectedDate;
 }
 
 function getDueIndicator(task) {

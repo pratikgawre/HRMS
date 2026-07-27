@@ -65,7 +65,7 @@ export function saveUsers(users) {
     twoFactorSecret: user.twoFactorSecret || '',
   }));
   window.dispatchEvent(new Event('kavyaUsersChanged'));
-  return apiRequest('/users/bulk', { method: 'POST', body: JSON.stringify(payload) });
+  return apiRequest('/users/bulk', { method: 'POST', timeoutMs: 60000, body: JSON.stringify(payload) });
 }
 
 function buildEmployeePassword(employee) {

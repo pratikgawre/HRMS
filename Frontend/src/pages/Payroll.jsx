@@ -1280,7 +1280,7 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
         </div>
       )}
 
-      <Section title="Payslip Filter" action={role === 'teamLead' ? '' : (roleLabels[role] || 'Employee')}>
+      <Section title="Payslip Filter">
         <div className="payslip-filter">
           <label className="field">
             <span>Month</span>

@@ -741,15 +741,15 @@ function Profile() {
             <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
               <label>
                 <span>Display Name</span>
-                <input value={form.displayName} onChange={(event) => updateField('displayName', event.target.value)} />
+                <input value={form.displayName} onChange={(event) => updateField('displayName', sanitizeTextField(event.target.value))} />
               </label>
               <label>
                 <span>Job Title</span>
-                <input value={form.jobTitle} onChange={(event) => updateField('jobTitle', event.target.value)} />
+                <input value={form.jobTitle} onChange={(event) => updateField('jobTitle', sanitizeTextField(event.target.value))} />
               </label>
               <label>
                 <span>Department</span>
-                <input value={form.department} onChange={(event) => updateField('department', event.target.value)} />
+                <input value={form.department} onChange={(event) => updateField('department', sanitizeTextField(event.target.value))} />
               </label>
               <label>
                 <span>Gender</span>
@@ -766,11 +766,11 @@ function Profile() {
               </label>
               <label>
                 <span>Nationality</span>
-                <input value={form.nationality} onChange={(event) => updateField('nationality', event.target.value)} />
+                <input value={form.nationality} onChange={(event) => updateField('nationality', sanitizeTextField(event.target.value))} />
               </label>
               <label>
                 <span>Working Location</span>
-                <input value={form.workingLocation} onChange={(event) => updateField('workingLocation', event.target.value)} />
+                <input value={form.workingLocation} onChange={(event) => updateField('workingLocation', sanitizeTextField(event.target.value))} />
               </label>
               <label>
                 <span>Marital Status</span>
@@ -792,7 +792,7 @@ function Profile() {
               </label>
               <label>
                 <span>Highest Qualification</span>
-                <input value={form.highestQualification} onChange={(event) => updateField('highestQualification', event.target.value)} />
+                <input value={form.highestQualification} onChange={(event) => updateField('highestQualification', sanitizeTextField(event.target.value))} />
               </label>
               <label>
                 <span>Employment Type</span>
@@ -809,11 +809,11 @@ function Profile() {
               </label>
               <label>
                 <span>Employee ID</span>
-                <input inputMode="numeric" pattern="[0-9]*" value={form.managerId} onChange={(event) => updateField('managerId', digitsOnly(event.target.value))} />
+                <input value={form.employeeId} onChange={(event) => updateField('employeeId', alphanumericOnly(event.target.value))} />
               </label>
               <label>
                 <span>Grade</span>
-                <input value={form.grade} onChange={(event) => updateField('grade', event.target.value)} />
+                <input value={form.grade} onChange={(event) => updateField('grade', sanitizeTextField(event.target.value))} />
               </label>
               <div className="notification-actions profile-form-actions">
                 <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
@@ -834,15 +834,21 @@ function Profile() {
               </label>
               <label>
                 <span>Present City</span>
-                <input value={form.presentCityDistrict} onChange={(event) => updateAddressField('presentCityDistrict', event.target.value)} />
+                <input value={form.presentCityDistrict} onChange={(event) => updateAddressField('presentCityDistrict', sanitizeTextField(event.target.value))} />
               </label>
               <label>
                 <span>Present State</span>
-                <input value={form.presentState} onChange={(event) => updateAddressField('presentState', event.target.value)} />
+                <input value={form.presentState} onChange={(event) => updateAddressField('presentState', sanitizeTextField(event.target.value))} />
               </label>
               <label>
                 <span>Present PIN Code</span>
-                <input inputMode="numeric" pattern="[0-9]*" value={form.presentPinCode} onChange={(event) => updateAddressField('presentPinCode', digitsOnly(event.target.value))} />
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength="6"
+                  value={form.presentPinCode}
+                  onChange={(event) => updateAddressField('presentPinCode', digitsOnly(event.target.value).slice(0, 6))}
+                />
               </label>
               <label>
                 <span>Present Country</span>
@@ -874,7 +880,14 @@ function Profile() {
               </label>
               <label>
                 <span>Permanent PIN Code</span>
-                <input inputMode="numeric" pattern="[0-9]*" value={form.permanentPinCode} onChange={(event) => updateField('permanentPinCode', digitsOnly(event.target.value))} disabled={form.sameAsAbove} />
+                <input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength="6"
+                  value={form.permanentPinCode}
+                  onChange={(event) => updateField('permanentPinCode', digitsOnly(event.target.value).slice(0, 6))}
+                  disabled={form.sameAsAbove}
+                />
               </label>
               <label>
                 <span>Permanent Country</span>
@@ -1190,6 +1203,7 @@ function createProfileForm(employee) {
     employmentType: employee.employmentType || employee.role || '',
     joiningDate: employee.joiningDate || '',
     managerId: employee.managerId || '',
+    employeeId: employee.employeeId || employee.employeeCode || employee.id || '',
     grade: employee.grade || '',
     email: employee.email || '',
     mobileNo: employee.mobileNo || employee.phone || '',
@@ -1338,12 +1352,17 @@ function buildStoredProfileDetails(employee, canManagePackageAmount) {
 
 function validateProfileSection(form, section, canManagePackageAmount) {
   const hasValue = (value) => String(value || '').trim().length > 0;
+  const textOnlyPattern = /^[\p{L}\s]+$/u;
   const displayName = String(form.displayName || '').trim();
   const jobTitle = String(form.jobTitle || '').trim();
   const department = String(form.department || '').trim();
   const gender = String(form.gender || '').trim();
   const dateOfBirth = String(form.dateOfBirth || '').trim();
   const employmentType = String(form.employmentType || '').trim();
+  const nationality = String(form.nationality || '').trim();
+  const workingLocation = String(form.workingLocation || '').trim();
+  const grade = String(form.grade || '').trim();
+  const highestQualification = String(form.highestQualification || '').trim();
   const email = String(form.email || '').trim();
   const mobileNo = String(form.mobileNo || '').trim();
   const bankName = String(form.bankName || '').trim();
@@ -1371,11 +1390,22 @@ function validateProfileSection(form, section, canManagePackageAmount) {
 
   if (section === 'personal' || section === 'all') {
     requireValue(displayName, 'Display name is required.');
+    requireValue(/^[\p{L}\s]+$/u.test(displayName), 'Display name can only contain letters and spaces.');
     requireValue(jobTitle, 'Job title is required.');
+    requireValue(/^[\p{L}\s]+$/u.test(jobTitle), 'Job title can only contain letters and spaces.');
     requireValue(department, 'Department is required.');
+    requireValue(/^[\p{L}\s]+$/u.test(department), 'Department can only contain letters and spaces.');
     requireValue(gender, 'Gender is required.');
     requireValue(dateOfBirth, 'Date of birth is required.');
     requireValue(employmentType, 'Employment type is required.');
+    requireValue(nationality, 'Nationality is required.');
+    requireValue(textOnlyPattern.test(nationality), 'Nationality can only contain letters and spaces.');
+    requireValue(workingLocation, 'Working location is required.');
+    requireValue(textOnlyPattern.test(workingLocation), 'Working location can only contain letters and spaces.');
+    requireValue(grade, 'Grade is required.');
+    requireValue(textOnlyPattern.test(grade), 'Grade can only contain letters and spaces.');
+    requireValue(highestQualification, 'Highest qualification is required.');
+    requireValue(textOnlyPattern.test(highestQualification), 'Highest qualification can only contain letters and spaces.');
   }
 
   if (section === 'contact' || section === 'all') {
@@ -1402,7 +1432,9 @@ function validateProfileSection(form, section, canManagePackageAmount) {
     requireValue(hasValue(String(form.presentAddressLine1 || '')), 'Present Address 1 is required.');
     requireValue(hasValue(String(form.presentAddressLine2 || '')), 'Present Address 2 is required.');
     requireValue(hasValue(String(form.presentCityDistrict || '')), 'Present City is required.');
+    requireValue(/^[\p{L}\s]+$/u.test(String(form.presentCityDistrict || '').trim()), 'Present City can only contain letters and spaces.');
     requireValue(hasValue(String(form.presentState || '')), 'Present State is required.');
+    requireValue(/^[\p{L}\s]+$/u.test(String(form.presentState || '').trim()), 'Present State can only contain letters and spaces.');
     requireValue(hasValue(presentPinCode), 'Present PIN code is required.');
     requireValue(hasValue(String(form.presentCountry || '')), 'Present Country is required.');
     if (!form.sameAsAbove) {
@@ -1414,10 +1446,10 @@ function validateProfileSection(form, section, canManagePackageAmount) {
       requireValue(hasValue(String(form.permanentCountry || '')), 'Permanent Country is required.');
     }
     if (presentPinCode) {
-      requireValue(/^\d{6}$/.test(presentPinCode), 'Present PIN code must be 6 digits.');
+      requireValue(isValidPostalCode(presentPinCode), postalCodeErrorMessage());
     }
     if (permanentPinCode && !form.sameAsAbove) {
-      requireValue(/^\d{6}$/.test(permanentPinCode), 'Permanent PIN code must be 6 digits.');
+      requireValue(isValidPostalCode(permanentPinCode), postalCodeErrorMessage());
     }
   }
 
@@ -1464,8 +1496,24 @@ function isValidIfscCode(value) {
   return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(String(value || '').trim().toUpperCase());
 }
 
+function isValidPostalCode(value) {
+  return /^\d{6}$/.test(String(value || '').trim());
+}
+
+function postalCodeErrorMessage() {
+  return 'Wrong PIN';
+}
+
 function digitsOnly(value) {
   return String(value || '').replace(/\D+/g, '');
+}
+
+function sanitizeTextField(value) {
+  return String(value || '').replace(/[^\p{L}\s]+/gu, '');
+}
+
+function alphanumericOnly(value) {
+  return String(value || '').replace(/[^a-zA-Z0-9]+/g, '');
 }
 
 function alphanumericUpperOnly(value) {
