@@ -6,11 +6,14 @@ import { apiRequest } from '../utils/api.js';
 import { getSessionValue, setSessionValue } from '../utils/appSession.js';
 import { getUsers } from '../utils/user-management.js';
 
+const sanitizeTextSearch = (value = '') => String(value).replace(/[^\p{L}\s]/gu, '');
+
 function Header({ role, onMenuClick }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchError, setSearchError] = useState('');
   const [notificationItems, setNotificationItems] = useState([]);
   const [employeeIdentity, setEmployeeIdentity] = useState(() => getHeaderEmployeeIdentity(role));
   const notificationWrapRef = useRef(null);
@@ -138,8 +141,9 @@ function Header({ role, onMenuClick }) {
       document.removeEventListener('keydown', handleNotificationKeyDown);
     };
   }, [showNotifications]);
+
   const runSearch = () => {
-    const normalized = searchQuery.trim().toLowerCase();
+    const normalized = sanitizeTextSearch(searchQuery).trim().toLowerCase();
     if (!normalized) return;
 
     const directMatch = searchRoutes.reduce((bestMatch, entry, index) => {
@@ -170,7 +174,7 @@ function Header({ role, onMenuClick }) {
       return candidateScore.index < score.index ? { entry, score: candidateScore } : bestMatch;
     }, null)?.entry;
     const targetPath = directMatch?.path || `${roleBasePath}/dashboard`;
-    navigate(`${targetPath}?search=${encodeURIComponent(searchQuery.trim())}`);
+    navigate(`${targetPath}?search=${encodeURIComponent(sanitizeTextSearch(searchQuery).trim())}`);
   };
 
   const handleNotificationClick = async (id) => {
@@ -241,17 +245,32 @@ function Header({ role, onMenuClick }) {
         </div>
       </div>
       <div className="topbar-actions">
-        <label className="search-pill">
-          <i className="ri-search-line" aria-hidden="true" />
-          <input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') runSearch();
-            }}
-            placeholder="Employee, leave, policy..."
-          />
-        </label>
+        <div className="search-stack">
+          <label className="search-pill">
+            <i className="ri-search-line" aria-hidden="true" />
+            <input
+              value={searchQuery}
+              onChange={(event) => {
+                const nextValue = String(event.target.value);
+                const sanitizedValue = sanitizeTextSearch(nextValue);
+                setSearchQuery(sanitizedValue);
+                setSearchError(nextValue === sanitizedValue ? '' : 'Numbers and symbols are not allowed.');
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') runSearch();
+              }}
+              inputMode="text"
+              autoComplete="off"
+              aria-describedby={searchError ? 'topbar-search-help' : undefined}
+              placeholder="Employee, leave, policy..."
+            />
+          </label>
+          {searchError ? (
+            <p id="topbar-search-help" className="search-hint is-error" aria-live="polite">
+              {searchError}
+            </p>
+          ) : null}
+        </div>
         <div className="date-chip">
           <i className="ri-calendar-line" aria-hidden="true" />
           <span>{today}</span>
