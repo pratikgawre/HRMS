@@ -16,7 +16,6 @@ import com.kavya.hrms.model.AppUser;
 import com.kavya.hrms.model.Notification;
 import com.kavya.hrms.repository.AppUserRepository;
 import com.kavya.hrms.repository.NotificationRepository;
-import org.springframework.stereotype.Service;
 
 @Service
 @SuppressWarnings("all")
