@@ -194,6 +194,8 @@ public class SupportController {
     String title = trimToEmpty(ticket.getTitle());
     if (title.isBlank() || title.length() < TITLE_MIN_LENGTH || title.length() > TITLE_MAX_LENGTH) {
       fieldErrors.put("title", "Ticket title is required.");
+    } else if (!isValidSupportTitle(title)) {
+      fieldErrors.put("title", "Ticket title must contain letters and spaces only.");
     }
 
     String category = trimToEmpty(ticket.getCategory());
@@ -276,6 +278,10 @@ public class SupportController {
     }
 
     return null;
+  }
+
+  private boolean isValidSupportTitle(String value) {
+    return trimToEmpty(value).matches("(?=.*[A-Za-z])[A-Za-z][A-Za-z\\s]*");
   }
 
   private void storeMultipartScreenshot(SupportTicket ticket, MultipartFile screenshotFile) throws IOException {

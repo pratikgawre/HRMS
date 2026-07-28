@@ -1186,12 +1186,19 @@ function EmployeeModal({
       return (
         <label className="field" key={key}>
           <span>{label}</span>
-          <select required={isFieldRequired(key)} value={value} onChange={(event) => update(key, event.target.value)}>
+          <select
+            required={isFieldRequired(key)}
+            value={value}
+            onChange={(event) => update(key, event.target.value)}
+            aria-invalid={Boolean(getEmployeeFieldError(key, value, { requireFilled: false }))}
+            aria-describedby={getEmployeeFieldNoteId(key, value)}
+          >
             {key === 'bankName' && <option value="">Select bank name</option>}
             {key === 'department' && <option value="">Select department</option>}
             {key === 'jobTitle' && <option value="">Select designation</option>}
             {renderSelectOptions(selectOptions)}
           </select>
+          {duplicateNote ? <small id={getEmployeeFieldNoteId(key, value)} className="employee-duplicate-note">{duplicateNote}</small> : renderEmployeeFieldNote(key, value)}
         </label>
       );
     }
@@ -1711,65 +1718,6 @@ function isStepComplete(form, step) {
 }
 
 function getInputValue(key, value) {
-  if (key === 'employeeCode') {
-    return value.replace(/[^a-zA-Z0-9]/g, '');
-  }
-
-  if (key === 'jobTitle') {
-    return value
-      .replace(/[^A-Za-z ]/g, '')
-      .replace(/\s{2,}/g, ' ')
-      .replace(/^\s+/, '');
-  }
-
-  if (key === 'grade') {
-    return value.replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase();
-  }
-
-  if (key === 'mobileNo') {
-    return value.replace(/\D/g, '').slice(0, 10);
-  }
-
-  if (key === 'aadhaarCardNo') {
-    return value.replace(/\D/g, '').slice(0, 12);
-  }
-
-  if (key === 'panCardNo') {
-    return value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase();
-  }
-
-  if (key === 'pfUanNo') {
-    return value.replace(/\D/g, '').slice(0, 12);
-  }
-
-  if (key === 'esiNo') {
-    return value.replace(/\D/g, '').slice(0, 10);
-  }
-
-  if (key === 'accountNo') {
-    return value.replace(/\D/g, '').slice(0, 18);
-  }
-
-  if (key === 'ifscCode') {
-    return value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 11).toUpperCase();
-  }
-
-  if (key === 'packageAmount') {
-    const sanitized = value.replace(/[^0-9.]/g, '');
-    const [integerPart = '', ...decimalParts] = sanitized.split('.');
-    const decimalPart = decimalParts.join('').slice(0, 2);
-
-    if (sanitized.startsWith('.')) {
-      return decimalPart ? `0.${decimalPart}` : '0';
-    }
-
-    return decimalParts.length > 0 ? `${integerPart}.${decimalPart}` : integerPart;
-  }
-
-  if (key === 'permanentPinCode' || key === 'presentPinCode') {
-    return value.replace(/\D/g, '').slice(0, 6);
-  }
-
   return value;
 }
 
@@ -1783,6 +1731,28 @@ function getEmployeeInputProps(key) {
   }
 
   if (key === 'jobTitle') {
+    props.pattern = '[A-Za-z ]+';
+    props.title = 'Use letters and spaces only.';
+  }
+
+  if (key === 'permanentAddressLine1'
+    || key === 'permanentAddressLine2'
+    || key === 'permanentAddressLine3'
+    || key === 'presentAddressLine1'
+    || key === 'presentAddressLine2'
+    || key === 'presentAddressLine3'
+    || key === 'permanentCityDistrict'
+    || key === 'presentCityDistrict') {
+    props.pattern = '[A-Za-z0-9 ,./-]+';
+    props.title = 'Use letters, numbers, spaces, commas, periods, slashes, and hyphens only.';
+  }
+
+  if (key === 'workingLocation') {
+    props.pattern = '[A-Za-z\\s,.-]+';
+    props.title = 'Use letters, spaces, commas, dots, and hyphens only.';
+  }
+
+  if (key === 'firstName' || key === 'middleName' || key === 'lastName' || key === 'nationality' || key === 'highestQualification') {
     props.pattern = '[A-Za-z ]+';
     props.title = 'Use letters and spaces only.';
   }
@@ -1953,6 +1923,24 @@ function getEmployeeFieldError(key, value, { requireFilled = true, today = new D
       return /^[A-Za-z0-9]+$/.test(trimmed) ? '' : 'Employee ID must contain only letters and numbers.';
     case 'jobTitle':
       return /^[A-Za-z ]+$/.test(trimmed) ? '' : 'Designation must contain letters and spaces only.';
+    case 'workingLocation':
+      return /^[A-Za-z\s,.-]+$/.test(trimmed) ? '' : 'Working Location must contain valid location characters only.';
+    case 'permanentAddressLine1':
+    case 'permanentAddressLine2':
+    case 'permanentAddressLine3':
+    case 'presentAddressLine1':
+    case 'presentAddressLine2':
+    case 'presentAddressLine3':
+      return /^[A-Za-z0-9\s,./-]+$/.test(trimmed) ? '' : 'Address must contain valid address characters only.';
+    case 'permanentCityDistrict':
+    case 'presentCityDistrict':
+      return /^[A-Za-z\s.-]+$/.test(trimmed) ? '' : 'City/District must contain letters and spaces only.';
+    case 'firstName':
+    case 'middleName':
+    case 'lastName':
+    case 'nationality':
+    case 'highestQualification':
+      return /^[A-Za-z ]+$/.test(trimmed) ? '' : 'Use letters and spaces only.';
     case 'grade':
       return /^[A-Z]$/.test(trimmed) ? '' : 'Grade must be a single capital letter.';
     case 'mobileNo':

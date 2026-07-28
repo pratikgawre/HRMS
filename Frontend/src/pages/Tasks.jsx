@@ -30,6 +30,8 @@ const taskStatusOptions = ['Pending', 'Active', 'Approved', 'Completed'];
 const taskAssignableRoles = ['admin', 'projectManager', 'teamLead'];
 const TASK_ATTACHMENT_ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf';
 const MAX_TASK_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const TASK_MODULE_INVALID_MESSAGE = 'Module name should contain letters and spaces only.';
+const TASK_MODULE_ALLOWED_PATTERN = /^[A-Za-z]+(?:\s+[A-Za-z]+)*$/;
 const TASK_TABS = [
   { id: 'list', label: 'List', icon: 'ri-list-check-3' },
   { id: 'assign', label: 'Assign', icon: 'ri-add-circle-line', roles: taskAssignableRoles },
@@ -72,6 +74,7 @@ function Tasks() {
   const [undoTask, setUndoTask] = useState(null);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(getEmptyTaskForm());
+  const [taskFormErrors, setTaskFormErrors] = useState({});
   const [taskFormMode, setTaskFormMode] = useState('create');
   const employeeIdentity = getCurrentEmployeeIdentity();
   const currentEmployeeId = String(employeeIdentity.employeeId || '').trim();
@@ -259,6 +262,7 @@ function Tasks() {
       projectId: selectedProject?.id || teamLeadProjects[0]?.id || '',
     }));
     setMessage('');
+    setTaskFormErrors({});
     setIsTaskModalOpen(true);
   };
 
@@ -287,6 +291,7 @@ function Tasks() {
     setIsTaskModalOpen(false);
     setTaskFormMode('create');
     setEditingTask(null);
+    setTaskFormErrors({});
     setForm(getEmptyTaskForm({
       teamLeadMode: isTeamLead,
       projectId: selectedProject?.id || teamLeadProjects[0]?.id || '',
@@ -306,6 +311,7 @@ function Tasks() {
     setTaskFormMode('edit');
     setEditingTask(task);
     setMessage('');
+    setTaskFormErrors({});
     setForm(buildTaskFormFromTask(task, isTeamLead));
     setIsTaskModalOpen(true);
   };
@@ -490,6 +496,31 @@ function Tasks() {
     const isEditing = Boolean(editingTask);
 
     try {
+      const validateTitle = () => {
+        const title = String(form.title || '').trim();
+        if (!title) {
+          setTaskFormErrors((current) => ({ ...current, title: 'Please enter a module name.' }));
+          setMessage('Please enter a module name.');
+          return '';
+        }
+
+        if (!TASK_MODULE_ALLOWED_PATTERN.test(title)) {
+          setTaskFormErrors((current) => ({ ...current, title: TASK_MODULE_INVALID_MESSAGE }));
+          setMessage(TASK_MODULE_INVALID_MESSAGE);
+          return '';
+        }
+
+        setTaskFormErrors((current) => {
+          if (!current.title) {
+            return current;
+          }
+          const next = { ...current };
+          delete next.title;
+          return next;
+        });
+        return title;
+      };
+
       if (isTeamLead) {
         const project = teamLeadProjects.find((item) => item.id === form.projectId) || null;
         if (!project) {
@@ -497,9 +528,8 @@ function Tasks() {
           return;
         }
 
-        const title = form.title.trim();
+        const title = validateTitle();
         if (!title) {
-          setMessage('Please enter a module name.');
           return;
         }
 
@@ -542,9 +572,8 @@ function Tasks() {
         return;
       }
 
-      const title = form.title.trim();
+      const title = validateTitle();
       if (!title) {
-        setMessage('Please enter a module name.');
         return;
       }
 
@@ -584,6 +613,7 @@ function Tasks() {
       setIsTaskModalOpen(false);
       setTaskFormMode('create');
       setEditingTask(null);
+      setTaskFormErrors({});
       setForm(getEmptyTaskForm());
       setMessage(isEditing ? 'Task updated successfully.' : 'Task assigned successfully.');
     } catch (error) {
@@ -740,6 +770,8 @@ function Tasks() {
           mode={taskFormMode}
           form={form}
           setForm={setForm}
+          taskFormErrors={taskFormErrors}
+          setTaskFormErrors={setTaskFormErrors}
           assigneeOptions={assigneeOptions}
           projectOptions={teamLeadProjects}
           selectedProject={selectedProject}
@@ -783,6 +815,10 @@ function Tasks() {
       )}
     </>
   );
+}
+
+function sanitizeTaskModuleInput(value) {
+  return String(value || '').replace(/[^A-Za-z\s]/g, '').replace(/\s{2,}/g, ' ');
 }
 
 function EmployeeTasksView() {
@@ -1129,12 +1165,40 @@ function EmployeeTasksView() {
   );
 }
 
-function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, projectOptions, selectedProject, isTeamLead, onClose, onSubmit }) {
+function TaskAssignmentModal({
+  mode = 'create',
+  form,
+  setForm,
+  taskFormErrors,
+  setTaskFormErrors,
+  assigneeOptions,
+  projectOptions,
+  selectedProject,
+  isTeamLead,
+  onClose,
+  onSubmit,
+}) {
   const teamLeadMode = Boolean(isTeamLead);
   const isEditMode = mode === 'edit';
   const handleSubmit = (event) => {
     event?.preventDefault?.();
     onSubmit?.(event);
+  };
+  const handleTitleChange = (event) => {
+    const nextValue = sanitizeTaskModuleInput(event.target.value);
+    setForm((current) => ({ ...current, title: nextValue }));
+    setTaskFormErrors((current) => {
+      if (!current.title && !nextValue) {
+        return current;
+      }
+      const nextErrors = { ...current };
+      if (nextValue && TASK_MODULE_ALLOWED_PATTERN.test(nextValue.trim())) {
+        delete nextErrors.title;
+      } else {
+        nextErrors.title = nextValue.trim() ? TASK_MODULE_INVALID_MESSAGE : 'Please enter a module name.';
+      }
+      return nextErrors;
+    });
   };
 
   const updateProject = (nextProjectId) => {
@@ -1146,6 +1210,7 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
         assignedToId: '',
       };
     });
+    setTaskFormErrors({});
   };
 
   return (
@@ -1187,10 +1252,24 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
                       <span>Module</span>
                       <input
                         required
+                        className={taskFormErrors.title ? 'support-invalid' : ''}
                         value={form.title}
-                        onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                        onChange={handleTitleChange}
+                        onBlur={() => {
+                          const title = String(form.title || '').trim();
+                          if (!title) {
+                            setTaskFormErrors((current) => ({ ...current, title: 'Please enter a module name.' }));
+                            return;
+                          }
+                          if (!TASK_MODULE_ALLOWED_PATTERN.test(title)) {
+                            setTaskFormErrors((current) => ({ ...current, title: TASK_MODULE_INVALID_MESSAGE }));
+                          }
+                        }}
+                        aria-invalid={Boolean(taskFormErrors.title)}
+                        title={TASK_MODULE_INVALID_MESSAGE}
                         placeholder="Enter module name"
                       />
+                      {taskFormErrors.title ? <small className="field-error" role="alert">{taskFormErrors.title}</small> : null}
                     </label>
                   ) : (
                     <p className="project-empty-state task-empty-inline">
@@ -1222,7 +1301,26 @@ function TaskAssignmentModal({ mode = 'create', form, setForm, assigneeOptions, 
             <>
               <label className="field">
                 <span>Module</span>
-                <input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Enter module name" />
+                <input
+                  required
+                  className={taskFormErrors.title ? 'support-invalid' : ''}
+                  value={form.title}
+                  onChange={handleTitleChange}
+                  onBlur={() => {
+                    const title = String(form.title || '').trim();
+                    if (!title) {
+                      setTaskFormErrors((current) => ({ ...current, title: 'Please enter a module name.' }));
+                      return;
+                    }
+                    if (!TASK_MODULE_ALLOWED_PATTERN.test(title)) {
+                      setTaskFormErrors((current) => ({ ...current, title: TASK_MODULE_INVALID_MESSAGE }));
+                    }
+                  }}
+                  aria-invalid={Boolean(taskFormErrors.title)}
+                  title={TASK_MODULE_INVALID_MESSAGE}
+                  placeholder="Enter module name"
+                />
+                {taskFormErrors.title ? <small className="field-error" role="alert">{taskFormErrors.title}</small> : null}
               </label>
               <label className="field">
                 <span>Assign</span>

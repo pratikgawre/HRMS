@@ -23,6 +23,9 @@ import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { people as fallbackPeople, projects as fallbackProjects } from '../data/dummyData.js';
 
+const TEAM_ATTENDANCE_SEARCH_ERROR = 'Search should contain letters and spaces only.';
+const TEAM_ATTENDANCE_SEARCH_PATTERN = /^[A-Za-z\s]*$/;
+
 function TeamAttendanceToast({ toast, onClose }) {
   if (!toast) {
     return null;
@@ -61,6 +64,10 @@ function TeamAttendanceToast({ toast, onClose }) {
   return createPortal(toastMarkup, portalRoot);
 }
 
+function sanitizeAttendanceSearchInput(value) {
+  return String(value || '').replace(/[^A-Za-z\s]/g, '').replace(/\s{2,}/g, ' ');
+}
+
 function TeamAttendance() {
   const role = getSessionValue('kavyaRole') || 'employee';
   const roleLabel = getRoleLabel(role);
@@ -74,6 +81,7 @@ function TeamAttendance() {
   const [projects, setProjects] = useState([]);
   const [status, setStatus] = useState('All');
   const [searchText, setSearchText] = useState('');
+  const [searchError, setSearchError] = useState('');
   const [dateRange, setDateRange] = useState(() => (role === 'projectManager' ? 'all' : 'day'));
   const [selectedDate, setSelectedDate] = useState(() => getDateInputValue(new Date()));
   const [selectedMonth, setSelectedMonth] = useState(() => getMonthInputValue(new Date()));
@@ -433,6 +441,17 @@ function TeamAttendance() {
 
     return rows;
   }, [rows, searchText, selectedDateTeamRows, summaryFocus]);
+  const handleSearchChange = (value) => {
+    const rawValue = String(value || '');
+    const nextValue = sanitizeAttendanceSearchInput(rawValue);
+    setSearchText(nextValue);
+    setSearchError(TEAM_ATTENDANCE_SEARCH_PATTERN.test(rawValue) ? '' : TEAM_ATTENDANCE_SEARCH_ERROR);
+  };
+  const handleSearchKeyDown = (event) => {
+    if (event.key === 'Enter' && searchError) {
+      event.preventDefault();
+    }
+  };
   const summaryText = role === 'employee'
     ? 'This page is for managers and team leads. Use My Attendance for your own record.'
     : 'Review your team attendance records without mixing them with your personal check-in or check-out.';
@@ -721,16 +740,26 @@ function TeamAttendance() {
               </label>
             )}
 
-            <label className="toolbar-search" style={{ minWidth: '260px' }}>
-              <i className="ri-search-line" aria-hidden="true" />
-              <input
-                type="search"
-                value={searchText}
-                onChange={(event) => setSearchText(event.target.value)}
-                placeholder="Search employee name or ID"
-                aria-label="Search employee name or ID"
-              />
-            </label>
+            <div className={`attendance-search-field${searchError ? ' is-invalid' : ''}`} style={{ minWidth: '260px' }}>
+              <label className="toolbar-search attendance-search-row">
+                <i className="ri-search-line" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={searchText}
+                  onChange={(event) => handleSearchChange(event.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Search employee name or ID"
+                  aria-label="Search employee name or ID"
+                  aria-invalid={Boolean(searchError)}
+                  aria-describedby={searchError ? 'team-attendance-search-error' : undefined}
+                />
+              </label>
+              {searchError && (
+                <span id="team-attendance-search-error" className="search-validation" role="alert">
+                  {searchError}
+                </span>
+              )}
+            </div>
 
             <select value={status} onChange={(event) => {
               setStatus(event.target.value);

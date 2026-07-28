@@ -89,6 +89,7 @@ public class TaskController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Task payload is required");
     }
 
+    validateTaskTitle(task.getTitle());
     hydrateTeamLeadFields(task);
     syncProjectAssignment(task);
     if (task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) {
@@ -138,6 +139,7 @@ public class TaskController {
     }
 
     task.setId(id);
+    validateTaskTitle(task.getTitle());
     TaskItem existing = taskRepository.findById(id).orElse(null);
     if ((task.getCreatedDateTime() == null || task.getCreatedDateTime().isBlank()) && existing != null) {
       task.setCreatedDateTime(existing.getCreatedDateTime());
@@ -452,6 +454,17 @@ public class TaskController {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim().toLowerCase();
+  }
+
+  private void validateTaskTitle(String title) {
+    String safeTitle = firstNonBlank(title);
+    if (safeTitle.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Module name is required.");
+    }
+
+    if (!safeTitle.matches("(?=.*[A-Za-z])[A-Za-z]+(?:\\s+[A-Za-z]+)*")) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Module name should contain letters and spaces only.");
+    }
   }
 
   private <T> List<T> safeList(List<T> values) {

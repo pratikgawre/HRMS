@@ -35,12 +35,17 @@ public class SystemSettingsController {
   }
 
   @PutMapping
-  public ResponseEntity<SystemSettings> save(
+  public ResponseEntity<?> save(
       @RequestBody SystemSettings settings,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRoleHeader) {
     String accessRole = normalizeAccessRole(accessRoleHeader);
     if ("Employee".equals(accessRole)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Settings access denied");
+    }
+
+    Map<String, String> validationErrors = validateSettings(settings);
+    if (!validationErrors.isEmpty()) {
+      return badRequest(validationErrors);
     }
 
     SystemSettings current = repository.findById(DEFAULT_ID).orElseGet(this::buildDefaultSettings);
@@ -199,5 +204,122 @@ public class SystemSettingsController {
       Map<String, List<String>> next,
       Map<String, List<String>> fallback) {
     return next == null || next.isEmpty() ? copyPermissionMatrix(fallback) : copyPermissionMatrix(next);
+  }
+
+  private Map<String, String> validateSettings(SystemSettings settings) {
+    Map<String, String> errors = new LinkedHashMap<>();
+    if (settings == null) {
+      errors.put("settings", "Settings payload is required.");
+      return errors;
+    }
+
+    validateNamedList(errors, "departments", settings.getDepartments(), "Department");
+    validateNamedList(errors, "designations", settings.getDesignations(), "Designation");
+    validateLeaveTypes(errors, settings.getLeaveTypes());
+    validatePayrollSettings(errors, settings.getPayrollSettings());
+    return errors;
+  }
+
+  private void validateNamedList(Map<String, String> errors, String field, List<String> values, String label) {
+    if (values == null) {
+      return;
+    }
+
+    for (String value : values) {
+      String trimmed = normalizeText(value);
+      if (trimmed.isBlank()) {
+        errors.put(field, label + " cannot be empty.");
+        return;
+      }
+
+      if (!isValidNamedText(trimmed)) {
+        errors.put(field, label + " must contain letters and valid separators only.");
+        return;
+      }
+    }
+  }
+
+  private void validateLeaveTypes(Map<String, String> errors, List<SystemSettings.LeaveTypeSetting> values) {
+    if (values == null) {
+      return;
+    }
+
+    for (SystemSettings.LeaveTypeSetting item : values) {
+      if (item == null) {
+        errors.put("leaveTypes", "Leave type entries cannot be empty.");
+        return;
+      }
+
+      String name = normalizeText(item.getName());
+      if (name.isBlank()) {
+        errors.put("leaveTypes", "Leave type name is required.");
+        return;
+      }
+
+      if (!isValidNamedText(name)) {
+        errors.put("leaveTypes", "Leave type name must contain letters and valid separators only.");
+        return;
+      }
+
+      Integer days = item.getDays();
+      if (days == null || days < 0) {
+        errors.put("leaveTypes", "Leave type days must be zero or a positive number.");
+        return;
+      }
+    }
+  }
+
+  private void validatePayrollSettings(Map<String, String> errors, Map<String, String> payrollSettings) {
+    if (payrollSettings == null) {
+      return;
+    }
+
+    for (Map.Entry<String, String> entry : payrollSettings.entrySet()) {
+      String value = normalizeText(entry.getValue());
+      if (value.isBlank()) {
+        errors.put("payrollSettings", "Payroll configuration values cannot be empty.");
+        return;
+      }
+
+      if (!isValidPayrollValue(value)) {
+        errors.put("payrollSettings", "Payroll configuration values must contain valid text only.");
+        return;
+      }
+    }
+  }
+
+  private boolean isValidNamedText(String value) {
+    return normalizeText(value).matches("(?=.*[A-Za-z])[A-Za-z0-9][A-Za-z0-9\\s.'&()/-]*");
+  }
+
+  private boolean isValidPayrollValue(String value) {
+    return normalizeText(value).matches("(?=.*[A-Za-z])[A-Za-z0-9][A-Za-z0-9\\s,.'&()/-]*");
+  }
+
+  private String normalizeText(String value) {
+    return value == null ? "" : value.trim();
+  }
+
+  private ResponseEntity<ValidationErrorResponse> badRequest(Map<String, String> fieldErrors) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(new ValidationErrorResponse("Validation failed", fieldErrors));
+  }
+
+  public static class ValidationErrorResponse {
+    private final String message;
+    private final Map<String, String> fieldErrors;
+
+    public ValidationErrorResponse(String message, Map<String, String> fieldErrors) {
+      this.message = message;
+      this.fieldErrors = fieldErrors;
+    }
+
+    public String getMessage() {
+      return message;
+    }
+
+    public Map<String, String> getFieldErrors() {
+      return fieldErrors;
+    }
   }
 }
