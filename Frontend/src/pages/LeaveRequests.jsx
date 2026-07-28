@@ -37,7 +37,7 @@ const leaveYearOptions = Array.from({ length: 5 }, (_, index) => currentLeaveYea
 const leaveFilterOptions = ['All', 'Casual Leave', 'Sick Leave', 'Earned Leave', 'Work From Home'];
 const approveActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%2309767a" stroke-width="2.4"/%3E%3Cpath d="M8 12.25l2.45 2.45L16.5 8.65" stroke="%2309767a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/%3E%3C/svg%3E';
 const rejectActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%23d94d63" stroke-width="2.4"/%3E%3Cpath d="M8.75 8.75l6.5 6.5M15.25 8.75l-6.5 6.5" stroke="%23d94d63" stroke-width="2.4" stroke-linecap="round"/%3E%3C/svg%3E';
-const isValidLeaveSearchQuery = (value = '') => /^[\p{L}\p{N}\s]*$/u.test(String(value));
+const employeeSearchRegex = /^[A-Za-z0-9]+(?:[ _-][A-Za-z0-9]+)*$/;
 
 function LeaveRequests() {
   const location = useLocation();
@@ -50,6 +50,7 @@ function LeaveRequests() {
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
   const [searchText, setSearchText] = useState('');
+  const [appliedSearchText, setAppliedSearchText] = useState('');
   const [searchError, setSearchError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
@@ -126,8 +127,6 @@ function LeaveRequests() {
   }), [roleResolvedRequests, role, currentEmployee.employeeId]);
 
   const filteredLeaveRequests = useMemo(() => {
-    const trimmedQuery = searchText.trim().toLowerCase();
-    const isSearchValid = isValidLeaveSearchQuery(searchText);
     const baseRows = visibleRequests.filter((request) => (
       matchesSelectedLeaveType(request, selectedLeaveType)
       && matchesSelectedLeavePeriod(request, selectedMonth, selectedYear)
@@ -147,7 +146,8 @@ function LeaveRequests() {
     return queueRows
       .filter((request) => status === 'All' || request.status === status)
       .filter((request) => {
-        if (!trimmedQuery || !isSearchValid) {
+        const query = appliedSearchText.trim().toLowerCase();
+        if (!query) {
           return true;
         }
 
@@ -157,9 +157,9 @@ function LeaveRequests() {
           request.type,
           request.reason,
           request.status,
-        ].some((value) => String(value || '').toLowerCase().includes(trimmedQuery));
+        ].some((value) => String(value || '').toLowerCase().includes(query));
       });
-  }, [queueFilter, searchText, selectedLeaveType, selectedMonth, selectedYear, status, visibleRequests]);
+  }, [appliedSearchText, queueFilter, selectedLeaveType, selectedMonth, selectedYear, status, visibleRequests]);
   const visibleLeaveSummary = useMemo(() => {
     const showingRows = visibleRequests;
     const approvedRows = visibleRequests.filter((request) => String(request.status || '').trim().toLowerCase() === 'approved');
@@ -193,16 +193,29 @@ function LeaveRequests() {
     });
   };
 
-  const handleSearchChange = (event) => {
-    const nextValue = event.target.value;
-    setSearchText(nextValue);
-
-    if (!nextValue.trim()) {
-      setSearchError('');
-      return;
+  const validateEmployeeSearch = (value) => {
+    const normalizedValue = String(value || '').trim();
+    if (!normalizedValue) {
+      return '';
     }
 
-    setSearchError(isValidLeaveSearchQuery(nextValue) ? '' : 'Search accepts letters and numbers only.');
+    return employeeSearchRegex.test(normalizedValue)
+      ? ''
+      : 'Please enter a valid employee name or employee ID.';
+  };
+
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+    setSearchText(value);
+
+    const error = validateEmployeeSearch(value);
+    setSearchError(error);
+
+    if (!error) {
+      setAppliedSearchText(String(value || '').trim());
+    } else if (!String(value || '').trim()) {
+      setAppliedSearchText('');
+    }
   };
 
   const handleSearchKeyDown = (event) => {
@@ -210,10 +223,16 @@ function LeaveRequests() {
       return;
     }
 
-    if (!isValidLeaveSearchQuery(searchText)) {
-      event.preventDefault();
-      setSearchError('Search accepts letters and numbers only.');
+    event.preventDefault();
+
+    const error = validateEmployeeSearch(searchText);
+    setSearchError(error);
+
+    if (error) {
+      return;
     }
+
+    setAppliedSearchText(String(searchText || '').trim());
   };
 
   const openNewRequest = () => {
@@ -677,15 +696,19 @@ function LeaveRequests() {
             <option>Rejected</option>
           </select>
           {role !== 'employee' && (
-            <label className="toolbar-search">
+            <label className="toolbar-search leave-search-field">
               <i className="ri-search-line" aria-hidden="true" />
               <input
                 type="search"
                 value={searchText}
-                onChange={(event) => setSearchText(sanitizeLeaveSearchInput(event.target.value))}
+                onChange={handleSearchChange}
+                onKeyDown={handleSearchKeyDown}
                 placeholder="Search employee, type, reason..."
                 aria-label="Search leave requests"
+                aria-invalid={Boolean(searchError)}
+                aria-describedby={searchError ? 'leave-search-error' : undefined}
               />
+              {searchError && <p id="leave-search-error" className="field-error leave-search-error" role="alert">{searchError}</p>}
             </label>
           )}
             </div>
@@ -960,10 +983,6 @@ function getLeaveDateRange(request, fallbackYear) {
     start: start || end,
     end: end || start,
   };
-}
-
-function sanitizeLeaveSearchInput(value) {
-  return String(value || '').replace(/[^a-zA-Z\s]/g, '');
 }
 
 function parseLeaveDate(value, fallbackYear) {

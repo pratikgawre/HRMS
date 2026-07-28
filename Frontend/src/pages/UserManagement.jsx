@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { getStoredEmployees, reconcileDeletedEmployees, saveStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
-import { apiRequest, deleteUser as deleteUserRequest, safeApiRequest } from '../utils/api.js';
+import { reconcileDeletedEmployees, saveStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
+import { apiRequest, deleteUser as deleteUserRequest } from '../utils/api.js';
 import { ACCESS_ROLE_OPTIONS, USER_STATUS_OPTIONS, getRoleBadgeClass, normalizeAccessRole } from '../utils/role-access.js';
 import {
   buildUserAccess,
@@ -18,7 +18,6 @@ import {
 } from '../utils/user-management.js';
 
 const USER_DELETE_UNDO_MS = 6000;
-const sanitizeSearchInput = (value = '') => String(value).replace(/[^\p{L}\p{N}\s]/gu, '');
 
 
 function UserManagement() {
@@ -36,14 +35,14 @@ function UserManagement() {
   const [form, setForm] = useState(getEmptyUserForm());
   const [message, setMessage] = useState('');
   const [isSavingUser, setIsSavingUser] = useState(false);
+  const isLoadingRef = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const nextSearch = sanitizeSearchInput(params.get('search') || '');
     const nextStatus = params.get('status');
     const nextRole = params.get('role');
 
-    setSearch(nextSearch);
+    setSearch('');
     setRoleFilter(nextRole || 'All Roles');
     setStatusFilter(nextStatus || 'All Status');
 
@@ -58,36 +57,48 @@ function UserManagement() {
     let active = true;
 
     const loadAccessData = async () => {
+      if (isLoadingRef.current) {
+        return;
+      }
+
+      isLoadingRef.current = true;
       try {
-        const [employeeRows, userRows] = await Promise.all([
-          safeApiRequest('/employees', getStoredEmployees([]), { timeoutMs: 60000 }),
-          safeApiRequest('/users', getUsers(), { timeoutMs: 60000 }),
+        const [employeeResult, userResult] = await Promise.allSettled([
+          apiRequest('/employees'),
+          apiRequest('/users'),
         ]);
         if (!active) {
           return;
         }
 
-        const normalizedEmployees = normalizeEmployees(Array.isArray(employeeRows) ? employeeRows : getStoredEmployees([]))
-          .filter((employee) => !isAdminEmployee(employee));
-        const normalizedUsers = dedupeSystemUsers(normalizeUsers(Array.isArray(userRows) ? userRows : getUsers(), normalizedEmployees))
-          .filter((user) => !isAdminLikeUser(user));
+        const employeeRows = employeeResult.status === 'fulfilled' ? employeeResult.value : [];
+        const userRows = userResult.status === 'fulfilled' ? userResult.value : [];
+        const normalizedEmployees = normalizeEmployees(employeeRows).filter((employee) => !isAdminEmployee(employee));
+        const normalizedUsers = dedupeSystemUsers(normalizeUsers(userRows, normalizedEmployees)).filter((user) => !isAdminLikeUser(user));
 
         reconcileDeletedEmployees(normalizedEmployees);
         setEmployees(normalizedEmployees);
         setUsers(normalizedUsers);
         setEmployeesCache(normalizedEmployees);
         setUsersCache(normalizedUsers);
-        setMessage('');
+
+        const employeeError = employeeResult.status === 'rejected' ? employeeResult.reason : null;
+        const userError = userResult.status === 'rejected' ? userResult.reason : null;
+        if (employeeError || userError) {
+          const employeeMessage = employeeError instanceof Error ? employeeError.message : '';
+          const userMessage = userError instanceof Error ? userError.message : '';
+          setMessage((current) => current || employeeMessage || userMessage || 'Some user access data could not be loaded right now.');
+        } else {
+          setMessage('');
+        }
       } catch (error) {
         if (!active) {
           return;
         }
 
-        setEmployees([]);
-        setUsers([]);
-        setEmployeesCache([]);
-        setUsersCache([]);
         setMessage((current) => current || (error instanceof Error ? error.message : 'Unable to load user access right now.'));
+      } finally {
+        isLoadingRef.current = false;
       }
     };
 
@@ -352,11 +363,7 @@ function UserManagement() {
         <div className="page-toolbar">
           <label className="toolbar-search">
             <i className="ri-search-line" aria-hidden="true" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(sanitizeSearchInput(event.target.value))}
-              placeholder="Search user, employee ID, email, role"
-            />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search user, employee ID, email, role" />
           </label>
           <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} aria-label="Filter by role">
             <option>All Roles</option>
@@ -834,5 +841,6 @@ function renderPermissionText(role) {
 }
 
 export default UserManagement;
+
 
 

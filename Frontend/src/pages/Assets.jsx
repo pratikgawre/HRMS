@@ -16,29 +16,6 @@ import { getVisibleTeamEmployeeIds, normalizeProjects } from './attendancePageUt
 
 const ADMIN_ASSET_CACHE_KEY = 'kavyaAssetsAdminCache';
 const ADMIN_EMPLOYEE_CACHE_KEY = 'kavyaAssetsAdminEmployeesCache';
-const ASSET_TEXT_INPUT_PATTERN = /^[A-Za-z0-9\s]*$/;
-const ASSET_TEXT_INPUT_ERROR = 'Special characters are not allowed.';
-const ASSET_SEARCH_PATTERN = /^[A-Za-z0-9\s-]*$/;
-const ASSET_SEARCH_ERROR = 'Special characters are not allowed in search.';
-
-function normalizeAssetTextInput(value) {
-  return String(value || '')
-    .replace(/[^A-Za-z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trimStart();
-}
-
-function isValidAssetTextInput(value) {
-  return ASSET_TEXT_INPUT_PATTERN.test(String(value || ''));
-}
-
-function sanitizeAssetSearchQuery(value) {
-  return String(value || '').replace(/[^A-Za-z0-9\s-]+/g, '');
-}
-
-function isValidAssetSearchQuery(value) {
-  return ASSET_SEARCH_PATTERN.test(String(value || ''));
-}
 
 function Assets() {
   const navigate = useNavigate();
@@ -59,7 +36,6 @@ function Assets() {
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
   const [searchText, setSearchText] = useState('');
-  const [searchError, setSearchError] = useState('');
   const [assetView, setAssetView] = useState('all');
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [assignedEmployeeQuery, setAssignedEmployeeQuery] = useState('');
@@ -67,7 +43,6 @@ function Assets() {
   const [editingAssetId, setEditingAssetId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [assetErrors, setAssetErrors] = useState({});
   const [assetForm, setAssetForm] = useState({
     assetName: '',
     category: 'Laptop',
@@ -78,6 +53,7 @@ function Assets() {
     currentDate: getTodayInputValue(),
     dueDate: '',
   });
+  const [assetErrors, setAssetErrors] = useState({});
   const [assetMessage, setAssetMessage] = useState('');
   const hasLoadedInitialDataRef = useRef(false);
   const isRefreshingRef = useRef(false);
@@ -335,8 +311,8 @@ function Assets() {
     },
   ]), [activeSummary]);
 
-  const updateAsset = (assetId, patch, { allowScopedUpdate = false } = {}) => {
-    if (!canManage && !allowScopedUpdate) {
+  const updateAsset = (assetId, patch) => {
+    if (!canManage) {
       return;
     }
 
@@ -387,7 +363,7 @@ function Assets() {
       return;
     }
 
-    updateAsset(assetId, { status: 'Replacement Requested' }, { allowScopedUpdate: true });
+    updateAsset(assetId, { status: 'Replacement Requested' });
   };
 
   const markReturned = (assetId) => {
@@ -410,7 +386,7 @@ function Assets() {
       status: asset.status || 'Available',
       condition: asset.condition || 'Good',
       location: asset.location || 'Store',
-      currentDate: formatDateForInput(asset.currentDate) || getTodayInputValue(),
+      currentDate: getTodayInputValue(),
       dueDate: formatDateForInput(asset.dueDate) || '',
     });
     setAssignedEmployeeQuery(
@@ -434,29 +410,36 @@ function Assets() {
 
   const updateAssetForm = (field, value) => {
     setAssetForm((current) => ({ ...current, [field]: value }));
-    setAssetErrors((current) => ({ ...current, [field]: '' }));
-  };
-
-  const updateAssetTextField = (field, value) => {
-    const normalized = normalizeAssetTextInput(value);
-    setAssetForm((current) => ({ ...current, [field]: normalized }));
-    setAssetErrors((current) => ({
-      ...current,
-      [field]: String(value || '') !== normalized ? ASSET_TEXT_INPUT_ERROR : '',
-    }));
-  };
-
-  const handleAssetSearchChange = (event) => {
-    const nextValue = sanitizeAssetSearchQuery(event.target.value);
-    const attemptedInvalid = String(event.target.value || '') !== nextValue;
-    setSearchText(nextValue);
-
-    if (!nextValue.trim()) {
-      setSearchError(attemptedInvalid ? ASSET_SEARCH_ERROR : '');
-      return;
+    if (field === 'currentDate') {
+      setAssetErrors((current) => ({ ...current, currentDate: '' }));
     }
+    if (field === 'assetName') {
+      const trimmedName = String(value || '').trim();
+      if (!trimmedName || /[A-Za-z]/.test(trimmedName)) {
+        setAssetErrors((current) => ({ ...current, assetName: '' }));
+      }
+    }
+    if (field === 'category') {
+      const trimmedCategory = String(value || '').trim();
+      const categoryRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
+      if (!trimmedCategory || categoryRegex.test(trimmedCategory)) {
+        setAssetErrors((current) => ({ ...current, category: '' }));
+      }
+    }
+    if (field === 'dueDate') {
+      const selectedDueDate = new Date(value);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (!value) {
+        setAssetErrors((current) => ({ ...current, dueDate: '' }));
+        return;
+      }
 
-    setSearchError(attemptedInvalid || !isValidAssetSearchQuery(nextValue) ? ASSET_SEARCH_ERROR : '');
+      selectedDueDate.setHours(0, 0, 0, 0);
+      if (selectedDueDate >= today) {
+        setAssetErrors((current) => ({ ...current, dueDate: '' }));
+      }
+    }
   };
 
   const selectEmployee = (option) => {
@@ -470,62 +453,49 @@ function Assets() {
 
   const handleAddAsset = (event) => {
     event.preventDefault();
-    const todayValue = getTodayInputValue();
-    const nextErrors = {};
 
-    const rawAssetName = String(assetForm.assetName || '').trim();
-    const rawCategory = String(assetForm.category || '').trim();
-    const rawCondition = String(assetForm.condition || '').trim();
-    const rawLocation = String(assetForm.location || '').trim();
-    const rawAssignedQuery = String(assignedEmployeeQuery || '').trim();
-
-    const assetName = normalizeAssetTextInput(rawAssetName).trim();
-    const category = normalizeAssetTextInput(rawCategory).trim();
-    const condition = normalizeAssetTextInput(rawCondition).trim();
-    const location = normalizeAssetTextInput(rawLocation).trim();
-    const assignedQuery = normalizeAssetTextInput(rawAssignedQuery).trim();
-
-    if (!rawAssetName) {
-      nextErrors.assetName = 'Asset name is required.';
-    } else if (!isValidAssetTextInput(rawAssetName)) {
-      nextErrors.assetName = ASSET_TEXT_INPUT_ERROR;
-    }
-
-    if (rawCategory && !isValidAssetTextInput(rawCategory)) {
-      nextErrors.category = ASSET_TEXT_INPUT_ERROR;
-    }
-
-    if (rawCondition && !isValidAssetTextInput(rawCondition)) {
-      nextErrors.condition = ASSET_TEXT_INPUT_ERROR;
-    }
-
-    if (rawLocation && !isValidAssetTextInput(rawLocation)) {
-      nextErrors.location = ASSET_TEXT_INPUT_ERROR;
-    }
-
-    if (rawAssignedQuery && !isValidAssetTextInput(rawAssignedQuery)) {
-      nextErrors.assignedTo = ASSET_TEXT_INPUT_ERROR;
-    }
-
-    if (rawAssetName !== assetName) {
-      nextErrors.assetName = ASSET_TEXT_INPUT_ERROR;
-    }
-
-    if (!assetName) {
-      nextErrors.assetName = nextErrors.assetName || 'Asset name is required.';
-    }
-
-    if (assetForm.dueDate && assetForm.dueDate < todayValue) {
-      nextErrors.dueDate = 'Due Date cannot be in the past.';
-    }
-
-    if (Object.keys(nextErrors).length > 0) {
-      setAssetErrors(nextErrors);
-      setAssetMessage('Please correct the highlighted fields before saving.');
+    const name = assetForm.assetName.trim();
+    if (!name) {
+      setAssetErrors((current) => ({ ...current, assetName: 'Asset Name is required.' }));
       return;
     }
 
-    const name = assetName;
+    const today = getTodayInputValue();
+    if (assetForm.currentDate !== today) {
+      setAssetErrors((current) => ({ ...current, currentDate: 'Current Date must be today\'s date.' }));
+      return;
+    }
+
+    if (!/[A-Za-z]/.test(name)) {
+      setAssetErrors((current) => ({ ...current, assetName: 'Enter a valid Asset Name.' }));
+      return;
+    }
+
+    const category = assetForm.category.trim();
+    const categoryRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
+    if (!category) {
+      setAssetErrors((current) => ({ ...current, category: 'Category is required.' }));
+      return;
+    }
+
+    if (!categoryRegex.test(category)) {
+      setAssetErrors((current) => ({ ...current, category: 'Enter a valid Category.' }));
+      return;
+    }
+
+    if (assetForm.dueDate) {
+      const selectedDueDate = new Date(assetForm.dueDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      selectedDueDate.setHours(0, 0, 0, 0);
+      if (selectedDueDate < today) {
+        setAssetErrors((current) => ({
+          ...current,
+          dueDate: 'Due Date cannot be earlier than today.',
+        }));
+        return;
+      }
+    }
 
     const rawEmployeeQuery = assignedEmployeeQuery.trim();
     const selectedEmployee = employeeLookup.get(normalizeLookupValue(assetForm.assignedTo))
@@ -542,18 +512,18 @@ function Assets() {
       id: assetId,
       assetCode: assetId,
       assetName: name,
-      category: category || 'Other',
+      category,
       brand: '',
       model: '',
       serialNo: '',
       purchaseDate: '',
-      currentDate: isAssignedAsset ? getTodayInputValue() : (assetForm.currentDate || ''),
+      currentDate: today,
       dueDate: assetForm.dueDate || '',
       status: assetForm.status,
       assignedTo,
       assignedToEmployeeId: enteredEmployeeId,
-      condition: condition || 'Good',
-      location: location || 'Store',
+      condition: assetForm.condition.trim() || 'Good',
+      location: assetForm.location.trim() || 'Store',
     };
 
     console.info(isEditingAsset ? '[Assets] update payload' : '[Assets] create payload', {
@@ -593,6 +563,7 @@ function Assets() {
           currentDate: getTodayInputValue(),
           dueDate: '',
         });
+        setAssetErrors({});
         setAssignedEmployeeQuery('');
         setIsEmployeePickerOpen(false);
         setEditingAssetId('');
@@ -773,7 +744,7 @@ function Assets() {
   ];
 
   const filteredAssets = useMemo(() => {
-    const query = normalizeAssetIdSearchText(searchText);
+    const query = searchText.trim().toLowerCase();
     let rows = scopedAssets;
 
     if (assetView === 'assigned') {
@@ -784,14 +755,18 @@ function Assets() {
       rows = rows.filter((asset) => asset.status === 'Available');
     }
 
-    if (!query || !isValidAssetSearchQuery(searchText)) {
+    if (!query) {
       return rows;
     }
 
     return rows.filter((asset) => {
-      const assetId = normalizeAssetIdSearchText(asset.id || asset.assetCode || '');
-      const assetName = normalizeAssetIdSearchText(asset.assetName || '');
-      return assetId.includes(query) || assetName.includes(query);
+      const employeeId = String(asset.assignedToEmployeeId || '').toLowerCase();
+      const assignedTo = String(asset.assignedTo || '').toLowerCase();
+      const employeeName = asset.assignedToEmployeeId
+        ? (employeeLookup.get(String(asset.assignedToEmployeeId).toLowerCase())?.employeeName || '')
+        : (employeeLookup.get(String(asset.assignedTo).toLowerCase())?.employeeName || '');
+      const assetName = String(asset.assetName || '').toLowerCase();
+      return assetName.includes(query) || assignedTo.includes(query) || employeeId.includes(query) || String(employeeName || '').toLowerCase().includes(query);
     });
   }, [assetView, scopedAssets, searchText]);
 
@@ -867,27 +842,25 @@ function Assets() {
               <span>Asset Name</span>
               <input
                 value={assetForm.assetName}
-                onChange={(event) => updateAssetTextField('assetName', event.target.value)}
+                onChange={(event) => updateAssetForm('assetName', event.target.value)}
                 placeholder="e.g. Dell Latitude 5440"
                 aria-invalid={Boolean(assetErrors.assetName)}
-                aria-describedby={assetErrors.assetName ? 'asset-name-error' : undefined}
               />
-              {assetErrors.assetName && <small id="asset-name-error" className="asset-field-error">{assetErrors.assetName}</small>}
+              {assetErrors.assetName && <small className="field-error">{assetErrors.assetName}</small>}
             </label>
             <label>
               <span>Category</span>
               <input
                 value={assetForm.category}
-                onChange={(event) => updateAssetTextField('category', event.target.value)}
+                onChange={(event) => updateAssetForm('category', event.target.value)}
                 placeholder="Laptop, Monitor, Phone..."
                 aria-invalid={Boolean(assetErrors.category)}
-                aria-describedby={assetErrors.category ? 'asset-category-error' : undefined}
               />
-              {assetErrors.category && <small id="asset-category-error" className="asset-field-error">{assetErrors.category}</small>}
+              {assetErrors.category && <small className="field-error">{assetErrors.category}</small>}
             </label>
             <label>
               <span>Current Date</span>
-              <input type="date" value={assetForm.currentDate} onChange={(event) => updateAssetForm('currentDate', event.target.value)} />
+              <input type="date" value={assetForm.currentDate} min={getTodayInputValue()} max={getTodayInputValue()} readOnly disabled />
             </label>
             <label>
               <span>Due Date</span>
@@ -897,9 +870,8 @@ function Assets() {
                 value={assetForm.dueDate}
                 onChange={(event) => updateAssetForm('dueDate', event.target.value)}
                 aria-invalid={Boolean(assetErrors.dueDate)}
-                aria-describedby={assetErrors.dueDate ? 'asset-due-date-error' : undefined}
               />
-              {assetErrors.dueDate && <small id="asset-due-date-error" className="asset-field-error">{assetErrors.dueDate}</small>}
+              {assetErrors.dueDate && <small className="field-error">{assetErrors.dueDate}</small>}
             </label>
             <label>
               <span>Status</span>
@@ -918,22 +890,14 @@ function Assets() {
                   type="text"
                   value={assignedEmployeeQuery}
                   onChange={(event) => {
-                    const normalized = normalizeAssetTextInput(event.target.value);
-                    setAssignedEmployeeQuery(normalized);
-                    setAssetErrors((current) => ({
-                      ...current,
-                      assignedTo: String(event.target.value || '') !== normalized ? ASSET_TEXT_INPUT_ERROR : '',
-                    }));
+                    setAssignedEmployeeQuery(event.target.value);
                     updateAssetForm('assignedTo', '');
                     setIsEmployeePickerOpen(true);
                   }}
                   onFocus={() => setIsEmployeePickerOpen(true)}
                   onBlur={() => window.setTimeout(() => setIsEmployeePickerOpen(false), 120)}
                   placeholder="Search employee name or ID"
-                  aria-invalid={Boolean(assetErrors.assignedTo)}
-                  aria-describedby={assetErrors.assignedTo ? 'asset-assigned-error' : undefined}
                 />
-                {assetErrors.assignedTo && <small id="asset-assigned-error" className="asset-field-error">{assetErrors.assignedTo}</small>}
                 {isEmployeePickerOpen && filteredEmployeeOptions.length > 0 && (
                   <div className="asset-picker-menu" role="listbox" aria-label="Employee search results">
                     {filteredEmployeeOptions.map((option) => (
@@ -961,25 +925,11 @@ function Assets() {
             </label>
             <label>
               <span>Condition</span>
-              <input
-                value={assetForm.condition}
-                onChange={(event) => updateAssetTextField('condition', event.target.value)}
-                placeholder="Good, New, Damaged..."
-                aria-invalid={Boolean(assetErrors.condition)}
-                aria-describedby={assetErrors.condition ? 'asset-condition-error' : undefined}
-              />
-              {assetErrors.condition && <small id="asset-condition-error" className="asset-field-error">{assetErrors.condition}</small>}
+              <input value={assetForm.condition} onChange={(event) => updateAssetForm('condition', event.target.value)} placeholder="Good, New, Damaged..." />
             </label>
             <label>
               <span>Location</span>
-              <input
-                value={assetForm.location}
-                onChange={(event) => updateAssetTextField('location', event.target.value)}
-                placeholder="Store, Office, Remote..."
-                aria-invalid={Boolean(assetErrors.location)}
-                aria-describedby={assetErrors.location ? 'asset-location-error' : undefined}
-              />
-              {assetErrors.location && <small id="asset-location-error" className="asset-field-error">{assetErrors.location}</small>}
+              <input value={assetForm.location} onChange={(event) => updateAssetForm('location', event.target.value)} placeholder="Store, Office, Remote..." />
             </label>
             <div className="notification-actions profile-form-actions asset-create-actions">
               <button type="button" onClick={() => {
@@ -993,11 +943,11 @@ function Assets() {
                   currentDate: getTodayInputValue(),
                   dueDate: '',
                 });
+                setAssetErrors({});
                 setAssignedEmployeeQuery('');
                 setIsEmployeePickerOpen(false);
                 setEditingAssetId('');
                 setAssetMessage('');
-                setAssetErrors({});
               }}>
                 Reset
               </button>
@@ -1007,21 +957,16 @@ function Assets() {
         )}
         {assetMessage && <p className="notification-empty">{assetMessage}</p>}
         <div className="page-toolbar compact asset-search-toolbar">
-          <label className={`toolbar-search asset-search-field${searchError ? ' is-invalid' : ''}`}>
+          <label className="toolbar-search asset-search-field">
             <i className="ri-search-line" aria-hidden="true" />
             <input
               type="search"
               value={searchText}
-              onChange={(event) => setSearchText(sanitizeAssetSearchInput(event.target.value))}
-              placeholder="Search by asset ID or asset..."
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search by asset name or employee ID..."
             />
           </label>
         </div>
-        {searchError && (
-          <p id="asset-search-error" className="asset-search-error" role="alert">
-            {searchError}
-          </p>
-        )}
         {!isLoading && !loadError && assets.length === 0 ? (
           <p className="notification-empty">No asset records found.</p>
         ) : (
@@ -2285,18 +2230,6 @@ function getNextAssetCode(assets) {
   }, 100);
 
   return `AST-${String(highest + 1)}`;
-}
-
-function sanitizeAssetSearchInput(value) {
-  return String(value || '').replace(/[^a-zA-Z0-9-]/g, '');
-}
-
-function normalizeAssetIdSearchText(value) {
-  return String(value || '')
-    .replace(/[^a-zA-Z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .trim()
-    .toLowerCase();
 }
 
 function isAdminEmployee(employee) {

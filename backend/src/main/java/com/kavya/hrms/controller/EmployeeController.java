@@ -21,6 +21,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.time.LocalDate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -43,6 +46,14 @@ import org.springframework.web.server.ResponseStatusException;
 @SuppressWarnings("all")
 public class EmployeeController {
   private static final String DUPLICATE_EMPLOYEE_MESSAGE = "This employee already exists with the same Employee ID, Email or Mobile Number.";
+  private static final Pattern NAME_PATTERN = Pattern.compile("^[A-Za-z]+(?:[ '-][A-Za-z]+)*$");
+  private static final Pattern GRADE_PATTERN = Pattern.compile("^[A-Za-z]+$");
+  private static final Pattern NATIONALITY_PATTERN = Pattern.compile("^[A-Za-z]+(?:[ -][A-Za-z]+)*$");
+  private static final Pattern QUALIFICATION_PATTERN = Pattern.compile("^(?=.*[A-Za-z])[A-Za-z0-9 .()+/-]+$");
+  private static final Pattern WORKING_LOCATION_PATTERN = Pattern.compile("^[A-Za-z]+(?:[ -][A-Za-z]+)*$");
+  private static final Pattern ADDRESS_LINE_PATTERN = Pattern.compile("^(?=.*[A-Za-z0-9])[A-Za-z0-9 ,.'()/-]+$");
+  private static final Pattern CITY_STATE_COUNTRY_PATTERN = Pattern.compile("^[A-Za-z]+(?:[ '-][A-Za-z]+)*$");
+  private static final Pattern EMPLOYMENT_BACKGROUND_PATTERN = Pattern.compile("^(?=.*[A-Za-z])[A-Za-z0-9 .,&()'/\\-]+$");
   private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
       "image/png",
       "image/jpeg",
@@ -78,6 +89,8 @@ public class EmployeeController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     Employee normalized = Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null");
+    validateEmployeeProfile(normalized);
+    validateEmployeeDetails(normalized);
     ensureNoDuplicateEmployee(normalized, employeeRepository.findAll(), null);
     Employee saved = employeeRepository.save(normalized);
     resetEmployeeLoginCredentials(saved);
@@ -112,15 +125,21 @@ public class EmployeeController {
     List<Employee> saved = employeeRepository.saveAll(Objects.requireNonNull(normalizedEmployees));
     syncCredentialEmailsForBulkSave(saved, existingByKey, shouldSendCredentialUpdates(sendCredentialUpdates), credentialUpdateEmployeeId);
     if (existingCount > 0) {
-      notificationService.notifyRoles(
-          NotificationAudience.operationalRecipients(accessRole),
-          "Employee records refreshed",
-          "Employee profiles were updated in bulk.",
-          "employee",
-          "bulk",
-          accessRole,
-          "System",
-          userId);
+      CompletableFuture.runAsync(() -> {
+        try {
+          notificationService.notifyRoles(
+              NotificationAudience.operationalRecipients(accessRole),
+              "Employee records refreshed",
+              "Employee profiles were updated in bulk.",
+              "employee",
+              "bulk",
+              accessRole,
+              "System",
+              userId);
+        } catch (Exception ignored) {
+          // Keep the bulk save response fast even if notifications fail.
+        }
+      });
     }
     return saved;
   }
@@ -289,6 +308,8 @@ public class EmployeeController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     employee.setEmployeeId(employeeId);
     Employee normalized = Objects.requireNonNull(normalizeEmployeeIdentity(employee), "employee must not be null");
+    validateEmployeeProfile(normalized);
+    validateEmployeeDetails(normalized);
     ensureNoDuplicateEmployee(normalized, employeeRepository.findAll(), normalizeKey(employeeId));
     Employee saved = employeeRepository.save(normalized);
     resetEmployeeLoginCredentials(saved);
@@ -458,6 +479,90 @@ public class EmployeeController {
       employee.setId(identity);
     }
     return employee;
+  }
+
+  private void validateEmployeeProfile(Employee employee) {
+    if (employee == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Employee profile is required.");
+    }
+
+    validateRequiredName(employee.getDisplayName(), "Display Name is required.", "Display Name must contain only alphabets.");
+    validateOptionalText(employee.getJobTitle(), NAME_PATTERN, "Enter a valid Job Title.");
+    validateRequiredName(employee.getFirstName(), "First Name is required.", "First Name must contain only alphabets.");
+    validateRequiredName(employee.getMiddleName(), "Middle Name is required.", "Middle Name must contain only alphabets.");
+    validateRequiredName(employee.getLastName(), "Last Name is required.", "Last Name must contain only alphabets.");
+    validateRequiredText(employee.getNationality(), NATIONALITY_PATTERN, "Nationality is required.", "Enter a valid Nationality.");
+    validateRequiredText(employee.getHighestQualification(), QUALIFICATION_PATTERN, "Highest Qualification is required.", "Enter a valid Highest Qualification.");
+    validateOptionalText(employee.getGrade(), GRADE_PATTERN, "Enter a valid Grade.");
+    validatePastDate(employee.getDateOfBirth(), "Date of Birth is required.", "Date of Birth must be earlier than today.");
+  }
+
+  private void validateRequiredName(String value, String requiredMessage, String invalidMessage) {
+    String normalized = normalizeValue(value);
+    if (normalized.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, requiredMessage);
+    }
+
+    if (!NAME_PATTERN.matcher(normalized).matches()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalidMessage);
+    }
+  }
+
+  private void validateRequiredText(String value, Pattern pattern, String requiredMessage, String invalidMessage) {
+    String normalized = normalizeValue(value);
+    if (normalized.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, requiredMessage);
+    }
+
+    if (!pattern.matcher(normalized).matches()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalidMessage);
+    }
+  }
+
+  private void validateEmployeeDetails(Employee employee) {
+    validateRequiredText(employee.getWorkingLocation(), WORKING_LOCATION_PATTERN, "Working Location is required.", "Enter a valid Working Location.");
+    validateRequiredText(employee.getPresentAddressLine1(), ADDRESS_LINE_PATTERN, "Present Address 1 is required.", "Please enter a valid address.");
+    validateOptionalText(employee.getPresentAddressLine2(), ADDRESS_LINE_PATTERN, "Please enter a valid address.");
+    validateRequiredText(employee.getPresentCityDistrict(), CITY_STATE_COUNTRY_PATTERN, "Present City is required.", "Please enter a valid city.");
+    validateRequiredText(employee.getPresentState(), CITY_STATE_COUNTRY_PATTERN, "Present State is required.", "Please enter a valid state.");
+    validateRequiredText(employee.getPresentCountry(), CITY_STATE_COUNTRY_PATTERN, "Present Country is required.", "Please enter a valid country.");
+    validateRequiredText(employee.getPermanentAddressLine1(), ADDRESS_LINE_PATTERN, "Permanent Address 1 is required.", "Please enter a valid address.");
+    validateOptionalText(employee.getPermanentAddressLine2(), ADDRESS_LINE_PATTERN, "Please enter a valid address.");
+    validateRequiredText(employee.getPermanentCityDistrict(), CITY_STATE_COUNTRY_PATTERN, "Permanent City is required.", "Please enter a valid city.");
+    validateRequiredText(employee.getPermanentState(), CITY_STATE_COUNTRY_PATTERN, "Permanent State is required.", "Please enter a valid state.");
+    validateRequiredText(employee.getPermanentCountry(), CITY_STATE_COUNTRY_PATTERN, "Permanent Country is required.", "Please enter a valid country.");
+    validateOptionalText(employee.getEmploymentBackground(), EMPLOYMENT_BACKGROUND_PATTERN, "Enter a valid Employment Background.");
+    validateOptionalText(employee.getPermanentAddressLine3(), ADDRESS_LINE_PATTERN, "Please enter a valid address.");
+  }
+
+  private void validatePastDate(String value, String requiredMessage, String invalidMessage) {
+    String normalized = normalizeValue(value);
+    if (normalized.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, requiredMessage);
+    }
+
+    try {
+      LocalDate selectedDate = LocalDate.parse(normalized);
+      if (!selectedDate.isBefore(LocalDate.now())) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalidMessage);
+      }
+    } catch (RuntimeException ex) {
+      if (ex instanceof ResponseStatusException) {
+        throw ex;
+      }
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalidMessage);
+    }
+  }
+
+  private void validateOptionalText(String value, Pattern pattern, String invalidMessage) {
+    String normalized = normalizeValue(value);
+    if (normalized.isBlank()) {
+      return;
+    }
+
+    if (!pattern.matcher(normalized).matches()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalidMessage);
+    }
   }
 
   private boolean hasEmployeeProfileChanged(Employee current, Employee next) {

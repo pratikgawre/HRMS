@@ -23,9 +23,6 @@ import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { people as fallbackPeople, projects as fallbackProjects } from '../data/dummyData.js';
 
-const TEAM_ATTENDANCE_SEARCH_ERROR = 'Search should contain letters and spaces only.';
-const TEAM_ATTENDANCE_SEARCH_PATTERN = /^[A-Za-z\s]*$/;
-
 function TeamAttendanceToast({ toast, onClose }) {
   if (!toast) {
     return null;
@@ -64,8 +61,20 @@ function TeamAttendanceToast({ toast, onClose }) {
   return createPortal(toastMarkup, portalRoot);
 }
 
-function sanitizeAttendanceSearchInput(value) {
-  return String(value || '').replace(/[^A-Za-z\s]/g, '').replace(/\s{2,}/g, ' ');
+const attendanceEmployeeSearchRegex = /^[A-Za-z0-9]+(?:[ _'-][A-Za-z0-9]+)*$/;
+
+function validateAttendanceEmployeeSearch(value) {
+  const normalizedValue = String(value || '').trim();
+
+  if (!normalizedValue) {
+    return '';
+  }
+
+  if (!attendanceEmployeeSearchRegex.test(normalizedValue)) {
+    return 'Please enter a valid employee name or ID.';
+  }
+
+  return '';
 }
 
 function TeamAttendance() {
@@ -411,7 +420,7 @@ function TeamAttendance() {
         const matchesStatus = status === 'All'
           || String(row.status || '').trim().toLowerCase() === String(status).trim().toLowerCase();
         const matchesRange = isRowWithinSelectedRange(row, dateRange, selectedDate, selectedMonth);
-        const query = searchText.trim().toLowerCase();
+        const query = searchError ? '' : searchText.trim().toLowerCase();
         const isPageLevelQuery = query === 'team attendance' || query === 'team-attendance';
         const matchesSearch = !query
           || String(row.employee || '').toLowerCase().includes(query)
@@ -424,10 +433,10 @@ function TeamAttendance() {
         employee: row.employee || row.employeeName || row.name || 'Employee',
         employeeId: row.employeeId || row.employeeCode || '-',
       }))
-  ), [dateRange, projectManagerPeriodRows, projectManagerTodayRows, role, searchText, selectedDate, selectedDateTeamRows, selectedMonth, status, teamRows]);
+  ), [dateRange, projectManagerPeriodRows, projectManagerTodayRows, role, searchError, searchText, selectedDate, selectedDateTeamRows, selectedMonth, status, teamRows]);
 
   const displayedRows = useMemo(() => {
-    const query = searchText.trim().toLowerCase();
+    const query = searchError ? '' : searchText.trim().toLowerCase();
     const isPageLevelQuery = query === 'team attendance' || query === 'team-attendance';
 
     if (summaryFocus === 'team') {
@@ -440,18 +449,7 @@ function TeamAttendance() {
     }
 
     return rows;
-  }, [rows, searchText, selectedDateTeamRows, summaryFocus]);
-  const handleSearchChange = (value) => {
-    const rawValue = String(value || '');
-    const nextValue = sanitizeAttendanceSearchInput(rawValue);
-    setSearchText(nextValue);
-    setSearchError(TEAM_ATTENDANCE_SEARCH_PATTERN.test(rawValue) ? '' : TEAM_ATTENDANCE_SEARCH_ERROR);
-  };
-  const handleSearchKeyDown = (event) => {
-    if (event.key === 'Enter' && searchError) {
-      event.preventDefault();
-    }
-  };
+  }, [rows, searchError, searchText, selectedDateTeamRows, summaryFocus]);
   const summaryText = role === 'employee'
     ? 'This page is for managers and team leads. Use My Attendance for your own record.'
     : 'Review your team attendance records without mixing them with your personal check-in or check-out.';
@@ -566,6 +564,21 @@ function TeamAttendance() {
       text: 'Excel sheet download started.',
     });
   }
+
+  const handleAttendanceSearchChange = (event) => {
+    const nextValue = event.target.value;
+    setSearchText(nextValue);
+    setSearchError(validateAttendanceEmployeeSearch(nextValue));
+  };
+
+  const handleAttendanceSearchKeyDown = (event) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    event.preventDefault();
+    setSearchError(validateAttendanceEmployeeSearch(searchText));
+  };
   function openRecommendDialog(row) {
     setEditingRow(row);
     setCorrectForm({
@@ -740,16 +753,22 @@ function TeamAttendance() {
               </label>
             )}
 
-            <label className="toolbar-search" style={{ minWidth: '260px' }}>
-              <i className="ri-search-line" aria-hidden="true" />
-              <input
-                type="search"
-                value={searchText}
-                onChange={(event) => setSearchText(sanitizeAttendanceSearchInput(event.target.value))}
-                placeholder="Search employee name or ID"
-                aria-label="Search employee name or ID"
-              />
-            </label>
+            <div className="attendance-search-validation-wrapper">
+              <label className="toolbar-search" style={{ minWidth: '260px' }}>
+                <i className="ri-search-line" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={searchText}
+                  onChange={handleAttendanceSearchChange}
+                  onKeyDown={handleAttendanceSearchKeyDown}
+                  placeholder="Search employee name or ID"
+                  aria-label="Search employee name or ID"
+                  aria-invalid={Boolean(searchError)}
+                  aria-describedby={searchError ? 'attendance-search-error' : undefined}
+                />
+              </label>
+              {searchError ? <p id="attendance-search-error" className="field-error attendance-search-error" role="alert">{searchError}</p> : null}
+            </div>
 
             <select value={status} onChange={(event) => {
               setStatus(event.target.value);

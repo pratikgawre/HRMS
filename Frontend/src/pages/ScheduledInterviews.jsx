@@ -1064,13 +1064,18 @@ function validateCandidate(payload, rows = [], editingId = '') {
 
   const email = String(payload.email || '').trim();
   const phone = String(payload.phone || '').trim();
-  const textOnlyFields = [
-    ['position', 'Position applied'],
-    ['department', 'Department'],
-    ['currentCompany', 'Current company'],
-    ['interviewer', 'Interviewer name'],
-    ['createdBy', 'Created by'],
-  ];
+  const candidateName = String(payload.candidateName || '').trim();
+  const position = String(payload.position || '').trim();
+  const department = String(payload.department || '').trim();
+  const currentCompany = String(payload.currentCompany || '').trim();
+  const experience = String(payload.experience || '').trim();
+  const candidateNameRegex = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
+  const positionRegex = /^(?=.*[A-Za-z])[A-Za-z +/()-]+$/;
+  const departmentRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
+  const currentCompanyRegex = /^(?=.*[A-Za-z])[A-Za-z0-9 .,&()'-]+$/;
+  const interviewerNameRegex = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
+  const interviewLocationRegex = /^(?=.*[A-Za-z])[A-Za-z0-9 ,.()/-]+$/;
+  const experienceRegex = /^\d+(?:\.\d+)?$/;
 
   if (email && !/^[^\s@]+@gmail\.com$/i.test(email)) {
     errors.email = 'Use a valid @gmail.com address.';
@@ -1082,11 +1087,68 @@ function validateCandidate(payload, rows = [], editingId = '') {
     errors.phone = 'Mobile number must be exactly 10 digits.';
   }
 
-  textOnlyFields.forEach(([field, label]) => {
-    if (!errors[field] && hasNumber(payload[field])) {
-      errors[field] = `${label} should contain text only.`;
+  if (!errors.candidateName) {
+    if (!candidateName) {
+      errors.candidateName = 'Candidate Name is required.';
+    } else if (!candidateNameRegex.test(candidateName)) {
+      errors.candidateName = 'Candidate Name must contain only alphabets.';
     }
-  });
+  }
+
+  if (!errors.position) {
+    if (!position) {
+      errors.position = 'Position Applied is required.';
+    } else if (!positionRegex.test(position)) {
+      errors.position = 'Enter a valid Position Applied.';
+    }
+  }
+
+  if (!errors.department) {
+    if (!department) {
+      errors.department = 'Department is required.';
+    } else if (!departmentRegex.test(department)) {
+      errors.department = 'Enter a valid Department.';
+    }
+  }
+
+  if (!errors.currentCompany && currentCompany && !currentCompanyRegex.test(currentCompany)) {
+    errors.currentCompany = 'Enter a valid Current Company.';
+  }
+
+  if (!errors.interviewer) {
+    const interviewer = String(payload.interviewer || '').trim();
+    if (!interviewer) {
+      errors.interviewer = 'Interviewer Name is required.';
+    } else if (!interviewerNameRegex.test(interviewer)) {
+      errors.interviewer = 'Interviewer Name must contain only alphabets.';
+    }
+  }
+
+  if (!errors.location) {
+    const location = String(payload.location || '').trim();
+    if (!location) {
+      errors.location = 'Interview Location is required.';
+    } else if (!interviewLocationRegex.test(location)) {
+      errors.location = 'Please enter a valid Interview Location.';
+    }
+  }
+
+  if (!errors.createdBy) {
+    const createdBy = String(payload.createdBy || '').trim();
+    if (!createdBy) {
+      errors.createdBy = 'Created By is required.';
+    } else if (!interviewerNameRegex.test(createdBy)) {
+      errors.createdBy = 'Please enter a valid Created By name.';
+    }
+  }
+
+  if (!errors.experience) {
+    if (!experience) {
+      errors.experience = 'Years of Experience is required.';
+    } else if (!experienceRegex.test(experience)) {
+      errors.experience = 'Enter valid Years of Experience.';
+    }
+  }
 
   if (!errors.currentCTC && !/^\d+$/.test(String(payload.currentCTC || '').trim())) {
     errors.currentCTC = 'Current CTC should contain numbers only.';

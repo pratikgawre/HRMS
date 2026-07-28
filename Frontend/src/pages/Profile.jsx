@@ -108,6 +108,7 @@ function Profile() {
         }
   ), [accessRole, currentAccessUser, identity.avatar, identity.email, identity.employee, identity.employeeId, identity.profilePicture, matchedEmployee]);
   const [form, setForm] = useState(() => createProfileForm(employee));
+  const [profileErrors, setProfileErrors] = useState({});
   const [statusMessage, setStatusMessage] = useState('Update your personal details, contact info, photo, and password here.');
   const [popup, setPopup] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -120,9 +121,6 @@ function Profile() {
   const [twoFactorQr, setTwoFactorQr] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({});
-  const [personalValidationTouched, setPersonalValidationTouched] = useState({});
-  const [personalValidationAttempted, setPersonalValidationAttempted] = useState(false);
   const [storedProfileSnapshot, setStoredProfileSnapshot] = useState(() => buildStoredProfileSnapshot(employee, form, canManagePackageAmount));
   const toastTimerRef = useRef(null);
   const photoInputRef = useRef(null);
@@ -264,16 +262,35 @@ function Profile() {
   );
 
   const updateField = (field, value) => {
-    setForm((current) => ({ ...current, [field]: sanitizeProfileTextField(field, value) }));
+    setForm((current) => ({ ...current, [field]: value }));
+    if (PROFILE_PERSONAL_FIELDS.includes(field)) {
+      setProfileErrors((current) => {
+        if (!current[field]) {
+          return current;
+        }
+
+        const nextErrors = { ...current };
+        delete nextErrors[field];
+        return nextErrors;
+      });
+    }
   };
 
   const updateAddressField = (field, value) => {
     setForm((current) => {
-      const next = { ...current, [field]: sanitizeProfileTextField(field, value) };
+      const next = { ...current, [field]: value };
       if (current.sameAsAbove && PRESENT_TO_PERMANENT_ADDRESS_MAP[field]) {
-        next[PRESENT_TO_PERMANENT_ADDRESS_MAP[field]] = sanitizeProfileTextField(PRESENT_TO_PERMANENT_ADDRESS_MAP[field], value);
+        next[PRESENT_TO_PERMANENT_ADDRESS_MAP[field]] = value;
       }
       return next;
+    });
+    setProfileErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+      const nextErrors = { ...current };
+      delete nextErrors[field];
+      return nextErrors;
     });
   };
 
@@ -459,25 +476,33 @@ function Profile() {
     }
 
     const section = event.nativeEvent?.submitter?.dataset?.section || 'all';
+    if (section === 'personal') {
+      const nextErrors = validateProfilePersonalDetails(form);
+      setProfileErrors(nextErrors);
+      if (Object.keys(nextErrors).length > 0) {
+        const message = Object.values(nextErrors)[0];
+        setStatusMessage(message);
+        showPopup(message, 'error');
+        return;
+      }
+    }
+
+    if (section === 'address') {
+      const nextErrors = validateProfileAddressDetails(form);
+      setProfileErrors((current) => ({ ...current, ...nextErrors }));
+      if (Object.keys(nextErrors).length > 0) {
+        const message = Object.values(nextErrors)[0];
+        setStatusMessage(message);
+        showPopup(message, 'error');
+        return;
+      }
+    }
+
     const validationError = validateProfileSection(form, section, canManagePackageAmount);
     if (validationError) {
-      if (section === 'personal') {
-        setPersonalValidationAttempted(true);
-      }
-      if (section === 'personal') {
-        setValidationErrors(validatePersonalDetails(form));
-      } else {
-        setValidationErrors({});
-      }
       setStatusMessage(validationError);
       showPopup(validationError, 'error');
       return;
-    }
-
-    if (section === 'personal' || section === 'all') {
-      setValidationErrors({});
-      setPersonalValidationAttempted(false);
-      setPersonalValidationTouched({});
     }
 
     if (form.newPassword && form.newPassword !== form.confirmPassword) {
@@ -571,6 +596,7 @@ function Profile() {
       setSessionValue('kavyaEmployeePhoto', nextEmployee.profilePicture || '');
       setSessionValue('kavyaUserEmail', nextEmployee.email);
       setSessionValue('kavyaAccessRole', nextEmployee.accessRole || accessRole);
+      setProfileErrors({});
 
       setForm((current) => ({
         ...current,
@@ -758,11 +784,27 @@ function Profile() {
             <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
               <label>
                 <span>Display Name</span>
-                <input value={form.displayName} onChange={(event) => updateField('displayName', event.target.value)} />
+                <input
+                  value={form.displayName}
+                  onChange={(event) => updateField('displayName', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'displayName', form.displayName))}
+                  aria-invalid={Boolean(profileErrors.displayName)}
+                  aria-describedby={profileErrors.displayName ? 'profile-display-name-error' : undefined}
+                  className={`form-control${profileErrors.displayName ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.displayName && <span id="profile-display-name-error" className="field-error">{profileErrors.displayName}</span>}
               </label>
               <label>
                 <span>Job Title</span>
-                <input value={form.jobTitle} onChange={(event) => updateField('jobTitle', event.target.value)} />
+                <input
+                  value={form.jobTitle}
+                  onChange={(event) => updateField('jobTitle', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'jobTitle', form.jobTitle))}
+                  aria-invalid={Boolean(profileErrors.jobTitle)}
+                  aria-describedby={profileErrors.jobTitle ? 'profile-job-title-error' : undefined}
+                  className={`form-control${profileErrors.jobTitle ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.jobTitle && <span id="profile-job-title-error" className="field-error">{profileErrors.jobTitle}</span>}
               </label>
               <label>
                 <span>Department</span>
@@ -780,22 +822,40 @@ function Profile() {
               <label>
                 <span>Date of Birth</span>
                 <input
-                  className={validationErrors.dateOfBirth ? 'is-invalid' : ''}
                   type="date"
+                  max={getYesterdayLocalDate()}
                   value={form.dateOfBirth}
-                  onChange={(event) => updatePersonalField('dateOfBirth', event.target.value)}
-                  onBlur={() => handlePersonalFieldBlur('dateOfBirth')}
-                  aria-invalid={Boolean(validationErrors.dateOfBirth)}
+                  onChange={(event) => updateField('dateOfBirth', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'dateOfBirth', form.dateOfBirth))}
+                  aria-invalid={Boolean(profileErrors.dateOfBirth)}
+                  aria-describedby={profileErrors.dateOfBirth ? 'profile-date-of-birth-error' : undefined}
+                  className={`form-control${profileErrors.dateOfBirth ? ' is-invalid' : ''}`}
                 />
-                {validationErrors.dateOfBirth ? <small className="profile-field-error" role="alert">{validationErrors.dateOfBirth}</small> : null}
+                {profileErrors.dateOfBirth && <span id="profile-date-of-birth-error" className="field-error">{profileErrors.dateOfBirth}</span>}
               </label>
               <label>
                 <span>Nationality</span>
-                <input value={form.nationality} onChange={(event) => updateField('nationality', event.target.value)} />
+                <input
+                  value={form.nationality}
+                  onChange={(event) => updateField('nationality', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'nationality', form.nationality))}
+                  aria-invalid={Boolean(profileErrors.nationality)}
+                  aria-describedby={profileErrors.nationality ? 'profile-nationality-error' : undefined}
+                  className={`form-control${profileErrors.nationality ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.nationality && <span id="profile-nationality-error" className="field-error">{profileErrors.nationality}</span>}
               </label>
               <label>
                 <span>Working Location</span>
-                <input value={form.workingLocation} onChange={(event) => updateField('workingLocation', event.target.value)} />
+                <input
+                  value={form.workingLocation}
+                  onChange={(event) => updateField('workingLocation', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'workingLocation', form.workingLocation))}
+                  aria-invalid={Boolean(profileErrors.workingLocation)}
+                  aria-describedby={profileErrors.workingLocation ? 'profile-working-location-error' : undefined}
+                  className={`form-control${profileErrors.workingLocation ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.workingLocation && <span id="profile-working-location-error" className="field-error">{profileErrors.workingLocation}</span>}
               </label>
               <label>
                 <span>Marital Status</span>
@@ -817,7 +877,15 @@ function Profile() {
               </label>
               <label>
                 <span>Highest Qualification</span>
-                <input value={form.highestQualification} onChange={(event) => updateField('highestQualification', event.target.value)} />
+                <input
+                  value={form.highestQualification}
+                  onChange={(event) => updateField('highestQualification', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'highestQualification', form.highestQualification))}
+                  aria-invalid={Boolean(profileErrors.highestQualification)}
+                  aria-describedby={profileErrors.highestQualification ? 'profile-highest-qualification-error' : undefined}
+                  className={`form-control${profileErrors.highestQualification ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.highestQualification && <span id="profile-highest-qualification-error" className="field-error">{profileErrors.highestQualification}</span>}
               </label>
               <label>
                 <span>Employment Type</span>
@@ -838,21 +906,18 @@ function Profile() {
               </label>
               <label>
                 <span>Grade</span>
-                <input value={form.grade} onChange={(event) => updateField('grade', event.target.value)} />
+                <input
+                  value={form.grade}
+                  onChange={(event) => updateField('grade', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'grade', form.grade))}
+                  aria-invalid={Boolean(profileErrors.grade)}
+                  aria-describedby={profileErrors.grade ? 'profile-grade-error' : undefined}
+                  className={`form-control${profileErrors.grade ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.grade && <span id="profile-grade-error" className="field-error">{profileErrors.grade}</span>}
               </label>
               <div className="notification-actions profile-form-actions">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm(createProfileForm(employee));
-                    setValidationErrors({});
-                    setPersonalValidationTouched({});
-                    setPersonalValidationAttempted(false);
-                  }}
-                  disabled={isSaving}
-                >
-                  Reset
-                </button>
+                <button type="button" onClick={() => { setForm(createProfileForm(employee)); setProfileErrors({}); }} disabled={isSaving}>Reset</button>
                 <button type="submit" data-section="personal" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Personal Details'}</button>
               </div>
             </form>
@@ -862,19 +927,51 @@ function Profile() {
             <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
               <label>
                 <span>Present Address 1</span>
-                <input value={form.presentAddressLine1} onChange={(event) => updateAddressField('presentAddressLine1', event.target.value)} />
+                <input
+                  value={form.presentAddressLine1}
+                  onChange={(event) => updateAddressField('presentAddressLine1', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'presentAddressLine1', form.presentAddressLine1))}
+                  aria-invalid={Boolean(profileErrors.presentAddressLine1)}
+                  aria-describedby={profileErrors.presentAddressLine1 ? 'profile-present-address-line1-error' : undefined}
+                  className={`form-control${profileErrors.presentAddressLine1 ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.presentAddressLine1 && <span id="profile-present-address-line1-error" className="field-error">{profileErrors.presentAddressLine1}</span>}
               </label>
               <label>
                 <span>Present Address 2</span>
-                <input value={form.presentAddressLine2} onChange={(event) => updateAddressField('presentAddressLine2', event.target.value)} />
+                <input
+                  value={form.presentAddressLine2}
+                  onChange={(event) => updateAddressField('presentAddressLine2', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'presentAddressLine2', form.presentAddressLine2))}
+                  aria-invalid={Boolean(profileErrors.presentAddressLine2)}
+                  aria-describedby={profileErrors.presentAddressLine2 ? 'profile-present-address-line2-error' : undefined}
+                  className={`form-control${profileErrors.presentAddressLine2 ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.presentAddressLine2 && <span id="profile-present-address-line2-error" className="field-error">{profileErrors.presentAddressLine2}</span>}
               </label>
               <label>
                 <span>Present City</span>
-                <input value={form.presentCityDistrict} onChange={(event) => updateAddressField('presentCityDistrict', event.target.value)} />
+                <input
+                  value={form.presentCityDistrict}
+                  onChange={(event) => updateAddressField('presentCityDistrict', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'presentCityDistrict', form.presentCityDistrict))}
+                  aria-invalid={Boolean(profileErrors.presentCityDistrict)}
+                  aria-describedby={profileErrors.presentCityDistrict ? 'profile-present-city-error' : undefined}
+                  className={`form-control${profileErrors.presentCityDistrict ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.presentCityDistrict && <span id="profile-present-city-error" className="field-error">{profileErrors.presentCityDistrict}</span>}
               </label>
               <label>
                 <span>Present State</span>
-                <input value={form.presentState} onChange={(event) => updateAddressField('presentState', event.target.value)} />
+                <input
+                  value={form.presentState}
+                  onChange={(event) => updateAddressField('presentState', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'presentState', form.presentState))}
+                  aria-invalid={Boolean(profileErrors.presentState)}
+                  aria-describedby={profileErrors.presentState ? 'profile-present-state-error' : undefined}
+                  className={`form-control${profileErrors.presentState ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.presentState && <span id="profile-present-state-error" className="field-error">{profileErrors.presentState}</span>}
               </label>
               <label>
                 <span>Present PIN Code</span>
@@ -882,7 +979,15 @@ function Profile() {
               </label>
               <label>
                 <span>Present Country</span>
-                <input value={form.presentCountry} onChange={(event) => updateAddressField('presentCountry', event.target.value)} />
+                <input
+                  value={form.presentCountry}
+                  onChange={(event) => updateAddressField('presentCountry', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'presentCountry', form.presentCountry))}
+                  aria-invalid={Boolean(profileErrors.presentCountry)}
+                  aria-describedby={profileErrors.presentCountry ? 'profile-present-country-error' : undefined}
+                  className={`form-control${profileErrors.presentCountry ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.presentCountry && <span id="profile-present-country-error" className="field-error">{profileErrors.presentCountry}</span>}
               </label>
               <label className="profile-checkbox-field profile-checkbox-field--wide">
                 <input
@@ -894,19 +999,55 @@ function Profile() {
               </label>
               <label>
                 <span>Permanent Address 1</span>
-                <input value={form.permanentAddressLine1} onChange={(event) => updateField('permanentAddressLine1', event.target.value)} disabled={form.sameAsAbove} />
+                <input
+                  value={form.permanentAddressLine1}
+                  onChange={(event) => updateField('permanentAddressLine1', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'permanentAddressLine1', form.permanentAddressLine1))}
+                  aria-invalid={Boolean(profileErrors.permanentAddressLine1)}
+                  aria-describedby={profileErrors.permanentAddressLine1 ? 'profile-permanent-address-line1-error' : undefined}
+                  className={`form-control${profileErrors.permanentAddressLine1 ? ' is-invalid' : ''}`}
+                  disabled={form.sameAsAbove}
+                />
+                {profileErrors.permanentAddressLine1 && <span id="profile-permanent-address-line1-error" className="field-error">{profileErrors.permanentAddressLine1}</span>}
               </label>
               <label>
                 <span>Permanent Address 2</span>
-                <input value={form.permanentAddressLine2} onChange={(event) => updateField('permanentAddressLine2', event.target.value)} disabled={form.sameAsAbove} />
+                <input
+                  value={form.permanentAddressLine2}
+                  onChange={(event) => updateField('permanentAddressLine2', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'permanentAddressLine2', form.permanentAddressLine2))}
+                  aria-invalid={Boolean(profileErrors.permanentAddressLine2)}
+                  aria-describedby={profileErrors.permanentAddressLine2 ? 'profile-permanent-address-line2-error' : undefined}
+                  className={`form-control${profileErrors.permanentAddressLine2 ? ' is-invalid' : ''}`}
+                  disabled={form.sameAsAbove}
+                />
+                {profileErrors.permanentAddressLine2 && <span id="profile-permanent-address-line2-error" className="field-error">{profileErrors.permanentAddressLine2}</span>}
               </label>
               <label>
                 <span>Permanent City</span>
-                <input value={form.permanentCityDistrict} onChange={(event) => updateField('permanentCityDistrict', event.target.value)} disabled={form.sameAsAbove} />
+                <input
+                  value={form.permanentCityDistrict}
+                  onChange={(event) => updateField('permanentCityDistrict', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'permanentCityDistrict', form.permanentCityDistrict))}
+                  aria-invalid={Boolean(profileErrors.permanentCityDistrict)}
+                  aria-describedby={profileErrors.permanentCityDistrict ? 'profile-permanent-city-error' : undefined}
+                  className={`form-control${profileErrors.permanentCityDistrict ? ' is-invalid' : ''}`}
+                  disabled={form.sameAsAbove}
+                />
+                {profileErrors.permanentCityDistrict && <span id="profile-permanent-city-error" className="field-error">{profileErrors.permanentCityDistrict}</span>}
               </label>
               <label>
                 <span>Permanent State</span>
-                <input value={form.permanentState} onChange={(event) => updateField('permanentState', event.target.value)} disabled={form.sameAsAbove} />
+                <input
+                  value={form.permanentState}
+                  onChange={(event) => updateField('permanentState', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'permanentState', form.permanentState))}
+                  aria-invalid={Boolean(profileErrors.permanentState)}
+                  aria-describedby={profileErrors.permanentState ? 'profile-permanent-state-error' : undefined}
+                  className={`form-control${profileErrors.permanentState ? ' is-invalid' : ''}`}
+                  disabled={form.sameAsAbove}
+                />
+                {profileErrors.permanentState && <span id="profile-permanent-state-error" className="field-error">{profileErrors.permanentState}</span>}
               </label>
               <label>
                 <span>Permanent PIN Code</span>
@@ -914,7 +1055,16 @@ function Profile() {
               </label>
               <label>
                 <span>Permanent Country</span>
-                <input value={form.permanentCountry} onChange={(event) => updateField('permanentCountry', event.target.value)} disabled={form.sameAsAbove} />
+                <input
+                  value={form.permanentCountry}
+                  onChange={(event) => updateField('permanentCountry', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'permanentCountry', form.permanentCountry))}
+                  aria-invalid={Boolean(profileErrors.permanentCountry)}
+                  aria-describedby={profileErrors.permanentCountry ? 'profile-permanent-country-error' : undefined}
+                  className={`form-control${profileErrors.permanentCountry ? ' is-invalid' : ''}`}
+                  disabled={form.sameAsAbove}
+                />
+                {profileErrors.permanentCountry && <span id="profile-permanent-country-error" className="field-error">{profileErrors.permanentCountry}</span>}
               </label>
               <div className="notification-actions profile-form-actions">
                 <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
@@ -1269,6 +1419,171 @@ function createProfileForm(employee) {
   };
 }
 
+const PROFILE_PERSONAL_FIELDS = [
+  'displayName',
+  'jobTitle',
+  'dateOfBirth',
+  'nationality',
+  'workingLocation',
+  'highestQualification',
+  'grade',
+];
+
+function getTodayLocalDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getYesterdayLocalDate() {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+const profileDisplayNameRegex = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
+const profileJobTitleRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
+const profileNationalityRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
+const profileWorkingLocationRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
+const profileQualificationRegex = /^(?=.*[A-Za-z])[A-Za-z0-9 .()+/-]+$/;
+const profileGradeRegex = /^[A-Za-z]+$/;
+const profileAddressLineRegex = /^(?=.*[A-Za-z0-9])[A-Za-z0-9 ,.'()/-]+$/;
+const profileCityStateCountryRegex = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
+
+function validateProfilePersonalDetails(form) {
+  const nextErrors = {};
+  const displayName = String(form.displayName || '').trim();
+  const jobTitle = String(form.jobTitle || '').trim();
+  const dateOfBirth = String(form.dateOfBirth || '').trim();
+  const nationality = String(form.nationality || '').trim();
+  const workingLocation = String(form.workingLocation || '').trim();
+  const highestQualification = String(form.highestQualification || '').trim();
+  const grade = String(form.grade || '').trim();
+
+  if (!displayName) {
+    nextErrors.displayName = 'Display Name is required.';
+  } else if (!profileDisplayNameRegex.test(displayName)) {
+    nextErrors.displayName = 'Display Name must contain only alphabets.';
+  }
+
+  if (!jobTitle) {
+    nextErrors.jobTitle = 'Job Title is required.';
+  } else if (!profileJobTitleRegex.test(jobTitle)) {
+    nextErrors.jobTitle = 'Enter a valid Job Title.';
+  }
+
+  if (!dateOfBirth) {
+    nextErrors.dateOfBirth = 'Date of Birth is required.';
+  } else {
+    const selectedDate = new Date(`${dateOfBirth}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (Number.isNaN(selectedDate.getTime()) || selectedDate >= today) {
+      nextErrors.dateOfBirth = 'Date of Birth must be earlier than today.';
+    }
+  }
+
+  if (nationality && !profileNationalityRegex.test(nationality)) {
+    nextErrors.nationality = 'Enter a valid Nationality.';
+  }
+
+  if (workingLocation && !profileWorkingLocationRegex.test(workingLocation)) {
+    nextErrors.workingLocation = 'Enter a valid Working Location.';
+  }
+
+  if (highestQualification && !profileQualificationRegex.test(highestQualification)) {
+    nextErrors.highestQualification = 'Enter a valid Highest Qualification.';
+  }
+
+  if (grade && !profileGradeRegex.test(grade)) {
+    nextErrors.grade = 'Enter a valid Grade.';
+  }
+
+  return nextErrors;
+}
+
+function validateProfileAddressDetails(form) {
+  const nextErrors = {};
+  const sameAsAbove = Boolean(form.sameAsAbove);
+  const presentAddressLine1 = String(form.presentAddressLine1 || '').trim();
+  const presentAddressLine2 = String(form.presentAddressLine2 || '').trim();
+  const presentCityDistrict = String(form.presentCityDistrict || '').trim();
+  const presentState = String(form.presentState || '').trim();
+  const presentCountry = String(form.presentCountry || '').trim();
+  const permanentAddressLine1 = sameAsAbove ? presentAddressLine1 : String(form.permanentAddressLine1 || '').trim();
+  const permanentAddressLine2 = sameAsAbove ? presentAddressLine2 : String(form.permanentAddressLine2 || '').trim();
+  const permanentCityDistrict = sameAsAbove ? presentCityDistrict : String(form.permanentCityDistrict || '').trim();
+  const permanentState = sameAsAbove ? presentState : String(form.permanentState || '').trim();
+  const permanentCountry = sameAsAbove ? presentCountry : String(form.permanentCountry || '').trim();
+
+  if (!presentAddressLine1) {
+    nextErrors.presentAddressLine1 = 'Present Address 1 is required.';
+  } else if (!profileAddressLineRegex.test(presentAddressLine1)) {
+    nextErrors.presentAddressLine1 = 'Please enter a valid address.';
+  }
+
+  if (presentAddressLine2 && !profileAddressLineRegex.test(presentAddressLine2)) {
+    nextErrors.presentAddressLine2 = 'Please enter a valid address.';
+  }
+
+  if (!presentCityDistrict) {
+    nextErrors.presentCityDistrict = 'Present City is required.';
+  } else if (!profileCityStateCountryRegex.test(presentCityDistrict)) {
+    nextErrors.presentCityDistrict = 'Please enter a valid city.';
+  }
+
+  if (!presentState) {
+    nextErrors.presentState = 'Present State is required.';
+  } else if (!profileCityStateCountryRegex.test(presentState)) {
+    nextErrors.presentState = 'Please enter a valid state.';
+  }
+
+  if (!presentCountry) {
+    nextErrors.presentCountry = 'Present Country is required.';
+  } else if (!profileCityStateCountryRegex.test(presentCountry)) {
+    nextErrors.presentCountry = 'Please enter a valid country.';
+  }
+
+  if (!sameAsAbove) {
+    if (permanentAddressLine1 && !profileAddressLineRegex.test(permanentAddressLine1)) {
+      nextErrors.permanentAddressLine1 = 'Please enter a valid address.';
+    }
+    if (permanentAddressLine2 && !profileAddressLineRegex.test(permanentAddressLine2)) {
+      nextErrors.permanentAddressLine2 = 'Please enter a valid address.';
+    }
+    if (permanentCityDistrict && !profileCityStateCountryRegex.test(permanentCityDistrict)) {
+      nextErrors.permanentCityDistrict = 'Please enter a valid city.';
+    }
+    if (permanentState && !profileCityStateCountryRegex.test(permanentState)) {
+      nextErrors.permanentState = 'Please enter a valid state.';
+    }
+    if (permanentCountry && !profileCityStateCountryRegex.test(permanentCountry)) {
+      nextErrors.permanentCountry = 'Please enter a valid country.';
+    }
+  }
+
+  return nextErrors;
+}
+
+function applyProfileFieldValidation(currentErrors, field, value) {
+  const nextErrors = { ...currentErrors };
+  const validation = validateProfilePersonalDetails({ [field]: value });
+  const addressValidation = validateProfileAddressDetails({ [field]: value });
+
+  if (validation[field] || addressValidation[field]) {
+    nextErrors[field] = validation[field] || addressValidation[field];
+  } else {
+    delete nextErrors[field];
+  }
+
+  return nextErrors;
+}
+
 function buildStoredProfileSnapshot(employee, form, canManagePackageAmount) {
   const presentAddressLine1 = String(form?.presentAddressLine1 || employee.presentAddressLine1 || '').trim();
   const presentAddressLine2 = String(form?.presentAddressLine2 || employee.presentAddressLine2 || '').trim();
@@ -1372,29 +1687,6 @@ function buildStoredProfileDetails(employee, canManagePackageAmount) {
   ];
 }
 
-function sanitizeProfileTextField(field, value) {
-  const restrictedFields = new Set([
-    'displayName',
-    'department',
-    'jobTitle',
-    'nationality',
-    'workingLocation',
-    'highestQualification',
-    'grade',
-    'presentAddressLine1',
-    'presentAddressLine2',
-    'presentCityDistrict',
-    'presentState',
-    'presentCountry',
-  ]);
-
-  if (!restrictedFields.has(field)) {
-    return value;
-  }
-
-  return String(value || '').replace(/[^a-zA-Z\s]/g, '');
-}
-
 function validateProfileSection(form, section, canManagePackageAmount) {
   const hasValue = (value) => String(value || '').trim().length > 0;
   const displayName = String(form.displayName || '').trim();
@@ -1434,7 +1726,6 @@ function validateProfileSection(form, section, canManagePackageAmount) {
     requireValue(department, 'Department is required.');
     requireValue(gender, 'Gender is required.');
     requireValue(dateOfBirth, 'Date of birth is required.');
-    requireValue(isValidDateOfBirth(dateOfBirth), 'Date of birth cannot be a future date.');
     requireValue(employmentType, 'Employment type is required.');
   }
 
@@ -1460,26 +1751,48 @@ function validateProfileSection(form, section, canManagePackageAmount) {
 
   if (section === 'address' || section === 'all') {
     requireValue(hasValue(String(form.presentAddressLine1 || '')), 'Present Address 1 is required.');
-    requireValue(isValidAddressLine(String(form.presentAddressLine1 || '')), 'Present Address 1 must contain valid address characters only.');
     requireValue(hasValue(String(form.presentAddressLine2 || '')), 'Present Address 2 is required.');
-    requireValue(isValidAddressLine(String(form.presentAddressLine2 || '')), 'Present Address 2 must contain valid address characters only.');
     requireValue(hasValue(String(form.presentCityDistrict || '')), 'Present City is required.');
     requireValue(hasValue(String(form.presentState || '')), 'Present State is required.');
     requireValue(hasValue(presentPinCode), 'Present PIN code is required.');
     requireValue(hasValue(String(form.presentCountry || '')), 'Present Country is required.');
-    requireValue(isValidRegionName(String(form.presentCountry || '')), 'Present Country must contain letters and spaces only.');
+    if (String(form.presentAddressLine1 || '').trim() && !profileAddressLineRegex.test(String(form.presentAddressLine1 || '').trim())) {
+      requireValue(false, 'Please enter a valid address.');
+    }
+    if (String(form.presentAddressLine2 || '').trim() && !profileAddressLineRegex.test(String(form.presentAddressLine2 || '').trim())) {
+      requireValue(false, 'Please enter a valid address.');
+    }
+    if (String(form.presentCityDistrict || '').trim() && !profileCityStateCountryRegex.test(String(form.presentCityDistrict || '').trim())) {
+      requireValue(false, 'Please enter a valid city.');
+    }
+    if (String(form.presentState || '').trim() && !profileCityStateCountryRegex.test(String(form.presentState || '').trim())) {
+      requireValue(false, 'Please enter a valid state.');
+    }
+    if (String(form.presentCountry || '').trim() && !profileCityStateCountryRegex.test(String(form.presentCountry || '').trim())) {
+      requireValue(false, 'Please enter a valid country.');
+    }
     if (!form.sameAsAbove) {
       requireValue(hasValue(String(form.permanentAddressLine1 || '')), 'Permanent Address 1 is required.');
-      requireValue(isValidAddressLine(String(form.permanentAddressLine1 || '')), 'Permanent Address 1 must contain valid address characters only.');
       requireValue(hasValue(String(form.permanentAddressLine2 || '')), 'Permanent Address 2 is required.');
-      requireValue(isValidAddressLine(String(form.permanentAddressLine2 || '')), 'Permanent Address 2 must contain valid address characters only.');
       requireValue(hasValue(String(form.permanentCityDistrict || '')), 'Permanent City is required.');
-      requireValue(isValidCityName(String(form.permanentCityDistrict || '')), 'Permanent City must contain letters and spaces only.');
       requireValue(hasValue(String(form.permanentState || '')), 'Permanent State is required.');
-      requireValue(isValidRegionName(String(form.permanentState || '')), 'Permanent State must contain letters and spaces only.');
       requireValue(hasValue(permanentPinCode), 'Permanent PIN code is required.');
       requireValue(hasValue(String(form.permanentCountry || '')), 'Permanent Country is required.');
-      requireValue(isValidRegionName(String(form.permanentCountry || '')), 'Permanent Country must contain letters and spaces only.');
+      if (String(form.permanentAddressLine1 || '').trim() && !profileAddressLineRegex.test(String(form.permanentAddressLine1 || '').trim())) {
+        requireValue(false, 'Please enter a valid address.');
+      }
+      if (String(form.permanentAddressLine2 || '').trim() && !profileAddressLineRegex.test(String(form.permanentAddressLine2 || '').trim())) {
+        requireValue(false, 'Please enter a valid address.');
+      }
+      if (String(form.permanentCityDistrict || '').trim() && !profileCityStateCountryRegex.test(String(form.permanentCityDistrict || '').trim())) {
+        requireValue(false, 'Please enter a valid city.');
+      }
+      if (String(form.permanentState || '').trim() && !profileCityStateCountryRegex.test(String(form.permanentState || '').trim())) {
+        requireValue(false, 'Please enter a valid state.');
+      }
+      if (String(form.permanentCountry || '').trim() && !profileCityStateCountryRegex.test(String(form.permanentCountry || '').trim())) {
+        requireValue(false, 'Please enter a valid country.');
+      }
     }
     if (presentPinCode) {
       requireValue(/^\d{6}$/.test(presentPinCode), 'Present PIN code must be 6 digits.');
@@ -1520,89 +1833,20 @@ function validateProfileSection(form, section, canManagePackageAmount) {
   return errors[0] || '';
 }
 
-function validatePersonalDetails(form) {
-  const errors = {};
-  const displayName = String(form.displayName || '').trim();
-  const jobTitle = String(form.jobTitle || '').trim();
-  const department = String(form.department || '').trim();
-  const dateOfBirth = String(form.dateOfBirth || '').trim();
-  const nationality = String(form.nationality || '').trim();
-  const workingLocation = String(form.workingLocation || '').trim();
-  const highestQualification = String(form.highestQualification || '').trim();
-  const grade = String(form.grade || '').trim();
-  const employmentType = String(form.employmentType || '').trim();
-
-  if (!displayName) {
-    errors.displayName = 'Display name is required.';
-  } else if (!isValidPersonName(displayName)) {
-    errors.displayName = 'Display name must contain letters, spaces, apostrophes, dots, or hyphens only.';
-  }
-
-  if (!jobTitle) {
-    errors.jobTitle = 'Job title is required.';
-  } else if (!isValidRoleTitle(jobTitle)) {
-    errors.jobTitle = 'Job title must contain valid title characters only.';
-  }
-
-  if (!department) {
-    errors.department = 'Department is required.';
-  } else if (!isValidDepartmentName(department)) {
-    errors.department = 'Department must contain letters and valid separators only.';
-  }
-
-  if (!dateOfBirth) {
-    errors.dateOfBirth = 'Date of birth is required.';
-  } else if (!isValidDateOfBirth(dateOfBirth)) {
-    errors.dateOfBirth = 'Date of birth cannot be a future date.';
-  }
-
-  if (!employmentType) {
-    errors.employmentType = 'Employment type is required.';
-  } else if (!isValidPersonName(employmentType)) {
-    errors.employmentType = 'Employment type must contain letters and valid separators only.';
-  }
-
-  if (!nationality) {
-    errors.nationality = 'Nationality is required.';
-  } else if (!isValidPersonName(nationality)) {
-    errors.nationality = 'Nationality must contain letters and valid separators only.';
-  }
-
-  if (!workingLocation) {
-    errors.workingLocation = 'Working location is required.';
-  } else if (!isValidLocationText(workingLocation)) {
-    errors.workingLocation = 'Working location must contain letters and valid separators only.';
-  }
-
-  if (!highestQualification) {
-    errors.highestQualification = 'Highest qualification is required.';
-  } else if (!isValidQualificationText(highestQualification)) {
-    errors.highestQualification = 'Highest qualification must contain valid qualification characters only.';
-  }
-
-  if (!grade) {
-    errors.grade = 'Grade is required.';
-  } else if (!isValidGrade(grade)) {
-    errors.grade = 'Grade must be a single capital letter.';
-  }
-
-  return errors;
-}
-
-function getPersonalFieldValidationError(field, form) {
-  return validatePersonalDetails(form)[field] || '';
-}
-
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 }
 
-function sanitizeTextField(value) {
-  return String(value || '').replace(/[^\p{L}\s]+/gu, '');
+function isValidMobileNumber(value) {
+  return /^\d{10}$/.test(String(value || '').trim());
 }
 
-function alphanumericOnly(value) {
-  return String(value || '').replace(/[^a-zA-Z0-9]+/g, '');
+function isValidIfscCode(value) {
+  return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(String(value || '').trim().toUpperCase());
+}
+
+function digitsOnly(value) {
+  return String(value || '').replace(/\D+/g, '');
 }
 
 function alphanumericUpperOnly(value) {

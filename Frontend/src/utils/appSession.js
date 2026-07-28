@@ -276,37 +276,58 @@ export async function touchSessionOnBackend() {
 }
 export async function bootstrapSessionFromBackend() {
   syncMemorySession();
-  const cachedSession = { ...session };
 
   if (getSessionValue('kavyaAuthMode') === 'local') {
     return getSessionSnapshot();
   }
 
   const authToken = getSessionValue('kavyaAuthToken');
-  const response = await fetch(`${API_BASE}/auth/session`, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-  }).catch(() => null);
+  
+  // Add a 5-second timeout to session validation
+  const controller = new AbortController();
+  let timedOut = false;
 
-  if (!response || !response.ok) {
-    session = cachedSession;
-    persistSessionSnapshot();
-    emitSessionChanged();
-    return session;
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 5000);
+
+  try {
+    const response = await fetch(`${API_BASE}/auth/session`, {
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      signal: controller.signal,
+    }).catch((error) => {
+      if (timedOut) {
+        console.warn('[Session] Validation timed out after 5 seconds');
+      }
+      return null;
+    });
+
+    if (!response || !response.ok) {
+      session = {};
+      lastBackendTouchAt = 0;
+      persistSessionSnapshot();
+      emitSessionChanged();
+      return session;
+    }
+
+    const payload = await response.json().catch(() => null);
+    if (!payload || payload.ok === false) {
+      session = {};
+      lastBackendTouchAt = 0;
+      persistSessionSnapshot();
+      emitSessionChanged();
+      return session;
+    }
+
+    return applySessionPayload(payload);
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-
-  const payload = await response.json().catch(() => null);
-  if (!payload || payload.ok === false) {
-    session = cachedSession;
-    persistSessionSnapshot();
-    emitSessionChanged();
-    return session;
-  }
-
-  return applySessionPayload(payload);
 }
 function normalizeRole(value) {
   const normalized = String(value || '').trim().toLowerCase().replaceAll(' ', '');

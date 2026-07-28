@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.Locale;
 import java.util.logging.Logger;
 import org.bson.Document;
+import org.springframework.http.HttpStatus;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.kavya.hrms.model.Asset;
 import com.kavya.hrms.model.AssetAssignment;
@@ -127,6 +129,10 @@ public class AssetController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     Asset safeAsset = Objects.requireNonNull(asset, "asset must not be null");
+    validateAssetName(safeAsset.getAssetName());
+    validateCategory(safeAsset.getCategory());
+    validateDueDate(safeAsset.getDueDate());
+    safeAsset.setCurrentDate(getTodayLocalDate());
     LOGGER.info(() -> "[AssetController] create payload id=" + safeAsset.getId()
       + ", currentDate=" + safeAsset.getCurrentDate()
       + ", dueDate=" + safeAsset.getDueDate()
@@ -187,7 +193,11 @@ public class AssetController {
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     String safeId = Objects.requireNonNull(id, "asset id must not be null");
     Asset safeAsset = Objects.requireNonNull(asset, "asset must not be null");
+    validateAssetName(safeAsset.getAssetName());
+    validateCategory(safeAsset.getCategory());
+    validateDueDate(safeAsset.getDueDate());
     safeAsset.setId(safeId);
+    safeAsset.setCurrentDate(getTodayLocalDate());
     LOGGER.info(() -> "[AssetController] update payload id=" + id
       + ", currentDate=" + safeAsset.getCurrentDate()
       + ", dueDate=" + safeAsset.getDueDate()
@@ -248,6 +258,50 @@ public class AssetController {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim();
+  }
+
+  private void validateDueDate(String dueDate) {
+    String normalizedDueDate = normalize(dueDate);
+    if (normalizedDueDate.isBlank()) {
+      return;
+    }
+
+    try {
+      LocalDate selectedDate = LocalDate.parse(normalizedDueDate);
+      LocalDate today = LocalDate.now();
+      if (selectedDate.isBefore(today)) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Due Date cannot be earlier than today.");
+      }
+    } catch (DateTimeParseException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Due Date.");
+    }
+  }
+
+  private String getTodayLocalDate() {
+    LocalDate today = LocalDate.now();
+    return today.toString();
+  }
+
+  private void validateAssetName(String assetName) {
+    String normalizedAssetName = normalize(assetName);
+    if (normalizedAssetName.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Asset Name is required.");
+    }
+
+    if (!normalizedAssetName.matches(".*[A-Za-z].*")) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid Asset Name.");
+    }
+  }
+
+  private void validateCategory(String category) {
+    String normalizedCategory = normalize(category);
+    if (normalizedCategory.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category is required.");
+    }
+
+    if (!normalizedCategory.matches("^[A-Za-z]+(?:[ -][A-Za-z]+)*$")) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid Category.");
+    }
   }
 
   private List<Asset> loadAssets() {

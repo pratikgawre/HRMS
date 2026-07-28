@@ -27,6 +27,12 @@ const genders = ['Male', 'Female', 'Other'];
 const maritalStatuses = ['Single', 'Married', 'Divorced', 'Widowed'];
 const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 const accountTypes = ['Savings', 'Salary'];
+const nameRegex = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
+const nationalityRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
+const qualificationRegex = /^(?=.*[A-Za-z])[A-Za-z0-9 .()+/-]+$/;
+const workingLocationRegex = /^(?=.*[A-Za-z])[A-Za-z ,()'-]+$/;
+const employmentBackgroundRegex = /^(?=.*[A-Za-z])[A-Za-z0-9 .,&()'/-]+$/;
+const permanentAddressRegex = /^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/;
 const bankNameGroups = [
   {
     label: 'Government / Public Sector Banks',
@@ -1926,6 +1932,26 @@ function getEmployeeFieldError(key, value, { requireFilled = true, today = new D
   switch (key) {
     case 'employeeCode':
       return /^[A-Za-z0-9]+$/.test(trimmed) ? '' : 'Employee ID must contain only letters and numbers.';
+    case 'firstName':
+      return nameRegex.test(trimmed) ? '' : 'First Name must contain only alphabets.';
+    case 'middleName':
+      return nameRegex.test(trimmed) ? '' : 'Middle Name must contain only alphabets.';
+    case 'lastName':
+      return nameRegex.test(trimmed) ? '' : 'Last Name must contain only alphabets.';
+    case 'nationality':
+      return nationalityRegex.test(trimmed) ? '' : 'Enter a valid Nationality.';
+    case 'highestQualification':
+      return qualificationRegex.test(trimmed) ? '' : 'Enter a valid Highest Qualification.';
+    case 'workingLocation':
+      return workingLocationRegex.test(trimmed) ? '' : 'Enter a valid Working Location.';
+    case 'employmentBackground':
+      return employmentBackgroundRegex.test(trimmed) ? '' : 'Enter a valid Employment Background.';
+    case 'permanentAddressLine1':
+      return permanentAddressRegex.test(trimmed) ? '' : 'Permanent Address Line 1 must contain only alphabets, numbers and spaces.';
+    case 'permanentAddressLine2':
+      return permanentAddressRegex.test(trimmed) ? '' : 'Permanent Address Line 2 must contain only alphabets, numbers and spaces.';
+    case 'permanentAddressLine3':
+      return permanentAddressRegex.test(trimmed) ? '' : 'Permanent Address Line 3 must contain only alphabets, numbers and spaces.';
     case 'jobTitle':
       return /^[A-Za-z ]+$/.test(trimmed) ? '' : 'Designation must contain letters and spaces only.';
     case 'workingLocation':

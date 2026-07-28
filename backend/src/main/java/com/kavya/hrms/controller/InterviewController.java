@@ -10,7 +10,6 @@ import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -30,7 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/interviews")
 public class InterviewController {
   private static final Logger log = LoggerFactory.getLogger(InterviewController.class);
-  private static final Pattern TEXT_ONLY_PATTERN = Pattern.compile("^[^0-9]+$");
+  private static final Pattern NAME_PATTERN = Pattern.compile("^[A-Za-z]+(?:[ '-][A-Za-z]+)*$");
+  private static final Pattern POSITION_PATTERN = Pattern.compile("^(?=.*[A-Za-z])[A-Za-z +/()-]+$");
+  private static final Pattern DEPARTMENT_PATTERN = Pattern.compile("^[A-Za-z]+(?:[ -][A-Za-z]+)*$");
+  private static final Pattern COMPANY_PATTERN = Pattern.compile("^(?=.*[A-Za-z])[A-Za-z0-9 .,&()'-]+$");
+  private static final Pattern LOCATION_PATTERN = Pattern.compile("^(?=.*[A-Za-z])[A-Za-z0-9 ,.()/-]+$");
+  private static final Pattern EXPERIENCE_PATTERN = Pattern.compile("^\\d+(?:\\.\\d+)?$");
   private static final Pattern NUMBER_ONLY_PATTERN = Pattern.compile("^\\d+$");
 
   private final InterviewRepository repository;
@@ -147,11 +151,14 @@ public class InterviewController {
 
   private ResponseEntity<?> validateInterview(Interview interview) {
     Map<String, String> fieldErrors = new LinkedHashMap<>();
-    addTextOnlyError(fieldErrors, "position", interview == null ? "" : interview.getPosition(), "Position applied");
-    addTextOnlyError(fieldErrors, "department", interview == null ? "" : interview.getDepartment(), "Department");
-    addTextOnlyError(fieldErrors, "currentCompany", interview == null ? "" : interview.getCurrentCompany(), "Current company");
-    addTextOnlyError(fieldErrors, "interviewer", interview == null ? "" : interview.getInterviewer(), "Interviewer name");
-    addTextOnlyError(fieldErrors, "createdBy", interview == null ? "" : interview.getCreatedBy(), "Created by");
+    addPatternError(fieldErrors, "candidateName", interview == null ? "" : interview.getCandidateName(), "Candidate Name", NAME_PATTERN, true);
+    addPatternError(fieldErrors, "position", interview == null ? "" : interview.getPosition(), "Position Applied", POSITION_PATTERN, true);
+    addPatternError(fieldErrors, "department", interview == null ? "" : interview.getDepartment(), "Department", DEPARTMENT_PATTERN, true);
+    addPatternError(fieldErrors, "currentCompany", interview == null ? "" : interview.getCurrentCompany(), "Current Company", COMPANY_PATTERN, true);
+    addPatternError(fieldErrors, "location", interview == null ? "" : interview.getLocation(), "Interview Location", LOCATION_PATTERN, true);
+    addExperienceError(fieldErrors, interview == null ? "" : interview.getExperience());
+    addPatternError(fieldErrors, "interviewer", interview == null ? "" : interview.getInterviewer(), "Interviewer Name", NAME_PATTERN, true);
+    addPatternError(fieldErrors, "createdBy", interview == null ? "" : interview.getCreatedBy(), "Created By", NAME_PATTERN, true);
     addNumberOnlyError(fieldErrors, "currentCTC", interview == null ? "" : interview.getCurrentCTC(), "Current CTC");
     addNumberOnlyError(fieldErrors, "expectedCTC", interview == null ? "" : interview.getExpectedCTC(), "Expected CTC");
     addInterviewDateError(fieldErrors, interview == null ? "" : interview.getInterviewDate());
@@ -165,10 +172,29 @@ public class InterviewController {
         "fieldErrors", fieldErrors));
   }
 
-  private void addTextOnlyError(Map<String, String> fieldErrors, String field, String value, String label) {
+  private void addPatternError(Map<String, String> fieldErrors, String field, String value, String label, Pattern pattern, boolean required) {
     String safeValue = businessValue(value);
-    if (!safeValue.isBlank() && !TEXT_ONLY_PATTERN.matcher(safeValue).matches()) {
-      fieldErrors.put(field, label + " should contain text only.");
+    if (safeValue.isBlank()) {
+      if (required) {
+        fieldErrors.put(field, label + " is required.");
+      }
+      return;
+    }
+
+    if (!pattern.matcher(safeValue).matches()) {
+      fieldErrors.put(field, "Enter a valid " + label + ".");
+    }
+  }
+
+  private void addExperienceError(Map<String, String> fieldErrors, String value) {
+    String safeValue = businessValue(value);
+    if (safeValue.isBlank()) {
+      fieldErrors.put("experience", "Years of Experience is required.");
+      return;
+    }
+
+    if (!EXPERIENCE_PATTERN.matcher(safeValue).matches()) {
+      fieldErrors.put("experience", "Enter valid Years of Experience.");
     }
   }
 
@@ -304,7 +330,7 @@ public class InterviewController {
   }
 
   private static String normalize(String value) {
-    return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    return value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
   }
 
   private static String now() {

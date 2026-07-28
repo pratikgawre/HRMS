@@ -4,10 +4,16 @@ import { apiRequest, safeApiRequest } from '../utils/api.js';
 import { getSessionValue } from '../utils/appSession.js';
 import { normalizeAccessRole } from '../utils/role-access.js';
 
+const departmentRegex = /^[A-Za-z]+(?:[ &-][A-Za-z]+)*$/;
+const designationRegex = /^(?=.*[A-Za-z])[A-Za-z +/()-]+$/;
+const leaveTypeRegex = /^[A-Za-z]+(?:[ ()-][A-Za-z]+)*$/;
+const payCycleRegex = /^[A-Za-z]+(?: [A-Za-z]+)*$/;
+const taxPolicyRegex = /^(?=.*[A-Za-z])[A-Za-z0-9 ,.()%/-]+$/;
+const allowedPayCycles = new Set(['Monthly', 'Weekly', 'Biweekly', 'Fortnightly', 'Quarterly']);
+const allowedPfDeductionValues = new Set(['Enabled', 'Disabled', 'Yes', 'No', 'Applicable', 'Not Applicable']);
+
 const SECTION_KEYS = ['company', 'departments', 'designations', 'leaveTypes', 'rolePermissions', 'payroll'];
 const HR_SECTION_KEYS = ['company', 'departments', 'designations', 'leaveTypes', 'payroll'];
-const settingsNameValidationMessage = 'Use letters and spaces only.';
-const settingsPayrollValidationMessage = 'Use letters, numbers, spaces, and basic punctuation only.';
 const DEFAULT_SETTINGS = {
   id: 'default',
   companyName: 'Kavya HRMS',
@@ -162,97 +168,13 @@ function Settings() {
 
   const clearSettingsError = (field) => {
     setSettingsErrors((current) => {
-      if (!(field in current)) {
+      if (!current[field]) {
         return current;
       }
-
       const next = { ...current };
       delete next[field];
       return next;
     });
-  };
-
-  const clearPayrollSettingError = (label) => {
-    setSettingsErrors((current) => {
-      const payrollErrors = current.payrollSettings || {};
-      if (!(label in payrollErrors)) {
-        return current;
-      }
-
-      const nextPayrollErrors = { ...payrollErrors };
-      delete nextPayrollErrors[label];
-      const next = { ...current, payrollSettings: nextPayrollErrors };
-      if (Object.keys(nextPayrollErrors).length === 0) {
-        delete next.payrollSettings;
-      }
-      return next;
-    });
-  };
-
-  const handleAddDepartment = () => {
-    const nextValue = String(newDepartment || '').trim();
-    if (!nextValue) {
-      return;
-    }
-
-    if (!isValidSettingsName(nextValue)) {
-      setSettingsErrors((current) => ({ ...current, newDepartment: settingsNameValidationMessage }));
-      return;
-    }
-
-    const next = addListItemToSettings(draft, 'departments', nextValue, 'Department');
-    if (next !== draft) {
-      setNewDepartment('');
-      clearSettingsError('newDepartment');
-      persistSettings(next, 'Department added successfully.');
-    }
-  };
-
-  const handleAddDesignation = () => {
-    const nextValue = String(newDesignation || '').trim();
-    if (!nextValue) {
-      return;
-    }
-
-    if (!isValidSettingsName(nextValue)) {
-      setSettingsErrors((current) => ({ ...current, newDesignation: settingsNameValidationMessage }));
-      return;
-    }
-
-    const next = addListItemToSettings(draft, 'designations', nextValue, 'Designation');
-    if (next !== draft) {
-      setNewDesignation('');
-      clearSettingsError('newDesignation');
-      persistSettings(next, 'Designation added successfully.');
-    }
-  };
-
-  const handleAddLeaveType = () => {
-    const nextName = String(newLeaveType.name || '').trim();
-    const nextDays = String(newLeaveType.days || '').trim();
-
-    if (!nextName) {
-      setSettingsErrors((current) => ({ ...current, newLeaveTypeName: 'Leave type name is required.' }));
-      return;
-    }
-
-    if (!isValidSettingsName(nextName)) {
-      setSettingsErrors((current) => ({ ...current, newLeaveTypeName: settingsNameValidationMessage }));
-      return;
-    }
-
-    if (!isValidPositiveInteger(nextDays)) {
-      setSettingsErrors((current) => ({ ...current, newLeaveTypeDays: 'Leave type days must be zero or a positive number.' }));
-      return;
-    }
-
-    const next = addLeaveTypeToSettings(draft, { name: nextName, days: nextDays });
-    if (next !== draft) {
-      setNewLeaveType({ name: '', days: '0' });
-      clearSettingsError('newLeaveTypeName');
-      clearSettingsError('newLeaveTypeDays');
-      persistSettings(next, 'Leave type added successfully.');
-    }
   };
 
   const showToast = (message, type = 'success') => {
@@ -289,14 +211,6 @@ function Settings() {
     if ((scope === 'main' && !canPersistMainSections) || (scope === 'rolePermissions' && !canPersistRolePermissions)) {
       setNotice('This role can only view settings. An admin must update permissions first.');
       showToast('This role can only view settings. An admin must update permissions first.', 'error');
-      return;
-    }
-
-    const validationErrors = validateSettingsDraft(nextDraft);
-    if (Object.keys(validationErrors).length > 0) {
-      setSettingsErrors(validationErrors);
-      setNotice('Please fix the highlighted settings fields.');
-      showToast('Please fix the highlighted settings fields.', 'error');
       return;
     }
 
@@ -346,6 +260,155 @@ function Settings() {
     setNewDesignation('');
     setNewLeaveType({ name: '', days: '0' });
     setSettingsErrors({});
+  };
+
+  const handleAddDepartment = () => {
+    const error = validateDepartment(newDepartment);
+    setSettingsErrors((current) => ({ ...current, department: error }));
+    if (error) return;
+    const next = addListItemToSettings(draft, 'departments', newDepartment);
+    if (next !== draft) {
+      setNewDepartment('');
+      clearSettingsError('department');
+      persistSettings(next, 'Department added successfully.');
+    }
+  };
+
+  const handleAddDesignation = () => {
+    const error = validateDesignation(newDesignation);
+    setSettingsErrors((current) => ({ ...current, designation: error }));
+    if (error) return;
+    const next = addListItemToSettings(draft, 'designations', newDesignation);
+    if (next !== draft) {
+      setNewDesignation('');
+      clearSettingsError('designation');
+      persistSettings(next, 'Designation added successfully.');
+    }
+  };
+
+  const handleAddLeaveType = () => {
+    const nameError = validateLeaveType(newLeaveType.name);
+    const allowanceError = validateAllowance(newLeaveType.days);
+    setSettingsErrors((current) => ({ ...current, leaveType: nameError, allowance: allowanceError }));
+    if (nameError || allowanceError) return;
+    const next = addLeaveTypeToSettings(draft, newLeaveType);
+    if (next !== draft) {
+      setNewLeaveType({ name: '', days: '0' });
+      clearSettingsError('leaveType');
+      clearSettingsError('allowance');
+      persistSettings(next, 'Leave type added successfully.');
+    }
+  };
+
+  const handleSaveDepartments = () => {
+    const errors = {};
+    (draft.departments || []).forEach((item) => {
+      if (validateDepartment(item)) {
+        errors.department = errors.department || validateDepartment(item);
+      }
+    });
+    setSettingsErrors((current) => ({ ...current, department: errors.department || '' }));
+    if (errors.department) {
+      return;
+    }
+    saveCurrentSettings('Department settings saved successfully.');
+  };
+
+  const handleSaveDesignations = () => {
+    const errors = {};
+    (draft.designations || []).forEach((item) => {
+      if (validateDesignation(item)) {
+        errors.designation = errors.designation || validateDesignation(item);
+      }
+    });
+    setSettingsErrors((current) => ({ ...current, designation: errors.designation || '' }));
+    if (errors.designation) {
+      return;
+    }
+    saveCurrentSettings('Designation settings saved successfully.');
+  };
+
+  const handleSaveLeaveTypes = () => {
+    const nameError = (draft.leaveTypes || []).find((item) => validateLeaveType(item.name));
+    const allowanceError = (draft.leaveTypes || []).find((item) => validateAllowance(item.days));
+    setSettingsErrors((current) => ({
+      ...current,
+      leaveType: nameError ? validateLeaveType(nameError.name) : '',
+      allowance: allowanceError ? validateAllowance(allowanceError.days) : '',
+    }));
+    if (nameError || allowanceError) {
+      return;
+    }
+    saveCurrentSettings('Leave type settings saved successfully.');
+  };
+
+  const handleSavePayroll = () => {
+    const nextErrors = validatePayroll(draft.payrollSettings || {});
+    setSettingsErrors((current) => ({ ...current, ...nextErrors }));
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+    saveCurrentSettings('Payroll configuration saved successfully.');
+  };
+
+  const validateDepartment = (value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized) return 'Department name is required.';
+    if (!departmentRegex.test(normalized)) return 'Enter a valid Department name.';
+    return '';
+  };
+
+  const validateDesignation = (value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized) return 'Designation is required.';
+    if (!designationRegex.test(normalized)) return 'Enter a valid Designation.';
+    return '';
+  };
+
+  const validateLeaveType = (value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized) return 'Leave Type is required.';
+    if (!leaveTypeRegex.test(normalized)) return 'Enter a valid Leave Type.';
+    return '';
+  };
+
+  const validateAllowance = (value) => {
+    const normalized = String(value || '').trim();
+    if (normalized === '') return 'Enter a valid leave allowance.';
+    const numeric = Number(normalized);
+    if (!Number.isInteger(numeric) || numeric < 0) return 'Enter a valid leave allowance.';
+    return '';
+  };
+
+  const validatePayroll = (payrollSettings) => {
+    const nextErrors = {};
+    const payCycle = String(payrollSettings['Pay Cycle'] || '').trim();
+    const salaryCreditDay = String(payrollSettings['Salary Credit Day'] || '').trim();
+    const pfDeduction = String(payrollSettings['PF Deduction'] || '').trim();
+    const taxPolicy = String(payrollSettings['Tax Policy'] || '').trim();
+
+    if (!payCycle) nextErrors.payCycle = 'Pay Cycle is required.';
+    else if (!allowedPayCycles.has(payCycle) && !payCycleRegex.test(payCycle)) nextErrors.payCycle = 'Enter a valid Pay Cycle.';
+
+    if (!salaryCreditDay) nextErrors.salaryCreditDay = 'Salary Credit Day is required.';
+    else if (!/^\d{1,2}$/.test(salaryCreditDay) || Number(salaryCreditDay) < 1 || Number(salaryCreditDay) > 31) nextErrors.salaryCreditDay = 'Salary Credit Day must be between 1 and 31.';
+
+    if (!pfDeduction) nextErrors.pfDeduction = 'PF Deduction is required.';
+    else if (!allowedPfDeductionValues.has(pfDeduction)) nextErrors.pfDeduction = 'Enter a valid PF Deduction value.';
+
+    if (!taxPolicy) nextErrors.taxPolicy = 'Tax Policy is required.';
+    else if (!taxPolicyRegex.test(taxPolicy)) nextErrors.taxPolicy = 'Enter a valid Tax Policy.';
+
+    return nextErrors;
+  };
+
+  const validatePayrollField = (label, value) => {
+    const nextErrors = validatePayroll({ ...draft.payrollSettings, [label]: value });
+    if (label === 'Pay Cycle') return nextErrors.payCycle || '';
+    if (label === 'Salary Credit Day') return nextErrors.salaryCreditDay || '';
+    if (label === 'PF Deduction') return nextErrors.pfDeduction || '';
+    if (label === 'Tax Policy') return nextErrors.taxPolicy || '';
+    return '';
   };
 
   const companySettings = [
@@ -474,43 +537,34 @@ function Settings() {
         )}
 
         {showDepartmentsSection && (
-        <Section title="Departments" action="Save Departments" actionOnClick={() => saveCurrentSettings('Department settings saved successfully.')} actionDisabled={!departmentsEditable || isSaving}>
+        <Section title="Departments" action="Save Departments" actionOnClick={handleSaveDepartments} actionDisabled={!departmentsEditable || isSaving}>
           <div className="settings-section-head">
             <p>Departments are shared across employee profiles, filters, and reporting.</p>
             <span>{departmentsEditable ? 'Manageable by this role' : 'View only'}</span>
           </div>
           {departmentsEditable && (
-            <>
-              <div className="settings-inline-form">
-                <input
-                  value={newDepartment}
-                  className={settingsErrors.newDepartment ? 'is-invalid' : ''}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    const nextValue = sanitizeSettingsNameInput(raw);
-                    setNewDepartment(nextValue);
-                    if (raw !== nextValue) {
-                      setSettingsErrors((current) => ({ ...current, newDepartment: settingsNameValidationMessage }));
-                    } else {
-                      clearSettingsError('newDepartment');
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      handleAddDepartment();
-                    }
-                  }}
-                  placeholder="Add a new department"
-                  aria-invalid={Boolean(settingsErrors.newDepartment)}
-                />
-                <button type="button" className="primary-btn" onClick={handleAddDepartment} disabled={!newDepartment.trim() || isSaving}>
-                  Add Department
-                </button>
-              </div>
-              {settingsErrors.newDepartment && <small className="field-error">{settingsErrors.newDepartment}</small>}
-            </>
+            <div className="settings-inline-form">
+              <input
+                value={newDepartment}
+                onChange={(event) => {
+                  setNewDepartment(event.target.value);
+                  clearSettingsError('department');
+                }}
+                onBlur={() => setSettingsErrors((current) => ({ ...current, department: validateDepartment(newDepartment) }))}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleAddDepartment();
+                  }
+                }}
+                placeholder="Add a new department"
+              />
+              <button type="button" className="primary-btn" onClick={handleAddDepartment} disabled={!newDepartment.trim() || isSaving}>
+                Add Department
+              </button>
+            </div>
           )}
+          {settingsErrors.department ? <p className="field-error">{settingsErrors.department}</p> : null}
           <div className="settings-chip-list">
             {draft.departments.map((department) => (
               <span key={department} className="settings-chip">
@@ -530,43 +584,34 @@ function Settings() {
         )}
 
         {showDesignationsSection && (
-        <Section title="Designations" action="Save Designations" actionOnClick={() => saveCurrentSettings('Designation settings saved successfully.')} actionDisabled={!designationsEditable || isSaving}>
+        <Section title="Designations" action="Save Designations" actionOnClick={handleSaveDesignations} actionDisabled={!designationsEditable || isSaving}>
           <div className="settings-section-head">
             <p>Designation defaults flow into employee roles, profiles, and user access mapping.</p>
             <span>{designationsEditable ? 'Manageable by this role' : 'View only'}</span>
           </div>
           {designationsEditable && (
-            <>
-              <div className="settings-inline-form">
-                <input
-                  value={newDesignation}
-                  className={settingsErrors.newDesignation ? 'is-invalid' : ''}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    const nextValue = sanitizeSettingsNameInput(raw);
-                    setNewDesignation(nextValue);
-                    if (raw !== nextValue) {
-                      setSettingsErrors((current) => ({ ...current, newDesignation: settingsNameValidationMessage }));
-                    } else {
-                      clearSettingsError('newDesignation');
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      handleAddDesignation();
-                    }
-                  }}
-                  placeholder="Add a new designation"
-                  aria-invalid={Boolean(settingsErrors.newDesignation)}
-                />
-                <button type="button" className="primary-btn" onClick={handleAddDesignation} disabled={!newDesignation.trim() || isSaving}>
-                  Add Designation
-                </button>
-              </div>
-              {settingsErrors.newDesignation && <small className="field-error">{settingsErrors.newDesignation}</small>}
-            </>
+            <div className="settings-inline-form">
+              <input
+                value={newDesignation}
+                onChange={(event) => {
+                  setNewDesignation(event.target.value);
+                  clearSettingsError('designation');
+                }}
+                onBlur={() => setSettingsErrors((current) => ({ ...current, designation: validateDesignation(newDesignation) }))}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleAddDesignation();
+                  }
+                }}
+                placeholder="Add a new designation"
+              />
+              <button type="button" className="primary-btn" onClick={handleAddDesignation} disabled={!newDesignation.trim() || isSaving}>
+                Add Designation
+              </button>
+            </div>
           )}
+          {settingsErrors.designation ? <p className="field-error">{settingsErrors.designation}</p> : null}
           <div className="settings-chip-list">
             {draft.designations.map((designation) => (
               <span key={designation} className="settings-chip">
@@ -589,7 +634,7 @@ function Settings() {
         <Section
           title={isEmployeeView ? 'Leave Balances' : 'Leave Types'}
           action={leaveTypesEditable ? 'Save Leave Types' : undefined}
-          actionOnClick={() => saveCurrentSettings('Leave type settings saved successfully.')}
+          actionOnClick={handleSaveLeaveTypes}
           actionDisabled={!leaveTypesEditable || isSaving}
         >
           <div className="settings-section-head">
@@ -597,59 +642,47 @@ function Settings() {
             <span>{leaveTypesEditable ? 'Manageable by this role' : 'Read only'}</span>
           </div>
           {leaveTypesEditable && (
-            <>
-              <div className="settings-inline-form settings-inline-form--leave">
-                <input
-                  value={newLeaveType.name}
-                  className={settingsErrors.newLeaveTypeName ? 'is-invalid' : ''}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    const nextValue = sanitizeSettingsNameInput(raw);
-                    setNewLeaveType((current) => ({ ...current, name: nextValue }));
-                    if (raw !== nextValue) {
-                      setSettingsErrors((current) => ({ ...current, newLeaveTypeName: settingsNameValidationMessage }));
-                    } else {
-                      clearSettingsError('newLeaveTypeName');
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      handleAddLeaveType();
-                    }
-                  }}
-                  placeholder="Leave type name"
-                  aria-invalid={Boolean(settingsErrors.newLeaveTypeName)}
-                />
-                <input
-                  className={settingsErrors.newLeaveTypeDays ? 'is-invalid' : ''}
-                  type="number"
-                  min="0"
-                  value={newLeaveType.days}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    const nextValue = sanitizeDigitsInput(raw);
-                    setNewLeaveType((current) => ({ ...current, days: nextValue }));
-                    if (raw !== nextValue) {
-                      setSettingsErrors((current) => ({ ...current, newLeaveTypeDays: 'Leave type days must be zero or a positive number.' }));
-                    } else {
-                      clearSettingsError('newLeaveTypeDays');
-                    }
-                  }}
-                  placeholder="Days"
-                  aria-invalid={Boolean(settingsErrors.newLeaveTypeDays)}
-                />
-                <button type="button" className="primary-btn" onClick={handleAddLeaveType} disabled={!newLeaveType.name.trim() || isSaving}>
-                  Add Leave Type
-                </button>
-              </div>
-              {(settingsErrors.newLeaveTypeName || settingsErrors.newLeaveTypeDays) && (
-                <small className="field-error">
-                  {settingsErrors.newLeaveTypeName || settingsErrors.newLeaveTypeDays}
-                </small>
-              )}
-            </>
+            <div className="settings-inline-form settings-inline-form--leave">
+              <input
+                value={newLeaveType.name}
+                onChange={(event) => {
+                  setNewLeaveType((current) => ({ ...current, name: event.target.value }));
+                  clearSettingsError('leaveType');
+                }}
+                onBlur={() => setSettingsErrors((current) => ({ ...current, leaveType: validateLeaveType(newLeaveType.name) }))}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleAddLeaveType();
+                  }
+                }}
+                placeholder="Leave type name"
+              />
+              <input
+                type="number"
+                min="0"
+                value={newLeaveType.days}
+                onChange={(event) => {
+                  setNewLeaveType((current) => ({ ...current, days: event.target.value }));
+                  clearSettingsError('allowance');
+                }}
+                onBlur={() => setSettingsErrors((current) => ({ ...current, allowance: validateAllowance(newLeaveType.days) }))}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleAddLeaveType();
+                  }
+                }}
+                placeholder="Days"
+              />
+              <button type="button" className="primary-btn" onClick={handleAddLeaveType} disabled={!newLeaveType.name.trim() || isSaving}>
+                Add Leave Type
+              </button>
+            </div>
           )}
+          {(settingsErrors.leaveType || settingsErrors.allowance) ? (
+            <p className="field-error">{settingsErrors.leaveType || settingsErrors.allowance}</p>
+          ) : null}
           {isEmployeeView ? (
             <div className="settings-cards settings-cards--leave-balances">
               {draft.leaveTypes.map((item, index) => (
@@ -667,23 +700,13 @@ function Settings() {
                 <span>Type</span>
                 <span>Allowance</span>
               </div>
-              {settingsErrors.leaveTypes && <small className="field-error">{settingsErrors.leaveTypes}</small>}
               {draft.leaveTypes.map((item, index) => (
                 <div key={`${item.name}-${index}`} className={`settings-table-row ${leaveTypesEditable ? 'settings-table-row--editable' : ''}`}>
                   <span>
                     {leaveTypesEditable ? (
                       <input
                         value={item.name}
-                        onChange={(event) => {
-                          const raw = event.target.value;
-                          const nextValue = sanitizeSettingsNameInput(raw);
-                          updateDraft((current) => updateLeaveTypeInSettings(current, index, 'name', nextValue));
-                          if (raw !== nextValue) {
-                            setSettingsErrors((current) => ({ ...current, leaveTypes: 'Leave type names must contain letters and spaces only.' }));
-                          } else {
-                            clearSettingsError('leaveTypes');
-                          }
-                        }}
+                        onChange={(event) => updateDraft((current) => updateLeaveTypeInSettings(current, index, 'name', event.target.value))}
                       />
                     ) : (
                       item.name
@@ -696,16 +719,7 @@ function Settings() {
                           type="number"
                           min="0"
                           value={item.days}
-                          onChange={(event) => {
-                            const raw = event.target.value;
-                            const nextValue = sanitizeDigitsInput(raw);
-                            updateDraft((current) => updateLeaveTypeInSettings(current, index, 'days', nextValue));
-                            if (raw !== nextValue) {
-                              setSettingsErrors((current) => ({ ...current, leaveTypes: 'Leave type days must be zero or a positive number.' }));
-                            } else {
-                              clearSettingsError('leaveTypes');
-                            }
-                          }}
+                          onChange={(event) => updateDraft((current) => updateLeaveTypeInSettings(current, index, 'days', event.target.value))}
                         />
                         <button type="button" onClick={() => {
                           const next = removeLeaveTypeFromSettings(draft, index);
@@ -787,7 +801,7 @@ function Settings() {
         )}
 
         {showPayrollSection && (
-        <Section title="Payroll Configuration" action="Save Payroll" actionOnClick={() => saveCurrentSettings('Payroll configuration saved successfully.')} actionDisabled={!payrollEditable || isSaving}>
+        <Section title="Payroll Configuration" action="Save Payroll" actionOnClick={handleSavePayroll} actionDisabled={!payrollEditable || isSaving}>
           <div className="settings-section-head">
             <p>Payroll defaults drive salary runs, deductions, and payout timing.</p>
             <span>{payrollEditable ? 'Manageable by this role' : 'View only'}</span>
@@ -798,35 +812,36 @@ function Settings() {
                 <span>{label}</span>
                 <input
                   value={value}
-                  className={settingsErrors.payrollSettings?.[label] ? 'is-invalid' : ''}
                   disabled={!payrollEditable}
                   onChange={(event) => {
-                    const raw = event.target.value;
-                    const nextValue = sanitizePayrollValueInput(raw);
                     updateDraft((current) => ({
                       ...current,
                       payrollSettings: {
                         ...current.payrollSettings,
-                        [label]: nextValue,
+                        [label]: event.target.value,
                       },
                     }));
-                    if (raw !== nextValue) {
-                      setSettingsErrors((current) => ({
-                        ...current,
-                        payrollSettings: {
-                          ...(current.payrollSettings || {}),
-                          [label]: settingsPayrollValidationMessage,
-                        },
-                      }));
-                    } else {
-                      clearPayrollSettingError(label);
-                    }
+                    setSettingsErrors((current) => {
+                      const next = { ...current };
+                      if (label === 'Pay Cycle') delete next.payCycle;
+                      if (label === 'Salary Credit Day') delete next.salaryCreditDay;
+                      if (label === 'PF Deduction') delete next.pfDeduction;
+                      if (label === 'Tax Policy') delete next.taxPolicy;
+                      return next;
+                    });
                   }}
-                  aria-invalid={Boolean(settingsErrors.payrollSettings?.[label])}
+                  onBlur={() => setSettingsErrors((current) => ({
+                    ...current,
+                    ...(label === 'Pay Cycle' ? { payCycle: validatePayrollField('Pay Cycle', value) } : {}),
+                    ...(label === 'Salary Credit Day' ? { salaryCreditDay: validatePayrollField('Salary Credit Day', value) } : {}),
+                    ...(label === 'PF Deduction' ? { pfDeduction: validatePayrollField('PF Deduction', value) } : {}),
+                    ...(label === 'Tax Policy' ? { taxPolicy: validatePayrollField('Tax Policy', value) } : {}),
+                  }))}
                 />
-                {settingsErrors.payrollSettings?.[label] && (
-                  <small className="field-error">{settingsErrors.payrollSettings[label]}</small>
-                )}
+                {label === 'Pay Cycle' && settingsErrors.payCycle ? <p className="field-error">{settingsErrors.payCycle}</p> : null}
+                {label === 'Salary Credit Day' && settingsErrors.salaryCreditDay ? <p className="field-error">{settingsErrors.salaryCreditDay}</p> : null}
+                {label === 'PF Deduction' && settingsErrors.pfDeduction ? <p className="field-error">{settingsErrors.pfDeduction}</p> : null}
+                {label === 'Tax Policy' && settingsErrors.taxPolicy ? <p className="field-error">{settingsErrors.taxPolicy}</p> : null}
               </label>
             ))}
           </div>
@@ -850,12 +865,8 @@ function addListItemToSettings(current, key, value) {
     return current;
   }
 
-  if (!isValidSettingsName(nextValue)) {
-    return current;
-  }
-
   const currentList = Array.isArray(current[key]) ? current[key] : [];
-  if (currentList.includes(nextValue)) {
+  if (currentList.some((item) => String(item || '').trim().toLowerCase() === nextValue.toLowerCase())) {
     return current;
   }
 
@@ -876,10 +887,6 @@ function addLeaveTypeToSettings(current, newLeaveType) {
   const name = String(newLeaveType?.name || '').trim();
   const days = normalizeDays(newLeaveType?.days);
   if (!name) {
-    return current;
-  }
-
-  if (!isValidSettingsName(name)) {
     return current;
   }
 
@@ -925,70 +932,6 @@ function togglePermissionInSettings(current, role, sectionKey) {
       [role]: [...roleSections],
     },
   };
-}
-
-function validateSettingsDraft(settings) {
-  const errors = {};
-  const payrollErrors = {};
-
-  const departments = Array.isArray(settings?.departments) ? settings.departments : [];
-  const designations = Array.isArray(settings?.designations) ? settings.designations : [];
-  const leaveTypes = Array.isArray(settings?.leaveTypes) ? settings.leaveTypes : [];
-  const payrollSettings = settings?.payrollSettings && typeof settings.payrollSettings === 'object'
-    ? settings.payrollSettings
-    : {};
-
-  if (departments.some((item) => !isValidSettingsName(item))) {
-    errors.departments = 'Departments must contain letters and spaces only.';
-  }
-
-  if (designations.some((item) => !isValidSettingsName(item))) {
-    errors.designations = 'Designations must contain letters and spaces only.';
-  }
-
-  const invalidLeaveType = leaveTypes.find((item) => !item || !isValidSettingsName(item.name) || !isValidPositiveInteger(item.days));
-  if (invalidLeaveType) {
-    errors.leaveTypes = 'Leave types must use a valid name and a non-negative day count.';
-  }
-
-  Object.entries(payrollSettings).forEach(([label, value]) => {
-    if (!isValidPayrollValue(value)) {
-      payrollErrors[label] = 'Payroll configuration values must contain valid text only.';
-    }
-  });
-
-  if (Object.keys(payrollErrors).length > 0) {
-    errors.payrollSettings = payrollErrors;
-  }
-
-  return errors;
-}
-
-function isValidSettingsName(value) {
-  const trimmed = String(value || '').trim();
-  return /^(?=.*[A-Za-z])[A-Za-z][A-Za-z\s'-]*$/.test(trimmed);
-}
-
-function isValidPayrollValue(value) {
-  const trimmed = String(value || '').trim();
-  return /^(?=.*[A-Za-z])[A-Za-z0-9][A-Za-z0-9\s,.'&()/-]*$/.test(trimmed);
-}
-
-function sanitizeSettingsNameInput(value) {
-  return String(value || '').replace(/[^A-Za-z\s'-]+/g, '');
-}
-
-function sanitizePayrollValueInput(value) {
-  return String(value || '').replace(/[^A-Za-z0-9\s,.'&()/-]+/g, '');
-}
-
-function sanitizeDigitsInput(value) {
-  return String(value || '').replace(/[^\d]/g, '');
-}
-
-function isValidPositiveInteger(value) {
-  const trimmed = String(value ?? '').trim();
-  return /^\d+$/.test(trimmed) && Number(trimmed) >= 0;
 }
 
 function getRoleSections(role, permissionMatrix) {

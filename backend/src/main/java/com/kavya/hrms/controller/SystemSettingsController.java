@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -21,6 +22,12 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/settings")
 public class SystemSettingsController {
   private static final String DEFAULT_ID = "default";
+  private static final Pattern DEPARTMENT_PATTERN = Pattern.compile("^[A-Za-z]+(?:[ &-][A-Za-z]+)*$");
+  private static final Pattern DESIGNATION_PATTERN = Pattern.compile("^(?=.*[A-Za-z])[A-Za-z +/()-]+$");
+  private static final Pattern LEAVE_TYPE_PATTERN = Pattern.compile("^[A-Za-z]+(?:[ ()-][A-Za-z]+)*$");
+  private static final Pattern TAX_POLICY_PATTERN = Pattern.compile("^(?=.*[A-Za-z])[A-Za-z0-9 ,.()%/-]+$");
+  private static final List<String> ALLOWED_PAY_CYCLES = List.of("Monthly", "Weekly", "Biweekly", "Fortnightly", "Quarterly");
+  private static final List<String> ALLOWED_PF_DEDUCTION_VALUES = List.of("Enabled", "Disabled", "Yes", "No", "Applicable", "Not Applicable");
   private final SystemSettingsRepository repository;
   private final SettingsBroadcastService broadcastService;
 
@@ -50,6 +57,7 @@ public class SystemSettingsController {
 
     SystemSettings current = repository.findById(DEFAULT_ID).orElseGet(this::buildDefaultSettings);
     SystemSettings next = mergeSettings(current, settings, accessRole);
+    validateSettings(next);
     next.setId(DEFAULT_ID);
     SystemSettings saved = repository.save(next);
     broadcastService.broadcastSettingsChanged(saved);
@@ -178,6 +186,85 @@ public class SystemSettingsController {
       List<SystemSettings.LeaveTypeSetting> next,
       List<SystemSettings.LeaveTypeSetting> fallback) {
     return next == null || next.isEmpty() ? copyLeaveTypes(fallback) : copyLeaveTypes(next);
+  }
+
+  private void validateSettings(SystemSettings settings) {
+    if (settings == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Settings are required.");
+    }
+
+    for (String department : safeStringList(settings.getDepartments())) {
+      validateText(department, DEPARTMENT_PATTERN, "Department name is required.", "Enter a valid Department name.");
+    }
+
+    for (String designation : safeStringList(settings.getDesignations())) {
+      validateText(designation, DESIGNATION_PATTERN, "Designation is required.", "Enter a valid Designation.");
+    }
+
+    for (SystemSettings.LeaveTypeSetting leaveType : safeLeaveTypes(settings.getLeaveTypes())) {
+      validateText(leaveType == null ? null : leaveType.getName(), LEAVE_TYPE_PATTERN, "Leave Type is required.", "Enter a valid Leave Type.");
+      Integer days = leaveType == null ? null : leaveType.getDays();
+      if (days == null || days < 0) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid leave allowance.");
+      }
+    }
+
+    Map<String, String> payroll = settings.getPayrollSettings() == null ? Map.of() : settings.getPayrollSettings();
+    String payCycle = trimToEmpty(payroll.get("Pay Cycle"));
+    String salaryCreditDay = trimToEmpty(payroll.get("Salary Credit Day"));
+    String pfDeduction = trimToEmpty(payroll.get("PF Deduction"));
+    String taxPolicy = trimToEmpty(payroll.get("Tax Policy"));
+
+    if (payCycle.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pay Cycle is required.");
+    }
+    if (!ALLOWED_PAY_CYCLES.contains(payCycle) && !payCycle.matches("^[A-Za-z]+(?: [A-Za-z]+)*$")) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid Pay Cycle.");
+    }
+
+    if (!salaryCreditDay.matches("^\\d{1,2}$")) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Salary Credit Day must be between 1 and 31.");
+    }
+    int creditDay = Integer.parseInt(salaryCreditDay);
+    if (creditDay < 1 || creditDay > 31) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Salary Credit Day must be between 1 and 31.");
+    }
+
+    if (pfDeduction.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PF Deduction is required.");
+    }
+    if (!ALLOWED_PF_DEDUCTION_VALUES.contains(pfDeduction)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid PF Deduction value.");
+    }
+
+    if (taxPolicy.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tax Policy is required.");
+    }
+    if (!TAX_POLICY_PATTERN.matcher(taxPolicy).matches()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid Tax Policy.");
+    }
+  }
+
+  private List<String> safeStringList(List<String> values) {
+    return values == null ? List.of() : values;
+  }
+
+  private List<SystemSettings.LeaveTypeSetting> safeLeaveTypes(List<SystemSettings.LeaveTypeSetting> values) {
+    return values == null ? List.of() : values;
+  }
+
+  private void validateText(String value, Pattern pattern, String requiredMessage, String invalidMessage) {
+    String normalized = trimToEmpty(value);
+    if (normalized.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, requiredMessage);
+    }
+    if (!pattern.matcher(normalized).matches()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalidMessage);
+    }
+  }
+
+  private String trimToEmpty(String value) {
+    return value == null ? "" : value.trim();
   }
 
   private Map<String, String> copyStringMap(Map<String, String> values) {
