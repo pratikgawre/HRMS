@@ -18,6 +18,7 @@ import {
 } from '../utils/user-management.js';
 
 const USER_DELETE_UNDO_MS = 6000;
+const sanitizeSearchInput = (value = '') => String(value).replace(/[^\p{L}\p{N}\s]/gu, '');
 
 
 function UserManagement() {
@@ -38,10 +39,11 @@ function UserManagement() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    const nextSearch = sanitizeSearchInput(params.get('search') || '');
     const nextStatus = params.get('status');
     const nextRole = params.get('role');
 
-    setSearch('');
+    setSearch(nextSearch);
     setRoleFilter(nextRole || 'All Roles');
     setStatusFilter(nextStatus || 'All Status');
 
@@ -350,7 +352,11 @@ function UserManagement() {
         <div className="page-toolbar">
           <label className="toolbar-search">
             <i className="ri-search-line" aria-hidden="true" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search user, employee ID, email, role" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(sanitizeSearchInput(event.target.value))}
+              placeholder="Search user, employee ID, email, role"
+            />
           </label>
           <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} aria-label="Filter by role">
             <option>All Roles</option>
