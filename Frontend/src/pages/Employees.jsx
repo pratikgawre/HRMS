@@ -344,12 +344,11 @@ function Employees() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const nextSearch = sanitizeSearchInput(params.get('search') || '');
     const nextStatus = params.get('status');
     const nextDepartment = params.get('department');
     const nextEmploymentType = params.get('employmentType');
 
-    setSearch(nextSearch);
+    setSearch('');
     setDepartment(nextDepartment || 'All Departments');
     setStatus(nextStatus || 'All');
     setEmploymentType(nextEmploymentType || 'All Types');
