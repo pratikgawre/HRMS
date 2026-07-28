@@ -41,8 +41,6 @@ function Header({ role, onMenuClick }) {
   }[role] || '/employee';
 
   const searchRoutes = getSearchRoutes(role);
-  const isSearchQueryValid = (value) => /^[A-Za-z\s]*$/.test(value);
-  const normalizeSearchQuery = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
   // Close notification panel when clicking outside
   useEffect(() => {
@@ -141,7 +139,7 @@ function Header({ role, onMenuClick }) {
     };
   }, [showNotifications]);
   const runSearch = () => {
-    const normalized = normalizeSearchQuery(searchQuery);
+    const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;
 
     const directMatch = searchRoutes.reduce((bestMatch, entry, index) => {
@@ -247,7 +245,7 @@ function Header({ role, onMenuClick }) {
           <i className="ri-search-line" aria-hidden="true" />
           <input
             value={searchQuery}
-            onChange={(event) => setSearchQuery(sanitizeSearchInput(event.target.value))}
+            onChange={(event) => setSearchQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') runSearch();
             }}

@@ -73,6 +73,7 @@ const bankNameGroups = [
   },
 ];
 const bankNameOptionSet = new Set(bankNameGroups.flatMap((group) => group.options));
+const sanitizeSearchInput = (value = '') => String(value).replace(/[^\p{L}\p{N}\s]/gu, '');
 const indiaStateDistrictData = indiaStateDistrict.getAllStatesWithDistricts?.()
   || indiaStateDistrict.default?.getAllStatesWithDistricts?.()
   || [];
@@ -343,11 +344,12 @@ function Employees() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    const nextSearch = sanitizeSearchInput(params.get('search') || '');
     const nextStatus = params.get('status');
     const nextDepartment = params.get('department');
     const nextEmploymentType = params.get('employmentType');
 
-    setSearch('');
+    setSearch(nextSearch);
     setDepartment(nextDepartment || 'All Departments');
     setStatus(nextStatus || 'All');
     setEmploymentType(nextEmploymentType || 'All Types');
@@ -701,7 +703,11 @@ function Employees() {
     <div className="page-toolbar">
           <label className="toolbar-search">
             <i className="ri-search-line" aria-hidden="true" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search employee, email, designation, department" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(sanitizeSearchInput(event.target.value))}
+              placeholder="Search employee, email, designation, department"
+            />
           </label>
           <select value={department} onChange={(event) => setDepartment(event.target.value)} aria-label="Filter by department">
             <option>All Departments</option>

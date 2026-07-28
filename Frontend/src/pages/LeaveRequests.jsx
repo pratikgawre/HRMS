@@ -37,6 +37,7 @@ const leaveYearOptions = Array.from({ length: 5 }, (_, index) => currentLeaveYea
 const leaveFilterOptions = ['All', 'Casual Leave', 'Sick Leave', 'Earned Leave', 'Work From Home'];
 const approveActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%2309767a" stroke-width="2.4"/%3E%3Cpath d="M8 12.25l2.45 2.45L16.5 8.65" stroke="%2309767a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/%3E%3C/svg%3E';
 const rejectActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%23d94d63" stroke-width="2.4"/%3E%3Cpath d="M8.75 8.75l6.5 6.5M15.25 8.75l-6.5 6.5" stroke="%23d94d63" stroke-width="2.4" stroke-linecap="round"/%3E%3C/svg%3E';
+const isValidLeaveSearchQuery = (value = '') => /^[\p{L}\p{N}\s]*$/u.test(String(value));
 
 function LeaveRequests() {
   const location = useLocation();
