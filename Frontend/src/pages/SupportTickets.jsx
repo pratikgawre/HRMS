@@ -24,8 +24,6 @@ const titleMinLength = 5;
 const titleMaxLength = 100;
 const descriptionMinLength = 20;
 const descriptionMaxLength = 1000;
-const supportTitlePattern = /^[A-Za-z0-9\s]*$/;
-const supportTitleError = 'Special characters are not allowed.';
 
 const ticketColumns = [
   { key: 'id', label: 'Ticket ID' },
@@ -128,9 +126,8 @@ function SupportTickets() {
     : ['id', 'employeeName', 'title', 'category', 'priority', 'status', 'createdDate'];
 
   const updateField = (field, value) => {
-    const normalizedValue = field === 'title' ? sanitizeSupportTitle(value) : value;
-    setForm((current) => ({ ...current, [field]: normalizedValue }));
-    const fieldError = validateSupportField(field, normalizedValue);
+    setForm((current) => ({ ...current, [field]: value }));
+    const fieldError = validateSupportField(field, value);
     setErrors((current) => {
       if (fieldError) {
         return { ...current, [field]: fieldError };
@@ -146,13 +143,6 @@ function SupportTickets() {
     });
     setSuccessMessage('');
     setErrorMessage('');
-  };
-
-  const sanitizeSupportTitle = (value) => {
-    return String(value || '')
-      .replace(/[^A-Za-z0-9\s]+/g, '')
-      .replace(/\s+/g, ' ')
-      .trimStart();
   };
 
   const handleScreenshotChange = (event) => {
@@ -275,7 +265,6 @@ function SupportTickets() {
       const screenshotDataUrl = form.screenshot ? await fileToDataUrl(form.screenshot) : '';
       const created = await apiRequest('/support', {
         method: 'POST',
-        timeoutMs: 60000,
         body: JSON.stringify({
           employeeId: currentEmployee.employeeId,
           employeeName: currentEmployee.employee,
@@ -346,12 +335,11 @@ function SupportTickets() {
                 className={errors.title ? 'support-invalid' : ''}
                 type="text"
                 value={form.title}
-                onChange={(event) => updateField('title', event.target.value)}
+                onChange={(event) => updateField('title', sanitizeSupportTitle(event.target.value))}
                 placeholder="Short summary of your issue"
                 aria-invalid={Boolean(errors.title)}
-                aria-describedby={errors.title ? 'support-title-error' : undefined}
               />
-              {errors.title && <small id="support-title-error">{errors.title}</small>}
+              {errors.title && <small>{errors.title}</small>}
             </label>
 
             <label className="field">
@@ -608,9 +596,6 @@ function validateSupportField(field, value) {
       if (!title || title.length < titleMinLength || title.length > titleMaxLength) {
         return 'Ticket title is required.';
       }
-      if (!supportTitlePattern.test(title)) {
-        return supportTitleError;
-      }
       return '';
     }
     case 'category': {
@@ -631,6 +616,10 @@ function validateSupportField(field, value) {
     default:
       return '';
   }
+}
+
+function sanitizeSupportTitle(value) {
+  return String(value || '').replace(/[^a-zA-Z\s]/g, '');
 }
 
 function validateScreenshotFile(file) {

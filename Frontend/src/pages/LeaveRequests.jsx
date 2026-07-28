@@ -58,7 +58,6 @@ function LeaveRequests() {
   const [selectedYear, setSelectedYear] = useState('All Years');
   const [form, setForm] = useState(() => getEmptyLeaveForm(currentEmployee, DEFAULT_LEAVE_TYPES));
   const [fileErrors, setFileErrors] = useState({});
-  const [reasonError, setReasonError] = useState('');
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [queueFilter, setQueueFilter] = useState('all');
   const [ownLeaveType, setOwnLeaveType] = useState('All');
@@ -218,7 +217,6 @@ function LeaveRequests() {
 
   const openNewRequest = () => {
     setFileErrors({});
-    setReasonError('');
     setForm({
       ...getEmptyLeaveForm(currentEmployee, leaveTypes),
       type: toolbarLeaveTypes.includes(selectedLeaveType) ? selectedLeaveType : leaveTypes[0]?.name || DEFAULT_LEAVE_TYPES[0].name,
@@ -349,8 +347,7 @@ function LeaveRequests() {
 
   const updateField = (field, value) => {
     setForm((current) => {
-      const nextValue = field === 'reason' ? sanitizeTextOnly(value) : value;
-      const next = { ...current, [field]: nextValue };
+      const next = { ...current, [field]: value };
       if (field === 'from' || field === 'to') {
         next.days = getLeaveDays(next.from, next.to);
       }
@@ -363,11 +360,6 @@ function LeaveRequests() {
       }
       return next;
     });
-    if (field === 'reason') {
-      setReasonError(String(value || '') === sanitizeTextOnly(value)
-        ? ''
-        : 'Numbers and symbols are not allowed.');
-    }
     setMessage('');
   };
 
@@ -451,12 +443,6 @@ function LeaveRequests() {
 
   const submitLeaveRequest = async (event) => {
     event.preventDefault();
-    if (!String(form.reason || '').trim()) {
-      setReasonError('Reason is required.');
-      setMessage('');
-      return;
-    }
-
     const needsMedicalReport = form.type === 'Sick Leave' && Number(form.days) > 2;
     if (needsMedicalReport && !form.medicalReport) {
       setFileErrors((currentErrors) => ({ ...currentErrors, medicalReport: 'Medical report is required for Sick Leave longer than 2 days.' }));
@@ -500,7 +486,6 @@ function LeaveRequests() {
 
     setForm(getEmptyLeaveForm(currentEmployee, leaveTypes));
     setFileErrors({});
-    setReasonError('');
     setShowForm(false);
     setMessage('Leave request created successfully.');
   };
@@ -691,21 +676,15 @@ function LeaveRequests() {
             <option>Rejected</option>
           </select>
           {role !== 'employee' && (
-            <label className={`leave-search${searchError ? ' is-invalid' : ''}`}>
-              <span className="leave-search-row">
-                <i className="ri-search-line" aria-hidden="true" />
-                <input
-                  type="search"
-                  value={searchText}
-                  onChange={handleSearchChange}
-                  onKeyDown={handleSearchKeyDown}
-                  placeholder="Search employee, type, reason..."
-                  aria-label="Search leave requests"
-                  aria-invalid={Boolean(searchError)}
-                  aria-describedby={searchError ? 'leave-search-error' : undefined}
-                />
-              </span>
-              {searchError && <span id="leave-search-error" className="leave-search-error" role="alert">{searchError}</span>}
+            <label className="toolbar-search">
+              <i className="ri-search-line" aria-hidden="true" />
+              <input
+                type="search"
+                value={searchText}
+                onChange={(event) => setSearchText(sanitizeLeaveSearchInput(event.target.value))}
+                placeholder="Search employee, type, reason..."
+                aria-label="Search leave requests"
+              />
             </label>
           )}
             </div>
@@ -727,14 +706,12 @@ function LeaveRequests() {
           leaveTypeOptions={leaveTypeOptions}
           form={form}
           fileErrors={fileErrors}
-          reasonError={reasonError}
           updateField={updateField}
           updateMedicalReport={updateMedicalReport}
           onSubmit={submitLeaveRequest}
           onClose={() => {
             setShowForm(false);
             setFileErrors({});
-            setReasonError('');
           }}
         />
       )}
@@ -750,7 +727,7 @@ function LeaveRequests() {
   );
 }
 
-function LeaveRequestModal({ currentEmployee, leaveTypeOptions, form, fileErrors, reasonError, updateField, updateMedicalReport, onSubmit, onClose }) {
+function LeaveRequestModal({ currentEmployee, leaveTypeOptions, form, fileErrors, updateField, updateMedicalReport, onSubmit, onClose }) {
   const needsMedicalReport = form.type === 'Sick Leave' && Number(form.days) > 2;
 
   return (
@@ -788,7 +765,6 @@ function LeaveRequestModal({ currentEmployee, leaveTypeOptions, form, fileErrors
           <label className="field full">
             <span>Reason</span>
             <textarea required value={form.reason} onChange={(event) => updateField('reason', event.target.value)} placeholder="Enter leave reason" />
-            {reasonError && <small>{reasonError}</small>}
           </label>
           {needsMedicalReport && (
             <label className="field full">
@@ -983,6 +959,10 @@ function getLeaveDateRange(request, fallbackYear) {
     start: start || end,
     end: end || start,
   };
+}
+
+function sanitizeLeaveSearchInput(value) {
+  return String(value || '').replace(/[^a-zA-Z\s]/g, '');
 }
 
 function parseLeaveDate(value, fallbackYear) {

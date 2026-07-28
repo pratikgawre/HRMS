@@ -335,8 +335,8 @@ function Assets() {
     },
   ]), [activeSummary]);
 
-  const updateAsset = (assetId, patch) => {
-    if (!canManage) {
+  const updateAsset = (assetId, patch, { allowScopedUpdate = false } = {}) => {
+    if (!canManage && !allowScopedUpdate) {
       return;
     }
 
@@ -387,7 +387,7 @@ function Assets() {
       return;
     }
 
-    updateAsset(assetId, { status: 'Replacement Requested' });
+    updateAsset(assetId, { status: 'Replacement Requested' }, { allowScopedUpdate: true });
   };
 
   const markReturned = (assetId) => {
@@ -773,7 +773,7 @@ function Assets() {
   ];
 
   const filteredAssets = useMemo(() => {
-    const query = searchText.trim().toLowerCase();
+    const query = normalizeAssetIdSearchText(searchText);
     let rows = scopedAssets;
 
     if (assetView === 'assigned') {
@@ -789,13 +789,9 @@ function Assets() {
     }
 
     return rows.filter((asset) => {
-      const employeeId = String(asset.assignedToEmployeeId || '').toLowerCase();
-      const assignedTo = String(asset.assignedTo || '').toLowerCase();
-      const employeeName = asset.assignedToEmployeeId
-        ? (employeeLookup.get(String(asset.assignedToEmployeeId).toLowerCase())?.employeeName || '')
-        : (employeeLookup.get(String(asset.assignedTo).toLowerCase())?.employeeName || '');
-      const assetName = String(asset.assetName || '').toLowerCase();
-      return assetName.includes(query) || assignedTo.includes(query) || employeeId.includes(query) || String(employeeName || '').toLowerCase().includes(query);
+      const assetId = normalizeAssetIdSearchText(asset.id || asset.assetCode || '');
+      const assetName = normalizeAssetIdSearchText(asset.assetName || '');
+      return assetId.includes(query) || assetName.includes(query);
     });
   }, [assetView, scopedAssets, searchText]);
 
@@ -1016,10 +1012,8 @@ function Assets() {
             <input
               type="search"
               value={searchText}
-              onChange={handleAssetSearchChange}
-              placeholder="Search by asset name or employee ID..."
-              aria-invalid={Boolean(searchError)}
-              aria-describedby={searchError ? 'asset-search-error' : undefined}
+              onChange={(event) => setSearchText(sanitizeAssetSearchInput(event.target.value))}
+              placeholder="Search by asset ID or asset..."
             />
           </label>
         </div>
@@ -2291,6 +2285,18 @@ function getNextAssetCode(assets) {
   }, 100);
 
   return `AST-${String(highest + 1)}`;
+}
+
+function sanitizeAssetSearchInput(value) {
+  return String(value || '').replace(/[^a-zA-Z0-9-]/g, '');
+}
+
+function normalizeAssetIdSearchText(value) {
+  return String(value || '')
+    .replace(/[^a-zA-Z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .trim()
+    .toLowerCase();
 }
 
 function isAdminEmployee(employee) {

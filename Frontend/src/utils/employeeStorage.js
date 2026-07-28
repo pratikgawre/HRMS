@@ -195,7 +195,6 @@ export function saveStoredEmployees(employees, options = {}) {
   window.dispatchEvent(new Event('kavyaEmployeesChanged'));
   return apiRequest('/employees/bulk', {
     method: 'POST',
-    timeoutMs: 60000,
     headers: options.sendCredentialUpdates ? {
       'X-Kavya-Send-Credential-Updates': 'true',
       'X-Kavya-Credential-Update-Employee': String(options.credentialUpdateEmployeeId || ''),

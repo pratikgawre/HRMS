@@ -6,14 +6,11 @@ import { apiRequest } from '../utils/api.js';
 import { getSessionValue, setSessionValue } from '../utils/appSession.js';
 import { getUsers } from '../utils/user-management.js';
 
-const sanitizeTextSearch = (value = '') => String(value).replace(/[^\p{L}\s]/gu, '');
-
 function Header({ role, onMenuClick }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchError, setSearchError] = useState('');
   const [notificationItems, setNotificationItems] = useState([]);
   const [employeeIdentity, setEmployeeIdentity] = useState(() => getHeaderEmployeeIdentity(role));
   const notificationWrapRef = useRef(null);
@@ -143,20 +140,19 @@ function Header({ role, onMenuClick }) {
       document.removeEventListener('keydown', handleNotificationKeyDown);
     };
   }, [showNotifications]);
-
   const runSearch = () => {
-    const normalized = searchQuery.trim().toLowerCase();
+    const normalized = normalizeSearchQuery(searchQuery);
     if (!normalized) return;
 
     const directMatch = searchRoutes.reduce((bestMatch, entry, index) => {
-      const matchedKeyword = entry.keywords.find((keyword) => normalized.includes(keyword));
-      if (!matchedKeyword) {
+      const matchedLabel = normalizeSearchQuery(entry.label);
+      if (!matchedLabel || !matchedLabel.includes(normalized)) {
         return bestMatch;
       }
 
       const candidateScore = {
-        exact: normalized === matchedKeyword ? 2 : 1,
-        length: matchedKeyword.length,
+        exact: normalized === matchedLabel ? 2 : 1,
+        length: matchedLabel.length,
         index,
       };
 
@@ -176,7 +172,7 @@ function Header({ role, onMenuClick }) {
       return candidateScore.index < score.index ? { entry, score: candidateScore } : bestMatch;
     }, null)?.entry;
     const targetPath = directMatch?.path || `${roleBasePath}/dashboard`;
-    navigate(`${targetPath}?search=${encodeURIComponent(searchQuery.trim())}`);
+    navigate(`${targetPath}?search=${encodeURIComponent(normalized)}`);
   };
 
   const handleNotificationClick = async (id) => {
@@ -251,7 +247,7 @@ function Header({ role, onMenuClick }) {
           <i className="ri-search-line" aria-hidden="true" />
           <input
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            onChange={(event) => setSearchQuery(sanitizeSearchInput(event.target.value))}
             onKeyDown={(event) => {
               if (event.key === 'Enter') runSearch();
             }}
@@ -335,78 +331,95 @@ function Header({ role, onMenuClick }) {
 function getSearchRoutes(role) {
   const baseRoutes = {
     admin: [
-      { path: '/admin/dashboard', keywords: ['dashboard', 'overview', 'home'] },
-      { path: '/admin/employees', keywords: ['employee', 'employees', 'staff', 'member', 'people', 'team'] },
-      { path: '/admin/users', keywords: ['user', 'users', 'access', 'role', 'account'] },
-      { path: '/admin/team-attendance', keywords: ['attendance', 'team attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
-      { path: '/admin/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
-      { path: '/admin/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
-      { path: '/admin/leave-management', keywords: ['leave', 'vacation', 'absence'] },
-      { path: '/admin/support', keywords: ['support', 'ticket', 'help'] },
-      { path: '/admin/assets', keywords: ['asset', 'assets', 'inventory'] },
-      { path: '/admin/tasks', keywords: ['task', 'tasks', 'assignment'] },
-      { path: '/admin/projects', keywords: ['project', 'projects', 'delivery'] },
-      { path: '/admin/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
-      { path: '/admin/profile', keywords: ['profile', 'account', 'me'] },
+      { path: '/admin/dashboard', label: 'Dashboard' },
+      { path: '/admin/announcements', label: 'Announcements' },
+      { path: '/admin/assets', label: 'Assets' },
+      { path: '/admin/tasks', label: 'Task Assignment' },
+      { path: '/admin/team-attendance', label: 'Team Attendance' },
+      { path: '/admin/employees', label: 'Employees' },
+      { path: '/admin/leave-management', label: 'Leave Management' },
+      { path: '/admin/payroll', label: 'Payroll/Salary' },
+      { path: '/admin/profile', label: 'Profile' },
+      { path: '/admin/projects', label: 'Projects' },
+      { path: '/admin/settings', label: 'Settings' },
+      { path: '/admin/support', label: 'Support' },
+      { path: '/admin/users', label: 'User Management' },
     ],
     hr: [
-      { path: '/hr/dashboard', keywords: ['dashboard', 'overview', 'home'] },
-      { path: '/hr/employees', keywords: ['employee', 'employees', 'staff', 'member', 'people', 'team'] },
-      { path: '/hr/users', keywords: ['user', 'users', 'access', 'role', 'account'] },
-      { path: '/hr/team-attendance', keywords: ['team attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
-      { path: '/hr/my-attendance', keywords: ['my attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
-      { path: '/hr/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
-      { path: '/hr/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
-      { path: '/hr/leave-approval', keywords: ['leave', 'vacation', 'absence'] },
-      { path: '/hr/tasks', keywords: ['task', 'tasks', 'assignment'] },
-      { path: '/hr/projects', keywords: ['project', 'projects', 'delivery'] },
-      { path: '/hr/assets', keywords: ['asset', 'assets', 'inventory'] },
-      { path: '/hr/support', keywords: ['support', 'ticket', 'help'] },
-      { path: '/hr/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
-      { path: '/hr/profile', keywords: ['profile', 'account', 'me'] },
+      { path: '/hr/dashboard', label: 'Dashboard' },
+      { path: '/hr/announcements', label: 'Announcements' },
+      { path: '/hr/assets', label: 'Asset Management' },
+      { path: '/hr/team-attendance', label: 'Team Attendance' },
+      { path: '/hr/employees', label: 'Employees' },
+      { path: '/hr/scheduled-interviews', label: 'Scheduled Interviews' },
+      { path: '/hr/attendance', label: 'My Attendance' },
+      { path: '/hr/leave-approval', label: 'Leave Approval' },
+      { path: '/hr/payroll', label: 'Payroll/Salary' },
+      { path: '/hr/profile', label: 'Profile' },
+      { path: '/hr/projects', label: 'Projects' },
+      { path: '/hr/settings', label: 'Settings' },
+      { path: '/hr/support', label: 'Support' },
+      { path: '/hr/tasks', label: 'Task Assignment' },
+      { path: '/hr/users', label: 'User Management' },
     ],
     teamLead: [
-      { path: '/team-lead/dashboard', keywords: ['dashboard', 'overview', 'home'] },
-      { path: '/team-lead/team-attendance', keywords: ['team attendance', 'team attendence', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
-      { path: '/team-lead/attendance', keywords: ['my attendance', 'self attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
-      { path: '/team-lead/team', keywords: ['my team', 'employee', 'employees', 'team member', 'team members', 'member', 'people'] },
-      { path: '/team-lead/assets', keywords: ['asset', 'assets', 'inventory'] },
-      { path: '/team-lead/leave-review', keywords: ['leave', 'vacation', 'absence'] },
-      { path: '/team-lead/tasks', keywords: ['task', 'tasks', 'assignment'] },
-      { path: '/team-lead/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
-      { path: '/team-lead/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
-      { path: '/team-lead/support', keywords: ['support', 'ticket', 'help'] },
-      { path: '/team-lead/profile', keywords: ['profile', 'account', 'me'] },
+      { path: '/team-lead/dashboard', label: 'Team Dashboard' },
+      { path: '/team-lead/announcements', label: 'Announcements' },
+      { path: '/team-lead/assets', label: 'Assets' },
+      { path: '/team-lead/leave-review', label: 'Leave Review' },
+      { path: '/team-lead/attendance', label: 'My Attendance' },
+      { path: '/team-lead/team-attendance', label: 'Team Attendance' },
+      { path: '/team-lead/payroll', label: 'My Payslip' },
+      { path: '/team-lead/profile', label: 'My Profile' },
+      { path: '/team-lead/team', label: 'My Team' },
+      { path: '/team-lead/support', label: 'Support' },
+      { path: '/team-lead/tasks', label: 'Task Assignment' },
     ],
     projectManager: [
-      { path: '/project-manager/dashboard', keywords: ['dashboard', 'overview', 'home'] },
-      { path: '/project-manager/team', keywords: ['employee', 'employees', 'team', 'member', 'people'] },
-      { path: '/project-manager/projects', keywords: ['project', 'projects', 'delivery', 'milestone'] },
-      { path: '/project-manager/tasks', keywords: ['task', 'tasks', 'assignment'] },
-      { path: '/project-manager/team-attendance', keywords: ['team attendance', 'team', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
-      { path: '/project-manager/my-attendance', keywords: ['my attendance', 'self attendance', 'attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
-      { path: '/project-manager/leave-review', keywords: ['leave', 'vacation', 'absence'] },
-      { path: '/project-manager/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
-      { path: '/project-manager/assets', keywords: ['asset', 'assets', 'inventory'] },
-      { path: '/project-manager/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
-      { path: '/project-manager/support', keywords: ['support', 'ticket', 'help'] },
-      { path: '/project-manager/profile', keywords: ['profile', 'account', 'me'] },
+      { path: '/project-manager/dashboard', label: 'Dashboard' },
+      { path: '/project-manager/announcements', label: 'Announcements' },
+      { path: '/project-manager/team-attendance', label: 'Team Attendance' },
+      { path: '/project-manager/my-attendance', label: 'My Attendance' },
+      { path: '/project-manager/leave-review', label: 'Leave Review' },
+      { path: '/project-manager/payroll', label: 'My Payslip' },
+      { path: '/project-manager/profile', label: 'My Profile' },
+      { path: '/project-manager/team', label: 'Project Team' },
+      { path: '/project-manager/projects', label: 'Projects' },
+      { path: '/project-manager/support', label: 'Support' },
+      { path: '/project-manager/tasks', label: 'Task Assignment' },
+      { path: '/project-manager/assets', label: 'Team Assets' },
     ],
     employee: [
-      { path: '/employee/dashboard', keywords: ['dashboard', 'overview', 'home'] },
-      { path: '/employee/leave-requests', keywords: ['leave', 'vacation', 'absence', 'request'] },
-      { path: '/employee/attendance', keywords: ['attendance', 'checkin', 'check-in', 'check out', 'checkout', 'late', 'present'] },
-      { path: '/employee/tasks', keywords: ['task', 'tasks', 'my task', 'my tasks', 'assignment'] },
-      { path: '/employee/assets', keywords: ['asset', 'assets', 'my asset', 'my assets', 'inventory'] },
-      { path: '/employee/payroll', keywords: ['payroll', 'salary', 'payslip', 'compensation'] },
-      { path: '/employee/announcements', keywords: ['announcement', 'announcements', 'notice', 'policy', 'update'] },
-      { path: '/employee/support', keywords: ['support', 'ticket', 'help'] },
-      { path: '/employee/settings', keywords: ['setting', 'settings', 'configuration', 'config'] },
-      { path: '/employee/profile', keywords: ['profile', 'account', 'me'] },
+      { path: '/employee/dashboard', label: 'My Dashboard' },
+      { path: '/employee/attendance', label: 'My Attendance' },
+      { path: '/employee/tasks', label: 'My Tasks' },
+      { path: '/employee/leave-requests', label: 'Leave Request' },
+      { path: '/employee/payroll', label: 'My Payslip' },
+      { path: '/employee/assets', label: 'My Asset' },
+      { path: '/employee/announcements', label: 'Announcement' },
+      { path: '/employee/support', label: 'Support' },
+      { path: '/employee/profile', label: 'Profile' },
     ],
   };
 
-  return baseRoutes[role] || baseRoutes.employee;
+  return (baseRoutes[role] || baseRoutes.employee).map((entry) => ({
+    ...entry,
+    label: normalizeSearchQuery(entry.label),
+  }));
+}
+
+function normalizeSearchQuery(value) {
+  return String(value || '')
+    .replace(/[^a-zA-Z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function sanitizeSearchInput(value) {
+  return String(value || '')
+    .replace(/[^a-zA-Z\s]/g, '')
+    .replace(/\s+/g, ' ');
 }
 
 function normalizeNotifications(rows) {
