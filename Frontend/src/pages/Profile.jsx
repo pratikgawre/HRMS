@@ -120,6 +120,9 @@ function Profile() {
   const [twoFactorQr, setTwoFactorQr] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [personalValidationTouched, setPersonalValidationTouched] = useState({});
+  const [personalValidationAttempted, setPersonalValidationAttempted] = useState(false);
   const [storedProfileSnapshot, setStoredProfileSnapshot] = useState(() => buildStoredProfileSnapshot(employee, form, canManagePackageAmount));
   const toastTimerRef = useRef(null);
   const photoInputRef = useRef(null);
@@ -262,6 +265,69 @@ function Profile() {
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
+    setValidationErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const updatePersonalField = (field, value) => {
+    const sanitizedValue = sanitizePersonalFieldValue(field, value);
+    const attemptedInvalidEntry = String(value || '') !== sanitizedValue;
+    setForm((current) => {
+      const next = { ...current, [field]: sanitizedValue };
+      const error = attemptedInvalidEntry
+        ? 'Invalid characters are not allowed.'
+        : getPersonalFieldValidationError(field, next);
+      setValidationErrors((currentErrors) => {
+        if (!error) {
+          if (!currentErrors[field]) {
+            return currentErrors;
+          }
+
+          const nextErrors = { ...currentErrors };
+          delete nextErrors[field];
+          return nextErrors;
+        }
+
+        return {
+          ...currentErrors,
+          [field]: error,
+        };
+      });
+
+      return next;
+    });
+  };
+
+  const handlePersonalFieldBlur = (field) => {
+    setPersonalValidationTouched((current) => ({
+      ...current,
+      [field]: true,
+    }));
+
+    const error = getPersonalFieldValidationError(field, form);
+    setValidationErrors((currentErrors) => {
+      if (!error) {
+        if (!currentErrors[field]) {
+          return currentErrors;
+        }
+
+        const nextErrors = { ...currentErrors };
+        delete nextErrors[field];
+        return nextErrors;
+      }
+
+      return {
+        ...currentErrors,
+        [field]: error,
+      };
+    });
   };
 
   const updateAddressField = (field, value) => {
@@ -458,9 +524,23 @@ function Profile() {
     const section = event.nativeEvent?.submitter?.dataset?.section || 'all';
     const validationError = validateProfileSection(form, section, canManagePackageAmount);
     if (validationError) {
+      if (section === 'personal') {
+        setPersonalValidationAttempted(true);
+      }
+      if (section === 'personal') {
+        setValidationErrors(validatePersonalDetails(form));
+      } else {
+        setValidationErrors({});
+      }
       setStatusMessage(validationError);
       showPopup(validationError, 'error');
       return;
+    }
+
+    if (section === 'personal' || section === 'all') {
+      setValidationErrors({});
+      setPersonalValidationAttempted(false);
+      setPersonalValidationTouched({});
     }
 
     if (form.newPassword && form.newPassword !== form.confirmPassword) {
@@ -741,15 +821,22 @@ function Profile() {
             <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
               <label>
                 <span>Display Name</span>
-                <input value={form.displayName} onChange={(event) => updateField('displayName', sanitizeTextField(event.target.value))} />
+                <input
+                  className={validationErrors.displayName ? 'is-invalid' : ''}
+                  value={form.displayName}
+                  onChange={(event) => updatePersonalField('displayName', sanitizeTextField(event.target.value))}
+                  onBlur={() => handlePersonalFieldBlur('displayName')}
+                  aria-invalid={Boolean(validationErrors.displayName)}
+                />
+                {validationErrors.displayName ? <small className="profile-field-error" role="alert">{validationErrors.displayName}</small> : null}
               </label>
               <label>
                 <span>Job Title</span>
-                <input value={form.jobTitle} onChange={(event) => updateField('jobTitle', sanitizeTextField(event.target.value))} />
+                <input value={form.jobTitle} onChange={(event) => updateField('jobTitle', event.target.value)} />
               </label>
               <label>
                 <span>Department</span>
-                <input value={form.department} onChange={(event) => updateField('department', sanitizeTextField(event.target.value))} />
+                <input value={form.department} onChange={(event) => updateField('department', event.target.value)} />
               </label>
               <label>
                 <span>Gender</span>
@@ -762,15 +849,23 @@ function Profile() {
               </label>
               <label>
                 <span>Date of Birth</span>
-                <input type="date" value={form.dateOfBirth} onChange={(event) => updateField('dateOfBirth', event.target.value)} />
+                <input
+                  className={validationErrors.dateOfBirth ? 'is-invalid' : ''}
+                  type="date"
+                  value={form.dateOfBirth}
+                  onChange={(event) => updatePersonalField('dateOfBirth', event.target.value)}
+                  onBlur={() => handlePersonalFieldBlur('dateOfBirth')}
+                  aria-invalid={Boolean(validationErrors.dateOfBirth)}
+                />
+                {validationErrors.dateOfBirth ? <small className="profile-field-error" role="alert">{validationErrors.dateOfBirth}</small> : null}
               </label>
               <label>
                 <span>Nationality</span>
-                <input value={form.nationality} onChange={(event) => updateField('nationality', sanitizeTextField(event.target.value))} />
+                <input value={form.nationality} onChange={(event) => updateField('nationality', event.target.value)} />
               </label>
               <label>
                 <span>Working Location</span>
-                <input value={form.workingLocation} onChange={(event) => updateField('workingLocation', sanitizeTextField(event.target.value))} />
+                <input value={form.workingLocation} onChange={(event) => updateField('workingLocation', event.target.value)} />
               </label>
               <label>
                 <span>Marital Status</span>
@@ -792,7 +887,7 @@ function Profile() {
               </label>
               <label>
                 <span>Highest Qualification</span>
-                <input value={form.highestQualification} onChange={(event) => updateField('highestQualification', sanitizeTextField(event.target.value))} />
+                <input value={form.highestQualification} onChange={(event) => updateField('highestQualification', event.target.value)} />
               </label>
               <label>
                 <span>Employment Type</span>
@@ -813,10 +908,21 @@ function Profile() {
               </label>
               <label>
                 <span>Grade</span>
-                <input value={form.grade} onChange={(event) => updateField('grade', sanitizeTextField(event.target.value))} />
+                <input value={form.grade} onChange={(event) => updateField('grade', event.target.value)} />
               </label>
               <div className="notification-actions profile-form-actions">
-                <button type="button" onClick={() => setForm(createProfileForm(employee))} disabled={isSaving}>Reset</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm(createProfileForm(employee));
+                    setValidationErrors({});
+                    setPersonalValidationTouched({});
+                    setPersonalValidationAttempted(false);
+                  }}
+                  disabled={isSaving}
+                >
+                  Reset
+                </button>
                 <button type="submit" data-section="personal" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Personal Details'}</button>
               </div>
             </form>
@@ -1390,22 +1496,12 @@ function validateProfileSection(form, section, canManagePackageAmount) {
 
   if (section === 'personal' || section === 'all') {
     requireValue(displayName, 'Display name is required.');
-    requireValue(/^[\p{L}\s]+$/u.test(displayName), 'Display name can only contain letters and spaces.');
     requireValue(jobTitle, 'Job title is required.');
-    requireValue(/^[\p{L}\s]+$/u.test(jobTitle), 'Job title can only contain letters and spaces.');
     requireValue(department, 'Department is required.');
-    requireValue(/^[\p{L}\s]+$/u.test(department), 'Department can only contain letters and spaces.');
     requireValue(gender, 'Gender is required.');
     requireValue(dateOfBirth, 'Date of birth is required.');
+    requireValue(isValidDateOfBirth(dateOfBirth), 'Date of birth cannot be a future date.');
     requireValue(employmentType, 'Employment type is required.');
-    requireValue(nationality, 'Nationality is required.');
-    requireValue(textOnlyPattern.test(nationality), 'Nationality can only contain letters and spaces.');
-    requireValue(workingLocation, 'Working location is required.');
-    requireValue(textOnlyPattern.test(workingLocation), 'Working location can only contain letters and spaces.');
-    requireValue(grade, 'Grade is required.');
-    requireValue(textOnlyPattern.test(grade), 'Grade can only contain letters and spaces.');
-    requireValue(highestQualification, 'Highest qualification is required.');
-    requireValue(textOnlyPattern.test(highestQualification), 'Highest qualification can only contain letters and spaces.');
   }
 
   if (section === 'contact' || section === 'all') {
@@ -1430,20 +1526,26 @@ function validateProfileSection(form, section, canManagePackageAmount) {
 
   if (section === 'address' || section === 'all') {
     requireValue(hasValue(String(form.presentAddressLine1 || '')), 'Present Address 1 is required.');
+    requireValue(isValidAddressLine(String(form.presentAddressLine1 || '')), 'Present Address 1 must contain valid address characters only.');
     requireValue(hasValue(String(form.presentAddressLine2 || '')), 'Present Address 2 is required.');
+    requireValue(isValidAddressLine(String(form.presentAddressLine2 || '')), 'Present Address 2 must contain valid address characters only.');
     requireValue(hasValue(String(form.presentCityDistrict || '')), 'Present City is required.');
-    requireValue(/^[\p{L}\s]+$/u.test(String(form.presentCityDistrict || '').trim()), 'Present City can only contain letters and spaces.');
     requireValue(hasValue(String(form.presentState || '')), 'Present State is required.');
-    requireValue(/^[\p{L}\s]+$/u.test(String(form.presentState || '').trim()), 'Present State can only contain letters and spaces.');
     requireValue(hasValue(presentPinCode), 'Present PIN code is required.');
     requireValue(hasValue(String(form.presentCountry || '')), 'Present Country is required.');
+    requireValue(isValidRegionName(String(form.presentCountry || '')), 'Present Country must contain letters and spaces only.');
     if (!form.sameAsAbove) {
       requireValue(hasValue(String(form.permanentAddressLine1 || '')), 'Permanent Address 1 is required.');
+      requireValue(isValidAddressLine(String(form.permanentAddressLine1 || '')), 'Permanent Address 1 must contain valid address characters only.');
       requireValue(hasValue(String(form.permanentAddressLine2 || '')), 'Permanent Address 2 is required.');
+      requireValue(isValidAddressLine(String(form.permanentAddressLine2 || '')), 'Permanent Address 2 must contain valid address characters only.');
       requireValue(hasValue(String(form.permanentCityDistrict || '')), 'Permanent City is required.');
+      requireValue(isValidCityName(String(form.permanentCityDistrict || '')), 'Permanent City must contain letters and spaces only.');
       requireValue(hasValue(String(form.permanentState || '')), 'Permanent State is required.');
+      requireValue(isValidRegionName(String(form.permanentState || '')), 'Permanent State must contain letters and spaces only.');
       requireValue(hasValue(permanentPinCode), 'Permanent PIN code is required.');
       requireValue(hasValue(String(form.permanentCountry || '')), 'Permanent Country is required.');
+      requireValue(isValidRegionName(String(form.permanentCountry || '')), 'Permanent Country must contain letters and spaces only.');
     }
     if (presentPinCode) {
       requireValue(isValidPostalCode(presentPinCode), postalCodeErrorMessage());
@@ -1484,6 +1586,79 @@ function validateProfileSection(form, section, canManagePackageAmount) {
   return errors[0] || '';
 }
 
+function validatePersonalDetails(form) {
+  const errors = {};
+  const displayName = String(form.displayName || '').trim();
+  const jobTitle = String(form.jobTitle || '').trim();
+  const department = String(form.department || '').trim();
+  const dateOfBirth = String(form.dateOfBirth || '').trim();
+  const nationality = String(form.nationality || '').trim();
+  const workingLocation = String(form.workingLocation || '').trim();
+  const highestQualification = String(form.highestQualification || '').trim();
+  const grade = String(form.grade || '').trim();
+  const employmentType = String(form.employmentType || '').trim();
+
+  if (!displayName) {
+    errors.displayName = 'Display name is required.';
+  } else if (!isValidPersonName(displayName)) {
+    errors.displayName = 'Display name must contain letters, spaces, apostrophes, dots, or hyphens only.';
+  }
+
+  if (!jobTitle) {
+    errors.jobTitle = 'Job title is required.';
+  } else if (!isValidRoleTitle(jobTitle)) {
+    errors.jobTitle = 'Job title must contain valid title characters only.';
+  }
+
+  if (!department) {
+    errors.department = 'Department is required.';
+  } else if (!isValidDepartmentName(department)) {
+    errors.department = 'Department must contain letters and valid separators only.';
+  }
+
+  if (!dateOfBirth) {
+    errors.dateOfBirth = 'Date of birth is required.';
+  } else if (!isValidDateOfBirth(dateOfBirth)) {
+    errors.dateOfBirth = 'Date of birth cannot be a future date.';
+  }
+
+  if (!employmentType) {
+    errors.employmentType = 'Employment type is required.';
+  } else if (!isValidPersonName(employmentType)) {
+    errors.employmentType = 'Employment type must contain letters and valid separators only.';
+  }
+
+  if (!nationality) {
+    errors.nationality = 'Nationality is required.';
+  } else if (!isValidPersonName(nationality)) {
+    errors.nationality = 'Nationality must contain letters and valid separators only.';
+  }
+
+  if (!workingLocation) {
+    errors.workingLocation = 'Working location is required.';
+  } else if (!isValidLocationText(workingLocation)) {
+    errors.workingLocation = 'Working location must contain letters and valid separators only.';
+  }
+
+  if (!highestQualification) {
+    errors.highestQualification = 'Highest qualification is required.';
+  } else if (!isValidQualificationText(highestQualification)) {
+    errors.highestQualification = 'Highest qualification must contain valid qualification characters only.';
+  }
+
+  if (!grade) {
+    errors.grade = 'Grade is required.';
+  } else if (!isValidGrade(grade)) {
+    errors.grade = 'Grade must be a single capital letter.';
+  }
+
+  return errors;
+}
+
+function getPersonalFieldValidationError(field, form) {
+  return validatePersonalDetails(form)[field] || '';
+}
+
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 }
@@ -1494,14 +1669,6 @@ function isValidMobileNumber(value) {
 
 function isValidIfscCode(value) {
   return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(String(value || '').trim().toUpperCase());
-}
-
-function isValidPostalCode(value) {
-  return /^\d{6}$/.test(String(value || '').trim());
-}
-
-function postalCodeErrorMessage() {
-  return 'Wrong PIN';
 }
 
 function digitsOnly(value) {

@@ -44,6 +44,8 @@ function Header({ role, onMenuClick }) {
   }[role] || '/employee';
 
   const searchRoutes = getSearchRoutes(role);
+  const isSearchQueryValid = (value) => /^[A-Za-z\s]*$/.test(value);
+  const normalizeSearchQuery = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
   // Close notification panel when clicking outside
   useEffect(() => {
@@ -143,7 +145,7 @@ function Header({ role, onMenuClick }) {
   }, [showNotifications]);
 
   const runSearch = () => {
-    const normalized = sanitizeTextSearch(searchQuery).trim().toLowerCase();
+    const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;
 
     const directMatch = searchRoutes.reduce((bestMatch, entry, index) => {
@@ -174,7 +176,7 @@ function Header({ role, onMenuClick }) {
       return candidateScore.index < score.index ? { entry, score: candidateScore } : bestMatch;
     }, null)?.entry;
     const targetPath = directMatch?.path || `${roleBasePath}/dashboard`;
-    navigate(`${targetPath}?search=${encodeURIComponent(sanitizeTextSearch(searchQuery).trim())}`);
+    navigate(`${targetPath}?search=${encodeURIComponent(searchQuery.trim())}`);
   };
 
   const handleNotificationClick = async (id) => {
@@ -245,32 +247,17 @@ function Header({ role, onMenuClick }) {
         </div>
       </div>
       <div className="topbar-actions">
-        <div className="search-stack">
-          <label className="search-pill">
-            <i className="ri-search-line" aria-hidden="true" />
-            <input
-              value={searchQuery}
-              onChange={(event) => {
-                const nextValue = String(event.target.value);
-                const sanitizedValue = sanitizeTextSearch(nextValue);
-                setSearchQuery(sanitizedValue);
-                setSearchError(nextValue === sanitizedValue ? '' : 'Numbers and symbols are not allowed.');
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') runSearch();
-              }}
-              inputMode="text"
-              autoComplete="off"
-              aria-describedby={searchError ? 'topbar-search-help' : undefined}
-              placeholder="Employee, leave, policy..."
-            />
-          </label>
-          {searchError ? (
-            <p id="topbar-search-help" className="search-hint is-error" aria-live="polite">
-              {searchError}
-            </p>
-          ) : null}
-        </div>
+        <label className="search-pill">
+          <i className="ri-search-line" aria-hidden="true" />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') runSearch();
+            }}
+            placeholder="Employee, leave, policy..."
+          />
+        </label>
         <div className="date-chip">
           <i className="ri-calendar-line" aria-hidden="true" />
           <span>{today}</span>

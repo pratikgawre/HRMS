@@ -31,6 +31,9 @@ const roleEmployeeFallback = {
   employee: 'PAY-1005',
 };
 
+const payrollSearchQueryPattern = /^[A-Za-z0-9\s]*$/;
+const payrollSearchValidationMessage = 'Search accepts letters and numbers only.';
+
 function isPayrollPeriodAvailable(month, year, referenceDate = new Date()) {
   const monthIndex = months.indexOf(String(month || ''));
   const targetYear = Number.parseInt(year, 10);
@@ -79,6 +82,10 @@ function resolvePayrollRecordForEmployee(records, employeeId, month, year) {
     normalizePayrollEmployeeId(record?.employeeId) === normalizedEmployeeId
     && matchesPayrollPeriod(record, normalizedMonth, normalizedYear)
   )) || null;
+}
+
+function isValidPayrollSearchQuery(value) {
+  return payrollSearchQueryPattern.test(String(value || ''));
 }
 
 function normalizePayrollMonthValue(month) {
@@ -407,6 +414,7 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [activeSummary, setActiveSummary] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchError, setSearchError] = useState('');
   const [isHrEmployeeFilterActive, setIsHrEmployeeFilterActive] = useState(false);
   const [payslipMonth, setPayslipMonth] = useState('');
   const [payslipYear, setPayslipYear] = useState('');
@@ -414,8 +422,9 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
   const payrollRows = useMemo(() => mergePayrollRecordsForDisplay(records, savedPayrollRecords), [records, savedPayrollRecords]);
   const searchFilteredRecords = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
+    const isSearchValid = isValidPayrollSearchQuery(searchTerm);
 
-    if (!query) {
+    if (!query || !isSearchValid) {
       return payrollRows;
     }
 
@@ -519,6 +528,29 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
     requestAnimationFrame(() => {
       setIsHrEmployeeFilterActive(true);
     });
+  };
+
+  const handleSearchChange = (event) => {
+    const nextValue = event.target.value;
+    setSearchTerm(nextValue);
+
+    if (!nextValue.trim()) {
+      setSearchError('');
+      return;
+    }
+
+    setSearchError(isValidPayrollSearchQuery(nextValue) ? '' : payrollSearchValidationMessage);
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    if (!isValidPayrollSearchQuery(searchTerm)) {
+      event.preventDefault();
+      setSearchError(payrollSearchValidationMessage);
+    }
   };
 
   const handleGeneratePayroll = async () => {
@@ -777,14 +809,20 @@ function PayrollManagement({ records, savedPayrollRecords, selectedMonth, select
       <div ref={tableSectionRef} id={role === 'hr' ? 'hr-payroll-salary-table' : undefined}>
         <Section title="Employee Salary Table">
         <div className="payroll-toolbar">
-          <label className="toolbar-search payroll-search-field">
-            <i className="ri-search-line" aria-hidden="true" />
-            <input
-              type="search"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search employee, department, or status"
-            />
+          <label className={`payroll-search-field${searchError ? ' is-invalid' : ''}`}>
+            <span className="payroll-search-row">
+              <i className="ri-search-line" aria-hidden="true" />
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={handleSearchChange}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search employee, department, or status"
+                aria-invalid={Boolean(searchError)}
+                aria-describedby={searchError ? 'payroll-search-error' : undefined}
+              />
+            </span>
+            {searchError && <span id="payroll-search-error" className="payroll-search-error" role="alert">{searchError}</span>}
           </label>
           <label className="field payroll-filter-field">
             <span>Month</span>
@@ -892,12 +930,14 @@ function PayrollSalaryTable({ records, setStatusOverrides, focusRecordId = '' })
   const [message, setMessage] = useState('');
   const [selectedPayslip, setSelectedPayslip] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchError, setSearchError] = useState('');
 
   const filteredRecords = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
+    const isSearchValid = isValidPayrollSearchQuery(searchTerm);
     const safeRecords = Array.isArray(records) ? records : [];
 
-    if (!query) {
+    if (!query || !isSearchValid) {
       return safeRecords;
     }
 
@@ -970,6 +1010,29 @@ function PayrollSalaryTable({ records, setStatusOverrides, focusRecordId = '' })
     }
   };
 
+  const handleSearchChange = (event) => {
+    const nextValue = event.target.value;
+    setSearchTerm(nextValue);
+
+    if (!nextValue.trim()) {
+      setSearchError('');
+      return;
+    }
+
+    setSearchError(isValidPayrollSearchQuery(nextValue) ? '' : payrollSearchValidationMessage);
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    if (!isValidPayrollSearchQuery(searchTerm)) {
+      event.preventDefault();
+      setSearchError(payrollSearchValidationMessage);
+    }
+  };
+
   return (
     <>
       {message && (
@@ -981,14 +1044,20 @@ function PayrollSalaryTable({ records, setStatusOverrides, focusRecordId = '' })
 
       <Section title="Employee Salary Table">
         <div className="payroll-toolbar">
-          <label className="toolbar-search payroll-search-field">
-            <i className="ri-search-line" aria-hidden="true" />
-            <input
-              type="search"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search employee, department, or status"
-            />
+          <label className={`payroll-search-field${searchError ? ' is-invalid' : ''}`}>
+            <span className="payroll-search-row">
+              <i className="ri-search-line" aria-hidden="true" />
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={handleSearchChange}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search employee, department, or status"
+                aria-invalid={Boolean(searchError)}
+                aria-describedby={searchError ? 'payroll-search-error' : undefined}
+              />
+            </span>
+            {searchError && <span id="payroll-search-error" className="payroll-search-error" role="alert">{searchError}</span>}
           </label>
         </div>
         <div className="table-card payroll-table-card">

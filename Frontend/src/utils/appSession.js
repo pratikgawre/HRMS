@@ -276,6 +276,7 @@ export async function touchSessionOnBackend() {
 }
 export async function bootstrapSessionFromBackend() {
   syncMemorySession();
+  const cachedSession = { ...session };
 
   if (getSessionValue('kavyaAuthMode') === 'local') {
     return getSessionSnapshot();
@@ -291,8 +292,7 @@ export async function bootstrapSessionFromBackend() {
   }).catch(() => null);
 
   if (!response || !response.ok) {
-    session = {};
-    lastBackendTouchAt = 0;
+    session = cachedSession;
     persistSessionSnapshot();
     emitSessionChanged();
     return session;
@@ -300,8 +300,7 @@ export async function bootstrapSessionFromBackend() {
 
   const payload = await response.json().catch(() => null);
   if (!payload || payload.ok === false) {
-    session = {};
-    lastBackendTouchAt = 0;
+    session = cachedSession;
     persistSessionSnapshot();
     emitSessionChanged();
     return session;

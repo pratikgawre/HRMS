@@ -37,7 +37,6 @@ const leaveYearOptions = Array.from({ length: 5 }, (_, index) => currentLeaveYea
 const leaveFilterOptions = ['All', 'Casual Leave', 'Sick Leave', 'Earned Leave', 'Work From Home'];
 const approveActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%2309767a" stroke-width="2.4"/%3E%3Cpath d="M8 12.25l2.45 2.45L16.5 8.65" stroke="%2309767a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/%3E%3C/svg%3E';
 const rejectActionIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"%3E%3Ccircle cx="12" cy="12" r="9" stroke="%23d94d63" stroke-width="2.4"/%3E%3Cpath d="M8.75 8.75l6.5 6.5M15.25 8.75l-6.5 6.5" stroke="%23d94d63" stroke-width="2.4" stroke-linecap="round"/%3E%3C/svg%3E';
-const sanitizeTextOnly = (value = '') => String(value).replace(/[^\p{L}\s]/gu, '');
 
 function LeaveRequests() {
   const location = useLocation();
@@ -50,6 +49,7 @@ function LeaveRequests() {
   const [leaveTypes, setLeaveTypes] = useState(DEFAULT_LEAVE_TYPES);
   const [status, setStatus] = useState('All');
   const [searchText, setSearchText] = useState('');
+  const [searchError, setSearchError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
   const [dataState, setDataState] = useState({ loading: true, error: '' });
@@ -126,6 +126,8 @@ function LeaveRequests() {
   }), [roleResolvedRequests, role, currentEmployee.employeeId]);
 
   const filteredLeaveRequests = useMemo(() => {
+    const trimmedQuery = searchText.trim().toLowerCase();
+    const isSearchValid = isValidLeaveSearchQuery(searchText);
     const baseRows = visibleRequests.filter((request) => (
       matchesSelectedLeaveType(request, selectedLeaveType)
       && matchesSelectedLeavePeriod(request, selectedMonth, selectedYear)
@@ -145,8 +147,7 @@ function LeaveRequests() {
     return queueRows
       .filter((request) => status === 'All' || request.status === status)
       .filter((request) => {
-        const query = searchText.trim().toLowerCase();
-        if (!query) {
+        if (!trimmedQuery || !isSearchValid) {
           return true;
         }
 
@@ -156,7 +157,7 @@ function LeaveRequests() {
           request.type,
           request.reason,
           request.status,
-        ].some((value) => String(value || '').toLowerCase().includes(query));
+        ].some((value) => String(value || '').toLowerCase().includes(trimmedQuery));
       });
   }, [queueFilter, searchText, selectedLeaveType, selectedMonth, selectedYear, status, visibleRequests]);
   const visibleLeaveSummary = useMemo(() => {
@@ -190,6 +191,29 @@ function LeaveRequests() {
         block: 'start',
       });
     });
+  };
+
+  const handleSearchChange = (event) => {
+    const nextValue = event.target.value;
+    setSearchText(nextValue);
+
+    if (!nextValue.trim()) {
+      setSearchError('');
+      return;
+    }
+
+    setSearchError(isValidLeaveSearchQuery(nextValue) ? '' : 'Search accepts letters and numbers only.');
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    if (!isValidLeaveSearchQuery(searchText)) {
+      event.preventDefault();
+      setSearchError('Search accepts letters and numbers only.');
+    }
   };
 
   const openNewRequest = () => {
@@ -667,15 +691,21 @@ function LeaveRequests() {
             <option>Rejected</option>
           </select>
           {role !== 'employee' && (
-            <label className="toolbar-search">
-              <i className="ri-search-line" aria-hidden="true" />
-              <input
-                type="search"
-                value={searchText}
-                onChange={(event) => setSearchText(event.target.value)}
-                placeholder="Search employee, type, reason..."
-                aria-label="Search leave requests"
-              />
+            <label className={`leave-search${searchError ? ' is-invalid' : ''}`}>
+              <span className="leave-search-row">
+                <i className="ri-search-line" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={searchText}
+                  onChange={handleSearchChange}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Search employee, type, reason..."
+                  aria-label="Search leave requests"
+                  aria-invalid={Boolean(searchError)}
+                  aria-describedby={searchError ? 'leave-search-error' : undefined}
+                />
+              </span>
+              {searchError && <span id="leave-search-error" className="leave-search-error" role="alert">{searchError}</span>}
             </label>
           )}
             </div>

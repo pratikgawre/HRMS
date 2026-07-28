@@ -55,6 +55,52 @@ const PROJECT_SECTION_ID = 'project-create';
 const PROJECT_DETAILS_ID = 'project-selected-details';
 const PROJECT_INLINE_DETAILS_ID = 'project-inline-details';
 const PROJECT_DELETE_UNDO_MS = 6000;
+const projectSearchValidationMessage = 'Search accepts letters and spaces only.';
+const projectFieldValidationMessage = 'Use letters, numbers, spaces, and basic punctuation only.';
+const projectIdValidationMessage = 'Use letters, numbers, and hyphens only.';
+const projectProgressValidationMessage = 'Progress must be a number from 0 to 100.';
+const projectDateValidationMessage = 'End date must be on or after the start date.';
+
+function isValidProjectSearchQuery(value) {
+  return /^[A-Za-z\s]*$/.test(String(value || ''));
+}
+
+function sanitizeProjectSearchQuery(value) {
+  return String(value || '').replace(/[^A-Za-z\s]+/g, '');
+}
+
+function isValidProjectTitle(value) {
+  const trimmed = String(value || '').trim();
+  return /(?=.*[A-Za-z])^[A-Za-z0-9][A-Za-z0-9\s.'&-]*$/.test(trimmed);
+}
+
+function isValidProjectManagerId(value) {
+  const trimmed = String(value || '').trim();
+  return /^[A-Za-z0-9-]+$/.test(trimmed) && /[A-Za-z0-9]/.test(trimmed);
+}
+
+function isValidProjectDescription(value) {
+  const trimmed = String(value || '').trim();
+  return /(?=.*[A-Za-z])^[A-Za-z0-9][A-Za-z0-9\s,.'&()\/-]*$/.test(trimmed);
+}
+
+function isValidProjectProgress(value) {
+  const trimmed = String(value || '').trim();
+  return /^\d{1,3}$/.test(trimmed) && Number(trimmed) >= 0 && Number(trimmed) <= 100;
+}
+
+function isValidProjectMilestone(value) {
+  const trimmed = String(value || '').trim();
+  return !trimmed || /(?=.*[A-Za-z])^[A-Za-z0-9][A-Za-z0-9\s,.'&()\/-]*$/.test(trimmed);
+}
+
+function isValidProjectDateRange(startDate, endDate) {
+  if (!startDate || !endDate) {
+    return true;
+  }
+
+  return String(endDate).localeCompare(String(startDate)) >= 0;
+}
 
 function Projects() {
   const navigate = useNavigate();
@@ -75,6 +121,8 @@ function Projects() {
   const [editingProjectId, setEditingProjectId] = useState('');
   const [message, setMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchError, setSearchError] = useState('');
+  const [projectFormErrors, setProjectFormErrors] = useState({});
   const [projectForm, setProjectForm] = useState(createEmptyProjectForm(managerName, managerId));
   const [teamFilter, setTeamFilter] = useState('All');
   const [teamSearch, setTeamSearch] = useState('');
@@ -238,7 +286,7 @@ function Projects() {
     }
 
     const query = searchTerm.trim().toLowerCase();
-    if (query) {
+    if (query && isValidProjectSearchQuery(searchTerm)) {
       rows = rows.filter((project) => [
         project.projectCode,
         project.name,
@@ -254,6 +302,30 @@ function Projects() {
 
     return rows;
   }, [projects, searchTerm, teamFilter]);
+
+  const handleProjectSearchChange = (event) => {
+    const nextValue = sanitizeProjectSearchQuery(event.target.value);
+    const attemptedInvalid = String(event.target.value || '') !== nextValue;
+    setSearchTerm(nextValue);
+
+    if (!nextValue.trim()) {
+      setSearchError(attemptedInvalid ? projectSearchValidationMessage : '');
+      return;
+    }
+
+    setSearchError(attemptedInvalid || !isValidProjectSearchQuery(nextValue) ? projectSearchValidationMessage : '');
+  };
+
+  const handleProjectSearchKeyDown = (event) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    if (!isValidProjectSearchQuery(searchTerm)) {
+      event.preventDefault();
+      setSearchError(projectSearchValidationMessage);
+    }
+  };
 
   const selectedProject = useMemo(() => (
     visibleProjects.find((project) => project.id === selectedProjectId)
@@ -415,6 +487,7 @@ function Projects() {
   function openCreateProject() {
     setEditingProjectId('');
     setProjectForm(createEmptyProjectForm(managerName, managerId));
+    setProjectFormErrors({});
     setSelectedTeamMembers([]);
     setIsTeamDraftDirty(false);
     setMessage('');
@@ -455,6 +528,7 @@ function Projects() {
     setSelectedProjectId(project.id);
     setEditingProjectId(project.id);
     setProjectForm(projectToForm(project, managerName, managerId));
+    setProjectFormErrors({});
     setSelectedTeamMembers(Array.isArray(project.teamMembers) ? project.teamMembers : []);
     setIsTeamDraftDirty(false);
     setMessage('');
@@ -571,19 +645,61 @@ function Projects() {
   function resetProjectForm() {
     setEditingProjectId('');
     setProjectForm(createEmptyProjectForm(managerName, managerId));
+    setProjectFormErrors({});
     setSelectedTeamMembers([]);
     setIsTeamDraftDirty(false);
     setMessage('');
     showProjectToast('Project form cleared.', 'success');
   }
 
+  function handleProjectFormChange(field, value) {
+    updateProjectForm(setProjectForm, field, value);
+    setProjectFormErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[field];
+      delete next.submit;
+      return next;
+    });
+  }
+
+  function clearProjectFormErrors(...fields) {
+    if (!fields.length) {
+      return;
+    }
+
+    setProjectFormErrors((current) => {
+      const next = { ...current };
+      let changed = false;
+
+      fields.forEach((field) => {
+        if (field in next) {
+          delete next[field];
+          changed = true;
+        }
+      });
+
+      if ('submit' in next) {
+        delete next.submit;
+        changed = true;
+      }
+
+      return changed ? next : current;
+    });
+  }
+
   async function handleProjectSubmit(event) {
     event.preventDefault();
 
-    const name = projectForm.name.trim();
-    if (!name) {
-      setMessage('Please add a project name first.');
-      showProjectToast('Please add a project name first.', 'error');
+    const nextErrors = validateProjectForm(projectForm, selectedTeamMembers);
+    if (Object.keys(nextErrors).length > 0) {
+      setProjectFormErrors(nextErrors);
+      const firstError = Object.values(nextErrors)[0] || 'Please fix the highlighted project fields.';
+      setMessage(firstError);
+      showProjectToast(firstError, 'error');
       return;
     }
 
@@ -622,6 +738,7 @@ function Projects() {
       setSelectedTeamMembers([]);
       setIsTeamDraftDirty(false);
       setActiveTab('list');
+      setProjectFormErrors({});
       showProjectToast(editingProjectId ? 'Project updated successfully.' : 'Project created successfully.', 'success');
       setMessage('');
       await loadProjectsFromServer(setProjects, setSelectedProjectId);
@@ -951,13 +1068,19 @@ function Projects() {
             {activeTab === 'list' && (
               <>
                 <div className="page-toolbar">
-                  <label className="toolbar-search project-toolbar-search">
-                    <i className="ri-search-line" aria-hidden="true" />
-                    <input
-                      value={searchTerm}
-                      onChange={(event) => setSearchTerm(event.target.value)}
-                      placeholder="Search project, manager, or milestone"
-                    />
+                  <label className={`project-search-field${searchError ? ' is-invalid' : ''}`}>
+                    <span className="project-search-row">
+                      <i className="ri-search-line" aria-hidden="true" />
+                      <input
+                        value={searchTerm}
+                        onChange={handleProjectSearchChange}
+                        onKeyDown={handleProjectSearchKeyDown}
+                        placeholder="Search project, manager, or milestone"
+                        aria-invalid={Boolean(searchError)}
+                        aria-describedby={searchError ? 'project-search-error' : undefined}
+                      />
+                    </span>
+                    {searchError && <span id="project-search-error" className="project-search-error" role="alert">{searchError}</span>}
                   </label>
                   <select value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} aria-label="Filter by status">
                     <option value="All">All Statuses</option>
@@ -1016,27 +1139,56 @@ function Projects() {
                 <div className="settings-grid project-form-grid">
                   <label>
                     <span>Project Name</span>
-                    <input value={projectForm.name} onChange={(event) => updateProjectForm(setProjectForm, 'name', event.target.value)} placeholder="e.g. Employee Self Service" />
+                    <input
+                      className={projectFormErrors.name ? 'is-invalid' : ''}
+                      value={projectForm.name}
+                      onChange={(event) => handleProjectFormChange('name', event.target.value)}
+                      placeholder="e.g. Employee Self Service"
+                      pattern="[A-Za-z0-9][A-Za-z0-9\s.'&-]*"
+                      title="Use letters, numbers, spaces, and basic punctuation only."
+                      aria-invalid={Boolean(projectFormErrors.name)}
+                    />
+                    {projectFormErrors.name && <small className="field-error">{projectFormErrors.name}</small>}
                   </label>
                   <label>
                     <span>Manager</span>
-                    <input value={projectForm.manager} onChange={(event) => updateProjectForm(setProjectForm, 'manager', event.target.value)} placeholder="Project owner" />
+                    <input
+                      className={projectFormErrors.manager ? 'is-invalid' : ''}
+                      value={projectForm.manager}
+                      onChange={(event) => handleProjectFormChange('manager', event.target.value)}
+                      placeholder="Project owner"
+                      pattern="[A-Za-z0-9][A-Za-z0-9\s.'&-]*"
+                      title="Use letters, numbers, spaces, and basic punctuation only."
+                      aria-invalid={Boolean(projectFormErrors.manager)}
+                    />
+                    {projectFormErrors.manager && <small className="field-error">{projectFormErrors.manager}</small>}
                   </label>
                   <label>
                     <span>Manager ID</span>
-                    <input value={projectForm.managerId} onChange={(event) => updateProjectForm(setProjectForm, 'managerId', event.target.value)} placeholder="Employee ID" />
+                    <input
+                      className={projectFormErrors.managerId ? 'is-invalid' : ''}
+                      value={projectForm.managerId}
+                      onChange={(event) => handleProjectFormChange('managerId', event.target.value)}
+                      placeholder="Employee ID"
+                      pattern="[A-Za-z0-9-]+"
+                      title="Use letters, numbers, and hyphens only."
+                      aria-invalid={Boolean(projectFormErrors.managerId)}
+                    />
+                    {projectFormErrors.managerId && <small className="field-error">{projectFormErrors.managerId}</small>}
                   </label>
                   <label>
                     <span>Team Leader</span>
                     <select
-                      className="profile-select"
+                      className={`profile-select ${projectFormErrors.teamLeadId ? 'is-invalid' : ''}`}
                       value={projectForm.teamLeadId}
                       onChange={(event) => {
                         const nextTeamLead = teamLeaderOptions.find((employee) => employee.id === event.target.value);
                         updateProjectForm(setProjectForm, 'teamLeadId', nextTeamLead?.id || '');
                         updateProjectForm(setProjectForm, 'teamLeadName', nextTeamLead?.name || '');
                         updateProjectForm(setProjectForm, 'teamLeadDesignation', nextTeamLead?.designation || nextTeamLead?.role || 'Team Lead');
+                        clearProjectFormErrors('teamLeadId', 'teamLeadName', 'teamLeadDesignation');
                       }}
+                      aria-invalid={Boolean(projectFormErrors.teamLeadId)}
                     >
                       <option value="">Select Team Leader</option>
                       {teamLeaderOptions.map((employee) => (
@@ -1050,18 +1202,38 @@ function Projects() {
                         ? `${selectedTeamLeader.name} will lead this project.`
                         : 'Choose a Team Lead from the employee database.'}
                     </small>
+                    {projectFormErrors.teamLeadId && <small className="field-error">{projectFormErrors.teamLeadId}</small>}
                   </label>
                   <label>
                     <span>Start Date</span>
-                    <input type="date" value={projectForm.startDate} onChange={(event) => updateProjectForm(setProjectForm, 'startDate', event.target.value)} />
+                    <input
+                      className={projectFormErrors.startDate ? 'is-invalid' : ''}
+                      type="date"
+                      value={projectForm.startDate}
+                      onChange={(event) => handleProjectFormChange('startDate', event.target.value)}
+                      aria-invalid={Boolean(projectFormErrors.startDate)}
+                    />
+                    {projectFormErrors.startDate && <small className="field-error">{projectFormErrors.startDate}</small>}
                   </label>
                   <label>
                     <span>End Date</span>
-                    <input type="date" value={projectForm.endDate} onChange={(event) => updateProjectForm(setProjectForm, 'endDate', event.target.value)} />
+                    <input
+                      className={projectFormErrors.endDate ? 'is-invalid' : ''}
+                      type="date"
+                      value={projectForm.endDate}
+                      onChange={(event) => handleProjectFormChange('endDate', event.target.value)}
+                      aria-invalid={Boolean(projectFormErrors.endDate)}
+                    />
+                    {projectFormErrors.endDate && <small className="field-error">{projectFormErrors.endDate}</small>}
                   </label>
                   <label>
                     <span>Status</span>
-                    <select className="profile-select" value={projectForm.status} onChange={(event) => updateProjectForm(setProjectForm, 'status', event.target.value)}>
+                    <select
+                      className={`profile-select ${projectFormErrors.status ? 'is-invalid' : ''}`}
+                      value={projectForm.status}
+                      onChange={(event) => handleProjectFormChange('status', event.target.value)}
+                      aria-invalid={Boolean(projectFormErrors.status)}
+                    >
                       <option value="Planning">Planning</option>
                       <option value="Pending">Pending</option>
                       <option value="Active">Active</option>
@@ -1069,23 +1241,47 @@ function Projects() {
                       <option value="Approved">Approved</option>
                       <option value="Completed">Completed</option>
                     </select>
+                    {projectFormErrors.status && <small className="field-error">{projectFormErrors.status}</small>}
                   </label>
                   <label>
                     <span>Progress</span>
-                    <input value={projectForm.progress} onChange={(event) => updateProjectForm(setProjectForm, 'progress', event.target.value)} placeholder="0, 25, 72" />
+                    <input
+                      className={projectFormErrors.progress ? 'is-invalid' : ''}
+                      value={projectForm.progress}
+                      onChange={(event) => handleProjectFormChange('progress', event.target.value)}
+                      placeholder="0, 25, 72"
+                      inputMode="numeric"
+                      pattern="[0-9]{1,3}"
+                      title="Progress must be a number from 0 to 100."
+                      aria-invalid={Boolean(projectFormErrors.progress)}
+                    />
+                    {projectFormErrors.progress && <small className="field-error">{projectFormErrors.progress}</small>}
                   </label>
                   <label>
                     <span>Milestone</span>
-                    <input value={projectForm.milestone} onChange={(event) => updateProjectForm(setProjectForm, 'milestone', event.target.value)} placeholder="e.g. Security review" />
+                    <input
+                      className={projectFormErrors.milestone ? 'is-invalid' : ''}
+                      value={projectForm.milestone}
+                      onChange={(event) => handleProjectFormChange('milestone', event.target.value)}
+                      placeholder="e.g. Security review"
+                      pattern="[A-Za-z0-9][A-Za-z0-9\s,.'&()/-]*"
+                      title="Use letters, numbers, spaces, and basic punctuation only."
+                      aria-invalid={Boolean(projectFormErrors.milestone)}
+                    />
+                    {projectFormErrors.milestone && <small className="field-error">{projectFormErrors.milestone}</small>}
                   </label>
                   <label className="full-width">
                     <span>Description</span>
                     <textarea
+                      className={projectFormErrors.description ? 'is-invalid' : ''}
                       rows="3"
                       value={projectForm.description}
-                      onChange={(event) => updateProjectForm(setProjectForm, 'description', event.target.value)}
+                      onChange={(event) => handleProjectFormChange('description', event.target.value)}
                       placeholder="What is this project about?"
+                      title="Use letters, numbers, spaces, and basic punctuation only."
+                      aria-invalid={Boolean(projectFormErrors.description)}
                     />
+                    {projectFormErrors.description && <small className="field-error">{projectFormErrors.description}</small>}
                   </label>
                 </div>
 
@@ -1753,6 +1949,77 @@ function stripPercent(value) {
 function normalizeProgress(value) {
   const raw = stripPercent(value);
   return raw.endsWith('%') ? raw : `${raw}%`;
+}
+
+function validateProjectForm(form, selectedTeamMembers = []) {
+  const errors = {};
+  const name = String(form?.name || '').trim();
+  const manager = String(form?.manager || '').trim();
+  const managerId = String(form?.managerId || '').trim();
+  const description = String(form?.description || '').trim();
+  const milestone = String(form?.milestone || '').trim();
+  const startDate = String(form?.startDate || '').trim();
+  const endDate = String(form?.endDate || '').trim();
+  const progress = String(form?.progress || '').trim();
+  const status = String(form?.status || '').trim();
+
+  if (!name) {
+    errors.name = 'Project name is required.';
+  } else if (!isValidProjectTitle(name)) {
+    errors.name = projectFieldValidationMessage;
+  }
+
+  if (!manager) {
+    errors.manager = 'Manager is required.';
+  } else if (!isValidProjectTitle(manager)) {
+    errors.manager = projectFieldValidationMessage;
+  }
+
+  if (!managerId) {
+    errors.managerId = 'Manager ID is required.';
+  } else if (!isValidProjectManagerId(managerId)) {
+    errors.managerId = projectIdValidationMessage;
+  }
+
+  if (form?.teamLeadId && !String(form.teamLeadId).trim()) {
+    errors.teamLeadId = 'Team Leader is required.';
+  } else if (!String(form?.teamLeadId || '').trim()) {
+    errors.teamLeadId = 'Team Leader is required.';
+  }
+
+  if (description && !isValidProjectDescription(description)) {
+    errors.description = projectFieldValidationMessage;
+  }
+
+  if (milestone && !isValidProjectMilestone(milestone)) {
+    errors.milestone = projectFieldValidationMessage;
+  }
+
+  if (startDate && Number.isNaN(Date.parse(startDate))) {
+    errors.startDate = 'Please choose a valid start date.';
+  }
+
+  if (endDate && Number.isNaN(Date.parse(endDate))) {
+    errors.endDate = 'Please choose a valid end date.';
+  }
+
+  if (startDate && endDate && !isValidProjectDateRange(startDate, endDate)) {
+    errors.endDate = projectDateValidationMessage;
+  }
+
+  if (progress && !isValidProjectProgress(progress)) {
+    errors.progress = projectProgressValidationMessage;
+  }
+
+  if (!status) {
+    errors.status = 'Project status is required.';
+  }
+
+  if (!Array.isArray(selectedTeamMembers)) {
+    errors.teamMembers = 'Select at least one team member.';
+  }
+
+  return errors;
 }
 
 async function loadProjectsFromServer(setProjects, setSelectedProjectId) {

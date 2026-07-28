@@ -9,24 +9,23 @@ import { bootstrapData } from './utils/bootstrapData.js';
 import { bootstrapSessionFromBackend, getSessionSnapshot } from './utils/appSession.js';
 
 const cachedSession = getSessionSnapshot();
-const sessionBootstrap = bootstrapSessionFromBackend().catch(() => cachedSession);
+const root = ReactDOMClient.createRoot(document.getElementById('root'));
 
-sessionBootstrap
-  .then((session) => {
-    const hasActiveSession = Boolean(session?.kavyaRole || session?.kavyaAccessRole);
-    if (!hasActiveSession) {
-      return null;
-    }
+root.render(
+  <StrictMode>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  </StrictMode>,
+);
 
-    return bootstrapData().catch(() => null);
-  })
-  .catch(() => null)
-  .finally(() => {
-    ReactDOMClient.createRoot(document.getElementById('root')).render(
-      <StrictMode>
-        <ErrorBoundary>
-          <App />
-        </ErrorBoundary>
-      </StrictMode>,
-    );
-  });
+void (async () => {
+  const session = await bootstrapSessionFromBackend().catch(() => cachedSession);
+  const hasActiveSession = Boolean(session?.kavyaRole || session?.kavyaAccessRole);
+
+  if (!hasActiveSession) {
+    return;
+  }
+
+  await bootstrapData().catch(() => null);
+})();

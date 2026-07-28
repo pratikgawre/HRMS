@@ -16,6 +16,29 @@ import { getVisibleTeamEmployeeIds, normalizeProjects } from './attendancePageUt
 
 const ADMIN_ASSET_CACHE_KEY = 'kavyaAssetsAdminCache';
 const ADMIN_EMPLOYEE_CACHE_KEY = 'kavyaAssetsAdminEmployeesCache';
+const ASSET_TEXT_INPUT_PATTERN = /^[A-Za-z0-9\s]*$/;
+const ASSET_TEXT_INPUT_ERROR = 'Special characters are not allowed.';
+const ASSET_SEARCH_PATTERN = /^[A-Za-z0-9\s-]*$/;
+const ASSET_SEARCH_ERROR = 'Special characters are not allowed in search.';
+
+function normalizeAssetTextInput(value) {
+  return String(value || '')
+    .replace(/[^A-Za-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trimStart();
+}
+
+function isValidAssetTextInput(value) {
+  return ASSET_TEXT_INPUT_PATTERN.test(String(value || ''));
+}
+
+function sanitizeAssetSearchQuery(value) {
+  return String(value || '').replace(/[^A-Za-z0-9\s-]+/g, '');
+}
+
+function isValidAssetSearchQuery(value) {
+  return ASSET_SEARCH_PATTERN.test(String(value || ''));
+}
 
 function Assets() {
   const navigate = useNavigate();
@@ -36,6 +59,7 @@ function Assets() {
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
   const [searchText, setSearchText] = useState('');
+  const [searchError, setSearchError] = useState('');
   const [assetView, setAssetView] = useState('all');
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [assignedEmployeeQuery, setAssignedEmployeeQuery] = useState('');
@@ -43,6 +67,7 @@ function Assets() {
   const [editingAssetId, setEditingAssetId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [assetErrors, setAssetErrors] = useState({});
   const [assetForm, setAssetForm] = useState({
     assetName: '',
     category: 'Laptop',
@@ -377,6 +402,7 @@ function Assets() {
     setSelectedAsset(null);
     setEditingAssetId(asset.id);
     setAssetMessage('');
+    setAssetErrors({});
     setAssetForm({
       assetName: asset.assetName || '',
       category: asset.category || 'Laptop',
@@ -408,6 +434,29 @@ function Assets() {
 
   const updateAssetForm = (field, value) => {
     setAssetForm((current) => ({ ...current, [field]: value }));
+    setAssetErrors((current) => ({ ...current, [field]: '' }));
+  };
+
+  const updateAssetTextField = (field, value) => {
+    const normalized = normalizeAssetTextInput(value);
+    setAssetForm((current) => ({ ...current, [field]: normalized }));
+    setAssetErrors((current) => ({
+      ...current,
+      [field]: String(value || '') !== normalized ? ASSET_TEXT_INPUT_ERROR : '',
+    }));
+  };
+
+  const handleAssetSearchChange = (event) => {
+    const nextValue = sanitizeAssetSearchQuery(event.target.value);
+    const attemptedInvalid = String(event.target.value || '') !== nextValue;
+    setSearchText(nextValue);
+
+    if (!nextValue.trim()) {
+      setSearchError(attemptedInvalid ? ASSET_SEARCH_ERROR : '');
+      return;
+    }
+
+    setSearchError(attemptedInvalid || !isValidAssetSearchQuery(nextValue) ? ASSET_SEARCH_ERROR : '');
   };
 
   const selectEmployee = (option) => {
@@ -421,12 +470,62 @@ function Assets() {
 
   const handleAddAsset = (event) => {
     event.preventDefault();
+    const todayValue = getTodayInputValue();
+    const nextErrors = {};
 
-    const name = assetForm.assetName.trim();
-    if (!name) {
-      setAssetMessage('Please enter an asset name before saving.');
+    const rawAssetName = String(assetForm.assetName || '').trim();
+    const rawCategory = String(assetForm.category || '').trim();
+    const rawCondition = String(assetForm.condition || '').trim();
+    const rawLocation = String(assetForm.location || '').trim();
+    const rawAssignedQuery = String(assignedEmployeeQuery || '').trim();
+
+    const assetName = normalizeAssetTextInput(rawAssetName).trim();
+    const category = normalizeAssetTextInput(rawCategory).trim();
+    const condition = normalizeAssetTextInput(rawCondition).trim();
+    const location = normalizeAssetTextInput(rawLocation).trim();
+    const assignedQuery = normalizeAssetTextInput(rawAssignedQuery).trim();
+
+    if (!rawAssetName) {
+      nextErrors.assetName = 'Asset name is required.';
+    } else if (!isValidAssetTextInput(rawAssetName)) {
+      nextErrors.assetName = ASSET_TEXT_INPUT_ERROR;
+    }
+
+    if (rawCategory && !isValidAssetTextInput(rawCategory)) {
+      nextErrors.category = ASSET_TEXT_INPUT_ERROR;
+    }
+
+    if (rawCondition && !isValidAssetTextInput(rawCondition)) {
+      nextErrors.condition = ASSET_TEXT_INPUT_ERROR;
+    }
+
+    if (rawLocation && !isValidAssetTextInput(rawLocation)) {
+      nextErrors.location = ASSET_TEXT_INPUT_ERROR;
+    }
+
+    if (rawAssignedQuery && !isValidAssetTextInput(rawAssignedQuery)) {
+      nextErrors.assignedTo = ASSET_TEXT_INPUT_ERROR;
+    }
+
+    if (rawAssetName !== assetName) {
+      nextErrors.assetName = ASSET_TEXT_INPUT_ERROR;
+    }
+
+    if (!assetName) {
+      nextErrors.assetName = nextErrors.assetName || 'Asset name is required.';
+    }
+
+    if (assetForm.dueDate && assetForm.dueDate < todayValue) {
+      nextErrors.dueDate = 'Due Date cannot be in the past.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setAssetErrors(nextErrors);
+      setAssetMessage('Please correct the highlighted fields before saving.');
       return;
     }
+
+    const name = assetName;
 
     const rawEmployeeQuery = assignedEmployeeQuery.trim();
     const selectedEmployee = employeeLookup.get(normalizeLookupValue(assetForm.assignedTo))
@@ -443,7 +542,7 @@ function Assets() {
       id: assetId,
       assetCode: assetId,
       assetName: name,
-      category: assetForm.category.trim() || 'Other',
+      category: category || 'Other',
       brand: '',
       model: '',
       serialNo: '',
@@ -453,8 +552,8 @@ function Assets() {
       status: assetForm.status,
       assignedTo,
       assignedToEmployeeId: enteredEmployeeId,
-      condition: assetForm.condition.trim() || 'Good',
-      location: assetForm.location.trim() || 'Store',
+      condition: condition || 'Good',
+      location: location || 'Store',
     };
 
     console.info(isEditingAsset ? '[Assets] update payload' : '[Assets] create payload', {
@@ -685,7 +784,7 @@ function Assets() {
       rows = rows.filter((asset) => asset.status === 'Available');
     }
 
-    if (!query) {
+    if (!query || !isValidAssetSearchQuery(searchText)) {
       return rows;
     }
 
@@ -770,11 +869,25 @@ function Assets() {
           <form className="settings-grid asset-create-grid" onSubmit={handleAddAsset}>
             <label>
               <span>Asset Name</span>
-              <input value={assetForm.assetName} onChange={(event) => updateAssetForm('assetName', event.target.value)} placeholder="e.g. Dell Latitude 5440" />
+              <input
+                value={assetForm.assetName}
+                onChange={(event) => updateAssetTextField('assetName', event.target.value)}
+                placeholder="e.g. Dell Latitude 5440"
+                aria-invalid={Boolean(assetErrors.assetName)}
+                aria-describedby={assetErrors.assetName ? 'asset-name-error' : undefined}
+              />
+              {assetErrors.assetName && <small id="asset-name-error" className="asset-field-error">{assetErrors.assetName}</small>}
             </label>
             <label>
               <span>Category</span>
-              <input value={assetForm.category} onChange={(event) => updateAssetForm('category', event.target.value)} placeholder="Laptop, Monitor, Phone..." />
+              <input
+                value={assetForm.category}
+                onChange={(event) => updateAssetTextField('category', event.target.value)}
+                placeholder="Laptop, Monitor, Phone..."
+                aria-invalid={Boolean(assetErrors.category)}
+                aria-describedby={assetErrors.category ? 'asset-category-error' : undefined}
+              />
+              {assetErrors.category && <small id="asset-category-error" className="asset-field-error">{assetErrors.category}</small>}
             </label>
             <label>
               <span>Current Date</span>
@@ -782,7 +895,15 @@ function Assets() {
             </label>
             <label>
               <span>Due Date</span>
-              <input type="date" value={assetForm.dueDate} onChange={(event) => updateAssetForm('dueDate', event.target.value)} />
+              <input
+                type="date"
+                min={getTodayInputValue()}
+                value={assetForm.dueDate}
+                onChange={(event) => updateAssetForm('dueDate', event.target.value)}
+                aria-invalid={Boolean(assetErrors.dueDate)}
+                aria-describedby={assetErrors.dueDate ? 'asset-due-date-error' : undefined}
+              />
+              {assetErrors.dueDate && <small id="asset-due-date-error" className="asset-field-error">{assetErrors.dueDate}</small>}
             </label>
             <label>
               <span>Status</span>
@@ -801,14 +922,22 @@ function Assets() {
                   type="text"
                   value={assignedEmployeeQuery}
                   onChange={(event) => {
-                    setAssignedEmployeeQuery(event.target.value);
+                    const normalized = normalizeAssetTextInput(event.target.value);
+                    setAssignedEmployeeQuery(normalized);
+                    setAssetErrors((current) => ({
+                      ...current,
+                      assignedTo: String(event.target.value || '') !== normalized ? ASSET_TEXT_INPUT_ERROR : '',
+                    }));
                     updateAssetForm('assignedTo', '');
                     setIsEmployeePickerOpen(true);
                   }}
                   onFocus={() => setIsEmployeePickerOpen(true)}
                   onBlur={() => window.setTimeout(() => setIsEmployeePickerOpen(false), 120)}
                   placeholder="Search employee name or ID"
+                  aria-invalid={Boolean(assetErrors.assignedTo)}
+                  aria-describedby={assetErrors.assignedTo ? 'asset-assigned-error' : undefined}
                 />
+                {assetErrors.assignedTo && <small id="asset-assigned-error" className="asset-field-error">{assetErrors.assignedTo}</small>}
                 {isEmployeePickerOpen && filteredEmployeeOptions.length > 0 && (
                   <div className="asset-picker-menu" role="listbox" aria-label="Employee search results">
                     {filteredEmployeeOptions.map((option) => (
@@ -836,11 +965,25 @@ function Assets() {
             </label>
             <label>
               <span>Condition</span>
-              <input value={assetForm.condition} onChange={(event) => updateAssetForm('condition', event.target.value)} placeholder="Good, New, Damaged..." />
+              <input
+                value={assetForm.condition}
+                onChange={(event) => updateAssetTextField('condition', event.target.value)}
+                placeholder="Good, New, Damaged..."
+                aria-invalid={Boolean(assetErrors.condition)}
+                aria-describedby={assetErrors.condition ? 'asset-condition-error' : undefined}
+              />
+              {assetErrors.condition && <small id="asset-condition-error" className="asset-field-error">{assetErrors.condition}</small>}
             </label>
             <label>
               <span>Location</span>
-              <input value={assetForm.location} onChange={(event) => updateAssetForm('location', event.target.value)} placeholder="Store, Office, Remote..." />
+              <input
+                value={assetForm.location}
+                onChange={(event) => updateAssetTextField('location', event.target.value)}
+                placeholder="Store, Office, Remote..."
+                aria-invalid={Boolean(assetErrors.location)}
+                aria-describedby={assetErrors.location ? 'asset-location-error' : undefined}
+              />
+              {assetErrors.location && <small id="asset-location-error" className="asset-field-error">{assetErrors.location}</small>}
             </label>
             <div className="notification-actions profile-form-actions asset-create-actions">
               <button type="button" onClick={() => {
@@ -858,6 +1001,7 @@ function Assets() {
                 setIsEmployeePickerOpen(false);
                 setEditingAssetId('');
                 setAssetMessage('');
+                setAssetErrors({});
               }}>
                 Reset
               </button>
@@ -867,16 +1011,23 @@ function Assets() {
         )}
         {assetMessage && <p className="notification-empty">{assetMessage}</p>}
         <div className="page-toolbar compact asset-search-toolbar">
-          <label className="toolbar-search asset-search-field">
+          <label className={`toolbar-search asset-search-field${searchError ? ' is-invalid' : ''}`}>
             <i className="ri-search-line" aria-hidden="true" />
             <input
               type="search"
               value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
+              onChange={handleAssetSearchChange}
               placeholder="Search by asset name or employee ID..."
+              aria-invalid={Boolean(searchError)}
+              aria-describedby={searchError ? 'asset-search-error' : undefined}
             />
           </label>
         </div>
+        {searchError && (
+          <p id="asset-search-error" className="asset-search-error" role="alert">
+            {searchError}
+          </p>
+        )}
         {!isLoading && !loadError && assets.length === 0 ? (
           <p className="notification-empty">No asset records found.</p>
         ) : (

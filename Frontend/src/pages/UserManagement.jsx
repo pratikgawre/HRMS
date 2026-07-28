@@ -3,8 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
-import { reconcileDeletedEmployees, saveStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
-import { apiRequest, deleteUser as deleteUserRequest } from '../utils/api.js';
+import { getStoredEmployees, reconcileDeletedEmployees, saveStoredEmployees, setEmployeesCache } from '../utils/employeeStorage.js';
+import { apiRequest, deleteUser as deleteUserRequest, safeApiRequest } from '../utils/api.js';
 import { ACCESS_ROLE_OPTIONS, USER_STATUS_OPTIONS, getRoleBadgeClass, normalizeAccessRole } from '../utils/role-access.js';
 import {
   buildUserAccess,
@@ -58,21 +58,24 @@ function UserManagement() {
     const loadAccessData = async () => {
       try {
         const [employeeRows, userRows] = await Promise.all([
-          apiRequest('/employees'),
-          apiRequest('/users'),
+          safeApiRequest('/employees', getStoredEmployees([]), { timeoutMs: 60000 }),
+          safeApiRequest('/users', getUsers(), { timeoutMs: 60000 }),
         ]);
         if (!active) {
           return;
         }
 
-        const normalizedEmployees = normalizeEmployees(employeeRows).filter((employee) => !isAdminEmployee(employee));
-        const normalizedUsers = dedupeSystemUsers(normalizeUsers(userRows, normalizedEmployees)).filter((user) => !isAdminLikeUser(user));
+        const normalizedEmployees = normalizeEmployees(Array.isArray(employeeRows) ? employeeRows : getStoredEmployees([]))
+          .filter((employee) => !isAdminEmployee(employee));
+        const normalizedUsers = dedupeSystemUsers(normalizeUsers(Array.isArray(userRows) ? userRows : getUsers(), normalizedEmployees))
+          .filter((user) => !isAdminLikeUser(user));
 
         reconcileDeletedEmployees(normalizedEmployees);
         setEmployees(normalizedEmployees);
         setUsers(normalizedUsers);
         setEmployeesCache(normalizedEmployees);
         setUsersCache(normalizedUsers);
+        setMessage('');
       } catch (error) {
         if (!active) {
           return;
@@ -825,7 +828,5 @@ function renderPermissionText(role) {
 }
 
 export default UserManagement;
-
-
 
 
