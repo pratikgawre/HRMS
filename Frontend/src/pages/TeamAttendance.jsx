@@ -740,26 +740,16 @@ function TeamAttendance() {
               </label>
             )}
 
-            <div className={`attendance-search-field${searchError ? ' is-invalid' : ''}`} style={{ minWidth: '260px' }}>
-              <label className="toolbar-search attendance-search-row">
-                <i className="ri-search-line" aria-hidden="true" />
-                <input
-                  type="search"
-                  value={searchText}
-                  onChange={(event) => handleSearchChange(event.target.value)}
-                  onKeyDown={handleSearchKeyDown}
-                  placeholder="Search employee name or ID"
-                  aria-label="Search employee name or ID"
-                  aria-invalid={Boolean(searchError)}
-                  aria-describedby={searchError ? 'team-attendance-search-error' : undefined}
-                />
-              </label>
-              {searchError && (
-                <span id="team-attendance-search-error" className="search-validation" role="alert">
-                  {searchError}
-                </span>
-              )}
-            </div>
+            <label className="toolbar-search" style={{ minWidth: '260px' }}>
+              <i className="ri-search-line" aria-hidden="true" />
+              <input
+                type="search"
+                value={searchText}
+                onChange={(event) => setSearchText(sanitizeAttendanceSearchInput(event.target.value))}
+                placeholder="Search employee name or ID"
+                aria-label="Search employee name or ID"
+              />
+            </label>
 
             <select value={status} onChange={(event) => {
               setStatus(event.target.value);

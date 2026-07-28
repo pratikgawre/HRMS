@@ -818,12 +818,7 @@ export function Section({
       <div className="section-heading">
         <h3>{title}</h3>
         {action && actionTo && <Link className="section-action" to={actionTo}>{action}</Link>}
-        {action && !actionTo && actionOnClick && (
-          <button type="button" onClick={actionOnClick} disabled={actionDisabled}>{action}</button>
-        )}
-        {action && !actionTo && !actionOnClick && (
-          <span className="section-action section-action-label">{action}</span>
-        )}
+        {action && !actionTo && <button type="button" onClick={actionOnClick} disabled={actionDisabled}>{action}</button>}
       </div>
       {children}
     </section>

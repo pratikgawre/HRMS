@@ -1139,42 +1139,15 @@ function Projects() {
                 <div className="settings-grid project-form-grid">
                   <label>
                     <span>Project Name</span>
-                    <input
-                      className={projectFormErrors.name ? 'is-invalid' : ''}
-                      value={projectForm.name}
-                      onChange={(event) => handleProjectFormChange('name', event.target.value)}
-                      placeholder="e.g. Employee Self Service"
-                      pattern="[A-Za-z0-9][A-Za-z0-9\s.'&-]*"
-                      title="Use letters, numbers, spaces, and basic punctuation only."
-                      aria-invalid={Boolean(projectFormErrors.name)}
-                    />
-                    {projectFormErrors.name && <small className="field-error">{projectFormErrors.name}</small>}
+                    <input value={projectForm.name} onChange={(event) => updateProjectForm(setProjectForm, 'name', sanitizeProjectTextInput(event.target.value))} placeholder="e.g. Employee Self Service" />
                   </label>
                   <label>
                     <span>Manager</span>
-                    <input
-                      className={projectFormErrors.manager ? 'is-invalid' : ''}
-                      value={projectForm.manager}
-                      onChange={(event) => handleProjectFormChange('manager', event.target.value)}
-                      placeholder="Project owner"
-                      pattern="[A-Za-z0-9][A-Za-z0-9\s.'&-]*"
-                      title="Use letters, numbers, spaces, and basic punctuation only."
-                      aria-invalid={Boolean(projectFormErrors.manager)}
-                    />
-                    {projectFormErrors.manager && <small className="field-error">{projectFormErrors.manager}</small>}
+                    <input value={projectForm.manager} onChange={(event) => updateProjectForm(setProjectForm, 'manager', event.target.value)} placeholder="Project owner" />
                   </label>
                   <label>
                     <span>Manager ID</span>
-                    <input
-                      className={projectFormErrors.managerId ? 'is-invalid' : ''}
-                      value={projectForm.managerId}
-                      onChange={(event) => handleProjectFormChange('managerId', event.target.value)}
-                      placeholder="Employee ID"
-                      pattern="[A-Za-z0-9-]+"
-                      title="Use letters, numbers, and hyphens only."
-                      aria-invalid={Boolean(projectFormErrors.managerId)}
-                    />
-                    {projectFormErrors.managerId && <small className="field-error">{projectFormErrors.managerId}</small>}
+                    <input value={projectForm.managerId} onChange={(event) => updateProjectForm(setProjectForm, 'managerId', event.target.value)} placeholder="Employee ID" />
                   </label>
                   <label>
                     <span>Team Leader</span>
@@ -1245,30 +1218,11 @@ function Projects() {
                   </label>
                   <label>
                     <span>Progress</span>
-                    <input
-                      className={projectFormErrors.progress ? 'is-invalid' : ''}
-                      value={projectForm.progress}
-                      onChange={(event) => handleProjectFormChange('progress', event.target.value)}
-                      placeholder="0, 25, 72"
-                      inputMode="numeric"
-                      pattern="[0-9]{1,3}"
-                      title="Progress must be a number from 0 to 100."
-                      aria-invalid={Boolean(projectFormErrors.progress)}
-                    />
-                    {projectFormErrors.progress && <small className="field-error">{projectFormErrors.progress}</small>}
+                    <input value={projectForm.progress} onChange={(event) => updateProjectForm(setProjectForm, 'progress', sanitizeProjectProgressInput(event.target.value))} placeholder="0, 25, 72" />
                   </label>
                   <label>
                     <span>Milestone</span>
-                    <input
-                      className={projectFormErrors.milestone ? 'is-invalid' : ''}
-                      value={projectForm.milestone}
-                      onChange={(event) => handleProjectFormChange('milestone', event.target.value)}
-                      placeholder="e.g. Security review"
-                      pattern="[A-Za-z0-9][A-Za-z0-9\s,.'&()/-]*"
-                      title="Use letters, numbers, spaces, and basic punctuation only."
-                      aria-invalid={Boolean(projectFormErrors.milestone)}
-                    />
-                    {projectFormErrors.milestone && <small className="field-error">{projectFormErrors.milestone}</small>}
+                    <input value={projectForm.milestone} onChange={(event) => updateProjectForm(setProjectForm, 'milestone', event.target.value)} placeholder="e.g. Security review" />
                   </label>
                   <label className="full-width">
                     <span>Description</span>
@@ -1666,6 +1620,22 @@ export default Projects;
 
 function updateProjectForm(setter, field, value) {
   setter((current) => ({ ...current, [field]: value }));
+}
+
+function sanitizeProjectTextInput(value) {
+  return String(value || '')
+    .replace(/[^a-zA-Z\s]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function sanitizeProjectIdInput(value) {
+  return String(value || '')
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function sanitizeProjectProgressInput(value) {
+  return String(value || '').replace(/[^0-9]/g, '');
 }
 
 function toggleTeamMember(setter, memberId) {

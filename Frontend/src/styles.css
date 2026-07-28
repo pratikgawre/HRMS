@@ -1937,15 +1937,6 @@ button.attendance-summary-card.is-clickable:focus-visible {
   min-width: 0;
 }
 
-.search-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  flex: 1 1 260px;
-  max-width: 340px;
-  min-width: 0;
-}
-
 .search-pill,
 .date-chip,
 .notification,
@@ -3484,13 +3475,6 @@ button.attendance-summary-card.is-clickable:focus-visible {
   font-weight: 800;
   text-decoration: none;
   transition: transform 0.18s ease;
-}
-
-.section-action.section-action-label {
-  cursor: default;
-  pointer-events: none;
-  opacity: 0.88;
-  background: linear-gradient(135deg, rgba(18, 170, 165, 0.88), rgba(18, 122, 165, 0.88));
 }
 
 .section-action:hover {

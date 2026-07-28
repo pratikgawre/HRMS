@@ -264,77 +264,14 @@ function Profile() {
   );
 
   const updateField = (field, value) => {
-    setForm((current) => ({ ...current, [field]: value }));
-    setValidationErrors((current) => {
-      if (!current[field]) {
-        return current;
-      }
-
-      const next = { ...current };
-      delete next[field];
-      return next;
-    });
-  };
-
-  const updatePersonalField = (field, value) => {
-    const sanitizedValue = sanitizePersonalFieldValue(field, value);
-    const attemptedInvalidEntry = String(value || '') !== sanitizedValue;
-    setForm((current) => {
-      const next = { ...current, [field]: sanitizedValue };
-      const error = attemptedInvalidEntry
-        ? 'Invalid characters are not allowed.'
-        : getPersonalFieldValidationError(field, next);
-      setValidationErrors((currentErrors) => {
-        if (!error) {
-          if (!currentErrors[field]) {
-            return currentErrors;
-          }
-
-          const nextErrors = { ...currentErrors };
-          delete nextErrors[field];
-          return nextErrors;
-        }
-
-        return {
-          ...currentErrors,
-          [field]: error,
-        };
-      });
-
-      return next;
-    });
-  };
-
-  const handlePersonalFieldBlur = (field) => {
-    setPersonalValidationTouched((current) => ({
-      ...current,
-      [field]: true,
-    }));
-
-    const error = getPersonalFieldValidationError(field, form);
-    setValidationErrors((currentErrors) => {
-      if (!error) {
-        if (!currentErrors[field]) {
-          return currentErrors;
-        }
-
-        const nextErrors = { ...currentErrors };
-        delete nextErrors[field];
-        return nextErrors;
-      }
-
-      return {
-        ...currentErrors,
-        [field]: error,
-      };
-    });
+    setForm((current) => ({ ...current, [field]: sanitizeProfileTextField(field, value) }));
   };
 
   const updateAddressField = (field, value) => {
     setForm((current) => {
-      const next = { ...current, [field]: value };
+      const next = { ...current, [field]: sanitizeProfileTextField(field, value) };
       if (current.sameAsAbove && PRESENT_TO_PERMANENT_ADDRESS_MAP[field]) {
-        next[PRESENT_TO_PERMANENT_ADDRESS_MAP[field]] = value;
+        next[PRESENT_TO_PERMANENT_ADDRESS_MAP[field]] = sanitizeProfileTextField(PRESENT_TO_PERMANENT_ADDRESS_MAP[field], value);
       }
       return next;
     });
@@ -821,14 +758,7 @@ function Profile() {
             <form className="settings-grid profile-edit-grid" onSubmit={handleSave}>
               <label>
                 <span>Display Name</span>
-                <input
-                  className={validationErrors.displayName ? 'is-invalid' : ''}
-                  value={form.displayName}
-                  onChange={(event) => updatePersonalField('displayName', sanitizeTextField(event.target.value))}
-                  onBlur={() => handlePersonalFieldBlur('displayName')}
-                  aria-invalid={Boolean(validationErrors.displayName)}
-                />
-                {validationErrors.displayName ? <small className="profile-field-error" role="alert">{validationErrors.displayName}</small> : null}
+                <input value={form.displayName} onChange={(event) => updateField('displayName', event.target.value)} />
               </label>
               <label>
                 <span>Job Title</span>
@@ -904,7 +834,7 @@ function Profile() {
               </label>
               <label>
                 <span>Employee ID</span>
-                <input value={form.employeeId} onChange={(event) => updateField('employeeId', alphanumericOnly(event.target.value))} />
+                <input inputMode="numeric" pattern="[0-9]*" value={form.managerId} onChange={(event) => updateField('managerId', digitsOnly(event.target.value))} />
               </label>
               <label>
                 <span>Grade</span>
@@ -940,21 +870,15 @@ function Profile() {
               </label>
               <label>
                 <span>Present City</span>
-                <input value={form.presentCityDistrict} onChange={(event) => updateAddressField('presentCityDistrict', sanitizeTextField(event.target.value))} />
+                <input value={form.presentCityDistrict} onChange={(event) => updateAddressField('presentCityDistrict', event.target.value)} />
               </label>
               <label>
                 <span>Present State</span>
-                <input value={form.presentState} onChange={(event) => updateAddressField('presentState', sanitizeTextField(event.target.value))} />
+                <input value={form.presentState} onChange={(event) => updateAddressField('presentState', event.target.value)} />
               </label>
               <label>
                 <span>Present PIN Code</span>
-                <input
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength="6"
-                  value={form.presentPinCode}
-                  onChange={(event) => updateAddressField('presentPinCode', digitsOnly(event.target.value).slice(0, 6))}
-                />
+                <input inputMode="numeric" pattern="[0-9]*" value={form.presentPinCode} onChange={(event) => updateAddressField('presentPinCode', digitsOnly(event.target.value))} />
               </label>
               <label>
                 <span>Present Country</span>
@@ -986,14 +910,7 @@ function Profile() {
               </label>
               <label>
                 <span>Permanent PIN Code</span>
-                <input
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength="6"
-                  value={form.permanentPinCode}
-                  onChange={(event) => updateField('permanentPinCode', digitsOnly(event.target.value).slice(0, 6))}
-                  disabled={form.sameAsAbove}
-                />
+                <input inputMode="numeric" pattern="[0-9]*" value={form.permanentPinCode} onChange={(event) => updateField('permanentPinCode', digitsOnly(event.target.value))} disabled={form.sameAsAbove} />
               </label>
               <label>
                 <span>Permanent Country</span>
@@ -1309,7 +1226,6 @@ function createProfileForm(employee) {
     employmentType: employee.employmentType || employee.role || '',
     joiningDate: employee.joiningDate || '',
     managerId: employee.managerId || '',
-    employeeId: employee.employeeId || employee.employeeCode || employee.id || '',
     grade: employee.grade || '',
     email: employee.email || '',
     mobileNo: employee.mobileNo || employee.phone || '',
@@ -1456,19 +1372,37 @@ function buildStoredProfileDetails(employee, canManagePackageAmount) {
   ];
 }
 
+function sanitizeProfileTextField(field, value) {
+  const restrictedFields = new Set([
+    'displayName',
+    'department',
+    'jobTitle',
+    'nationality',
+    'workingLocation',
+    'highestQualification',
+    'grade',
+    'presentAddressLine1',
+    'presentAddressLine2',
+    'presentCityDistrict',
+    'presentState',
+    'presentCountry',
+  ]);
+
+  if (!restrictedFields.has(field)) {
+    return value;
+  }
+
+  return String(value || '').replace(/[^a-zA-Z\s]/g, '');
+}
+
 function validateProfileSection(form, section, canManagePackageAmount) {
   const hasValue = (value) => String(value || '').trim().length > 0;
-  const textOnlyPattern = /^[\p{L}\s]+$/u;
   const displayName = String(form.displayName || '').trim();
   const jobTitle = String(form.jobTitle || '').trim();
   const department = String(form.department || '').trim();
   const gender = String(form.gender || '').trim();
   const dateOfBirth = String(form.dateOfBirth || '').trim();
   const employmentType = String(form.employmentType || '').trim();
-  const nationality = String(form.nationality || '').trim();
-  const workingLocation = String(form.workingLocation || '').trim();
-  const grade = String(form.grade || '').trim();
-  const highestQualification = String(form.highestQualification || '').trim();
   const email = String(form.email || '').trim();
   const mobileNo = String(form.mobileNo || '').trim();
   const bankName = String(form.bankName || '').trim();
@@ -1548,10 +1482,10 @@ function validateProfileSection(form, section, canManagePackageAmount) {
       requireValue(isValidRegionName(String(form.permanentCountry || '')), 'Permanent Country must contain letters and spaces only.');
     }
     if (presentPinCode) {
-      requireValue(isValidPostalCode(presentPinCode), postalCodeErrorMessage());
+      requireValue(/^\d{6}$/.test(presentPinCode), 'Present PIN code must be 6 digits.');
     }
     if (permanentPinCode && !form.sameAsAbove) {
-      requireValue(isValidPostalCode(permanentPinCode), postalCodeErrorMessage());
+      requireValue(/^\d{6}$/.test(permanentPinCode), 'Permanent PIN code must be 6 digits.');
     }
   }
 
@@ -1661,18 +1595,6 @@ function getPersonalFieldValidationError(field, form) {
 
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
-}
-
-function isValidMobileNumber(value) {
-  return /^\d{10}$/.test(String(value || '').trim());
-}
-
-function isValidIfscCode(value) {
-  return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(String(value || '').trim().toUpperCase());
-}
-
-function digitsOnly(value) {
-  return String(value || '').replace(/\D+/g, '');
 }
 
 function sanitizeTextField(value) {

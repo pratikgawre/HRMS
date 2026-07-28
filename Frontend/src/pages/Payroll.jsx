@@ -1297,7 +1297,6 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
     ? Boolean(hrActualRecord) && isPaidStatus(hrActualRecord.status) && !isFuturePreviewPeriod
     : Boolean(previewRecord) && isPaidStatus(previewRecord.status) && isPayrollPeriodAvailable(previewMonth, previewYear);
   const activePayslipRecord = isHrPayroll ? hrActualRecord : previewRecord;
-  const isActivePayslipPaid = Boolean(activePayslipRecord) && isPaidStatus(activePayslipRecord.status);
 
   const handleHrPayslipAction = async (action) => {
     if (isFuturePreviewPeriod) {
@@ -1350,7 +1349,7 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
         </div>
       )}
 
-      <Section title="Payslip Filter">
+      <Section title="Payslip Filter" action={role === 'teamLead' ? '' : (roleLabels[role] || 'Employee')}>
         <div className="payslip-filter">
           <label className="field">
             <span>Month</span>
@@ -1362,7 +1361,6 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
                   setSelectedPayslip(null);
                   return;
                 }
-                setSelectedPayslip(null);
                 setMonth(event.target.value);
               }}
             >
@@ -1379,7 +1377,6 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
                   setSelectedPayslip(null);
                   return;
                 }
-                setSelectedPayslip(null);
                 setYear(event.target.value);
               }}
             >
@@ -1395,7 +1392,7 @@ function MyPayslip({ records, savedPayrollRecords = [], role, month, year, setMo
                 return;
               }
 
-              if (!isActivePayslipPaid) {
+              if (!isSelectedPayslipPaid && !(isHrPayroll ? isPaidStatus(hrActualRecord?.status) : isPaidStatus(previewRecord?.status))) {
                 setMessage('Payslip is available only after the salary has been marked as Paid.');
                 return;
               }

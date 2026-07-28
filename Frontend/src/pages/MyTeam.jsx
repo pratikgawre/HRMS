@@ -123,6 +123,9 @@ function TeamLeadMyTeamView() {
           ? Array.from(new Set(memberTasks.map((task) => String(task.title || task.projectName || task.projectCode || '-').trim()).filter(Boolean))).join(', ')
           : '-',
         status: member.status || source?.status || '-',
+        taskRows: memberTasks,
+        taskId: memberTasks.find((task) => String(task.id || '').trim())?.id || '',
+        hasPersistedTask: memberTasks.some((task) => String(task.id || '').trim()),
       };
     })
   ), [effectiveEmployeeDirectory, memberProjectMap, tasks]);
