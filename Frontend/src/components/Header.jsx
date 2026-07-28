@@ -11,6 +11,7 @@ function Header({ role, onMenuClick }) {
   const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchError, setSearchError] = useState('');
   const [notificationItems, setNotificationItems] = useState([]);
   const [employeeIdentity, setEmployeeIdentity] = useState(() => getHeaderEmployeeIdentity(role));
   const notificationWrapRef = useRef(null);
@@ -41,7 +42,7 @@ function Header({ role, onMenuClick }) {
   }[role] || '/employee';
 
   const searchRoutes = getSearchRoutes(role);
-
+  const searchQueryIsValid = isValidEmployeeSearchQuery(searchQuery);
   // Close notification panel when clicking outside
   useEffect(() => {
     if (!showNotifications) {
@@ -142,6 +143,11 @@ function Header({ role, onMenuClick }) {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;
 
+    if (!searchQueryIsValid) {
+      setSearchError('Please enter a valid employee name or employee ID.');
+      return;
+    }
+
     const directMatch = searchRoutes.reduce((bestMatch, entry, index) => {
       const matchedLabel = normalizeSearchQuery(entry.label);
       if (!matchedLabel || !matchedLabel.includes(normalized)) {
@@ -241,17 +247,27 @@ function Header({ role, onMenuClick }) {
         </div>
       </div>
       <div className="topbar-actions">
-        <label className="search-pill">
-          <i className="ri-search-line" aria-hidden="true" />
-          <input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') runSearch();
-            }}
-            placeholder="Employee, leave, policy..."
-          />
-        </label>
+        <div className="search-pill-group">
+          <label className="search-pill">
+            <i className="ri-search-line" aria-hidden="true" />
+            <input
+              value={searchQuery}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setSearchQuery(nextValue);
+                if (isValidEmployeeSearchQuery(nextValue) || !nextValue.trim()) {
+                  setSearchError('');
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') runSearch();
+              }}
+              placeholder="Employee, leave, policy..."
+              aria-invalid={Boolean(searchError)}
+            />
+          </label>
+          {searchError && <p className="search-pill-error" role="alert">{searchError}</p>}
+        </div>
         <div className="date-chip">
           <i className="ri-calendar-line" aria-hidden="true" />
           <span>{today}</span>
@@ -418,6 +434,15 @@ function sanitizeSearchInput(value) {
   return String(value || '')
     .replace(/[^a-zA-Z\s]/g, '')
     .replace(/\s+/g, ' ');
+}
+
+function isValidEmployeeSearchQuery(value) {
+  const trimmedValue = String(value || '').trim();
+  if (!trimmedValue) {
+    return true;
+  }
+
+  return /^[A-Za-z0-9][A-Za-z0-9 _-]*$/.test(trimmedValue);
 }
 
 function normalizeNotifications(rows) {

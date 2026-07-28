@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -54,6 +55,7 @@ public class SupportController {
   private static final int TITLE_MAX_LENGTH = 100;
   private static final int DESCRIPTION_MIN_LENGTH = 20;
   private static final int DESCRIPTION_MAX_LENGTH = 1000;
+  private static final Pattern TICKET_TITLE_PATTERN = Pattern.compile("^(?=.*[A-Za-z])[A-Za-z0-9 .,:()'/-]+$");
   private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd MMM uuuu");
   private static final Path SCREENSHOT_DIRECTORY = Paths.get("uploads", "support-screenshots");
 
@@ -192,10 +194,10 @@ public class SupportController {
     Map<String, String> fieldErrors = new LinkedHashMap<>();
 
     String title = trimToEmpty(ticket.getTitle());
-    if (title.isBlank() || title.length() < TITLE_MIN_LENGTH || title.length() > TITLE_MAX_LENGTH) {
-      fieldErrors.put("title", "Ticket title is required.");
-    } else if (!isValidSupportTitle(title)) {
-      fieldErrors.put("title", "Ticket title must contain letters and spaces only.");
+    if (title.isBlank()) {
+      fieldErrors.put("title", "Ticket Title is required.");
+    } else if (title.length() < TITLE_MIN_LENGTH || title.length() > TITLE_MAX_LENGTH || !TICKET_TITLE_PATTERN.matcher(title).matches()) {
+      fieldErrors.put("title", "Enter a valid Ticket Title.");
     }
 
     String category = trimToEmpty(ticket.getCategory());
@@ -278,10 +280,6 @@ public class SupportController {
     }
 
     return null;
-  }
-
-  private boolean isValidSupportTitle(String value) {
-    return trimToEmpty(value).matches("(?=.*[A-Za-z])[A-Za-z][A-Za-z\\s]*");
   }
 
   private void storeMultipartScreenshot(SupportTicket ticket, MultipartFile screenshotFile) throws IOException {

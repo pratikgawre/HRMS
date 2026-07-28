@@ -7,7 +7,6 @@ import { getSessionValue } from "../utils/appSession.js";
 const categories = ["Company", "Policy", "Wellness", "Payroll", "Attendance", "Event", "Vacancy", "Other"];
 const priorities = ["Low", "Medium", "High", "Critical"];
 const statuses = ["Active", "Draft", "Archived"];
-const titlePattern = /^[A-Za-z][A-Za-z\s]*$/;
 
 function toLower(value) {
   return String(value || "").toLowerCase();
@@ -47,13 +46,9 @@ function getDefaultForm() {
   };
 }
 
-function normalizeAnnouncementTitle(value) {
-  return String(value || "").replace(/[^A-Za-z\s]/g, "").replace(/\s+/g, " ").trimStart();
-}
-
 function isValidAnnouncementTitle(value) {
-  const normalized = String(value || "").trim();
-  return normalized.length > 0 && titlePattern.test(normalized);
+  const trimmedValue = String(value || "").trim();
+  return trimmedValue.length > 0 && /[A-Za-z]/.test(trimmedValue);
 }
 
 function Announcements() {
@@ -155,17 +150,6 @@ function Announcements() {
   }, [filterCategory]);
 
   const updateField = (field, value) => {
-    if (field === "title") {
-      const nextValue = normalizeAnnouncementTitle(value);
-      setForm((current) => ({ ...current, title: nextValue }));
-      setErrors((current) => ({
-        ...current,
-        title: String(value || "") !== nextValue ? "Announcement title should contain letters only." : "",
-      }));
-      clearMessage();
-      return;
-    }
-
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: "" }));
     clearMessage();
@@ -185,8 +169,12 @@ function Announcements() {
 
   const validateForm = () => {
     const nextErrors = {};
-    if (!form.title.trim()) nextErrors.title = "Announcement title is required.";
-    else if (!isValidAnnouncementTitle(form.title)) nextErrors.title = "Announcement title should contain letters only.";
+    const trimmedTitle = form.title.trim();
+    if (!trimmedTitle) {
+      nextErrors.title = "Announcement title is required.";
+    } else if (!isValidAnnouncementTitle(trimmedTitle)) {
+      nextErrors.title = "Announcement title must contain at least one letter.";
+    }
     if (!form.body.trim()) nextErrors.body = "Description is required.";
     return nextErrors;
   };
@@ -501,14 +489,13 @@ function AnnouncementModal({ title, form, errors, updateField, onSubmit, onClose
             <span>Announcement Title</span>
             <input
               type="text"
-              inputMode="text"
-              autoComplete="off"
               value={form.title}
               onChange={(event) => updateField("title", event.target.value)}
               placeholder="Enter announcement title"
               aria-invalid={Boolean(errors.title)}
+              aria-describedby={errors.title ? "announcement-title-error" : undefined}
             />
-            {errors.title && <small>{errors.title}</small>}
+            {errors.title && <small id="announcement-title-error" className="field-error">{errors.title}</small>}
           </label>
 
           <label className="field">

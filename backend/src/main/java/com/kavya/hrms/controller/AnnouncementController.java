@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Objects;
 import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/announcements")
@@ -54,8 +56,14 @@ public class AnnouncementController {
       @RequestBody Announcement announcement,
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
-    Announcement saved = announcementRepository
-        .save(Objects.requireNonNull(announcement, "announcement must not be null"));
+    Announcement safeAnnouncement = announcement == null ? new Announcement() : announcement;
+    String titleError = validateTitle(safeAnnouncement.getTitle());
+    if (titleError != null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, titleError);
+    }
+
+    safeAnnouncement.setTitle(asString(safeAnnouncement.getTitle()));
+    Announcement saved = announcementRepository.save(safeAnnouncement);
     String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
     String safeUserId = Objects.requireNonNullElse(userId, "");
     notificationService.notifyRoles(
@@ -97,6 +105,12 @@ public class AnnouncementController {
       @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
       @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
     Announcement safeAnnouncement = announcement == null ? new Announcement() : announcement;
+    String titleError = validateTitle(safeAnnouncement.getTitle());
+    if (titleError != null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, titleError);
+    }
+
+    safeAnnouncement.setTitle(asString(safeAnnouncement.getTitle()));
     safeAnnouncement.setId(id);
     Announcement saved = announcementRepository.save(safeAnnouncement);
     String safeAccessRole = Objects.requireNonNullElse(accessRole, "");
@@ -141,6 +155,17 @@ public class AnnouncementController {
 
   private String asString(Object value) {
     return value == null ? "" : String.valueOf(value).trim();
+  }
+
+  private String validateTitle(String title) {
+    String normalizedTitle = asString(title);
+    if (normalizedTitle.isEmpty()) {
+      return "Announcement title is required.";
+    }
+    if (!normalizedTitle.matches(".*[A-Za-z].*")) {
+      return "Announcement title must contain at least one letter.";
+    }
+    return null;
   }
 
   private boolean equalsIgnoreCase(String left, String right) {
