@@ -1427,10 +1427,6 @@ function parseMonthInputValue(value) {
   return new Date(year, month - 1, 1);
 }
 
-function sanitizeAttendanceSearchInput(value) {
-  return String(value || '').replace(/[^a-zA-Z0-9\s]/g, '');
-}
-
 export default TeamAttendance;
 
 
