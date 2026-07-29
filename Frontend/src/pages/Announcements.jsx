@@ -7,6 +7,8 @@ import { getSessionValue } from "../utils/appSession.js";
 const categories = ["Company", "Policy", "Wellness", "Payroll", "Attendance", "Event", "Vacancy", "Other"];
 const priorities = ["Low", "Medium", "High", "Critical"];
 const statuses = ["Active", "Draft", "Archived"];
+const announcementTitleValidationMessage = "Please use letters and numbers only.";
+const announcementTitleCharacterPattern = /[^A-Za-z0-9\s]/;
 
 function toLower(value) {
   return String(value || "").toLowerCase();
@@ -48,7 +50,18 @@ function getDefaultForm() {
 
 function isValidAnnouncementTitle(value) {
   const trimmedValue = String(value || "").trim();
-  return trimmedValue.length > 0 && /[A-Za-z]/.test(trimmedValue);
+  return trimmedValue.length > 0 && /^[A-Za-z0-9\s]+$/.test(trimmedValue) && /[A-Za-z0-9]/.test(trimmedValue);
+}
+
+function sanitizeAnnouncementTitle(value) {
+  return String(value || "")
+    .replace(/[^A-Za-z0-9\s]+/g, "")
+    .replace(/\s+/g, " ")
+    .trimStart();
+}
+
+function isInvalidAnnouncementTitleInsertion(value) {
+  return announcementTitleCharacterPattern.test(String(value || ""));
 }
 
 function Announcements() {
@@ -155,6 +168,32 @@ function Announcements() {
     clearMessage();
   };
 
+  const handleTitleChange = (event) => {
+    const nextRawValue = String(event.target.value || "");
+    const nextValue = sanitizeAnnouncementTitle(nextRawValue);
+    const attemptedInvalid = nextRawValue !== nextValue;
+
+    updateField("title", nextValue);
+    if (attemptedInvalid) {
+      setErrors((current) => ({ ...current, title: announcementTitleValidationMessage }));
+    }
+  };
+
+  const handleTitleBeforeInput = (event) => {
+    if (event.data && announcementTitleCharacterPattern.test(String(event.data || ""))) {
+      event.preventDefault();
+      setErrors((current) => ({ ...current, title: announcementTitleValidationMessage }));
+    }
+  };
+
+  const handleTitlePaste = (event) => {
+    const pastedValue = event.clipboardData?.getData("text") || "";
+    if (announcementTitleCharacterPattern.test(pastedValue)) {
+      event.preventDefault();
+      setErrors((current) => ({ ...current, title: announcementTitleValidationMessage }));
+    }
+  };
+
   const resetForm = () => {
     setForm(getDefaultForm());
     setEditingId("");
@@ -173,7 +212,7 @@ function Announcements() {
     if (!trimmedTitle) {
       nextErrors.title = "Announcement title is required.";
     } else if (!isValidAnnouncementTitle(trimmedTitle)) {
-      nextErrors.title = "Announcement title must contain at least one letter.";
+      nextErrors.title = "Announcement title can contain letters and numbers only.";
     }
     if (!form.body.trim()) nextErrors.body = "Description is required.";
     return nextErrors;
@@ -426,7 +465,9 @@ function Announcements() {
           title={editingId === "new" ? "Create Announcement" : "Edit Announcement"}
           form={form}
           errors={errors}
-          updateField={updateField}
+          onTitleChange={handleTitleChange}
+          onTitleBeforeInput={handleTitleBeforeInput}
+          onTitlePaste={handleTitlePaste}
           onSubmit={handleSubmit}
           onClose={resetForm}
           submitLabel={saving ? "Saving..." : editingId === "new" ? "Post Announcement" : "Update Announcement"}
@@ -473,7 +514,7 @@ function Announcements() {
   );
 }
 
-function AnnouncementModal({ title, form, errors, updateField, onSubmit, onClose, submitLabel }) {
+function AnnouncementModal({ title, form, errors, onTitleChange, onTitleBeforeInput, onTitlePaste, onSubmit, onClose, submitLabel }) {
   return (
     <div className="payroll-modal-backdrop" role="presentation">
       <section className="payroll-modal announcement-modal" role="dialog" aria-modal="true" aria-label={title}>
@@ -490,7 +531,9 @@ function AnnouncementModal({ title, form, errors, updateField, onSubmit, onClose
             <input
               type="text"
               value={form.title}
-              onChange={(event) => updateField("title", event.target.value)}
+              onChange={onTitleChange}
+              onBeforeInput={onTitleBeforeInput}
+              onPaste={onTitlePaste}
               placeholder="Enter announcement title"
               aria-invalid={Boolean(errors.title)}
               aria-describedby={errors.title ? "announcement-title-error" : undefined}

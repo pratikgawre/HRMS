@@ -6,6 +6,7 @@ import DashboardCard from '../components/DashboardCard.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { Hero, Section } from './AdminDashboard.jsx';
 import {
+  getStoredEmployees,
   reconcileDeletedEmployees,
   saveStoredEmployees,
   setEmployeesCache,
@@ -32,7 +33,7 @@ const nationalityRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
 const qualificationRegex = /^(?=.*[A-Za-z])[A-Za-z0-9 .()+/-]+$/;
 const workingLocationRegex = /^(?=.*[A-Za-z])[A-Za-z ,()'-]+$/;
 const employmentBackgroundRegex = /^(?=.*[A-Za-z])[A-Za-z0-9 .,&()'/-]+$/;
-const permanentAddressRegex = /^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/;
+const permanentAddressRegex = /^(?=.*[A-Za-z0-9])[A-Za-z0-9\s,./'()#-]+$/;
 const bankNameGroups = [
   {
     label: 'Government / Public Sector Banks',
@@ -308,8 +309,8 @@ function Employees() {
           return;
         }
 
-        setEmployees([]);
-        setEmployeesCache([]);
+        const cachedEmployees = normalizeEmployeeDirectoryRows(getStoredEmployees([]));
+        setEmployees((current) => (cachedEmployees.length > 0 ? cachedEmployees : current));
         setMessage((current) => current || (error instanceof Error ? error.message : 'Unable to load employees right now.'));
       }
     };
@@ -643,14 +644,17 @@ function Employees() {
 
       if (editingEmployee) {
         const savedEmployee = await saveEmployeeRecord(payload, true);
+        const editingEmployeeKey = getEmployeeRecordKey(editingEmployee);
         const next = employees.map((employee) => (
-          employee.id === editingEmployee.id ? { ...employee, ...savedEmployee } : employee
+          getEmployeeRecordKey(employee) === editingEmployeeKey ? { ...employee, ...savedEmployee } : employee
         ));
         const successMessage = getEmployeeSaveMessage(savedEmployee, true);
 
         setEmployees(next);
         setEmployeesCache(next);
-        setSelectedEmployee((current) => (current?.id === editingEmployee.id ? { ...current, ...savedEmployee } : current));
+        setSelectedEmployee((current) => (
+          getEmployeeRecordKey(current) === editingEmployeeKey ? { ...current, ...savedEmployee } : current
+        ));
         setCredentialNotice(getEmployeeCredentialNotice(savedEmployee));
         setMessage(successMessage);
         setSaveToast({ text: getEmployeeSaveToastMessage(true), tone: 'success' });
@@ -1947,11 +1951,11 @@ function getEmployeeFieldError(key, value, { requireFilled = true, today = new D
     case 'employmentBackground':
       return employmentBackgroundRegex.test(trimmed) ? '' : 'Enter a valid Employment Background.';
     case 'permanentAddressLine1':
-      return permanentAddressRegex.test(trimmed) ? '' : 'Permanent Address Line 1 must contain only alphabets, numbers and spaces.';
+      return permanentAddressRegex.test(trimmed) ? '' : 'Please enter a valid Permanent Address Line 1.';
     case 'permanentAddressLine2':
-      return permanentAddressRegex.test(trimmed) ? '' : 'Permanent Address Line 2 must contain only alphabets, numbers and spaces.';
+      return permanentAddressRegex.test(trimmed) ? '' : 'Please enter a valid Permanent Address Line 2.';
     case 'permanentAddressLine3':
-      return permanentAddressRegex.test(trimmed) ? '' : 'Permanent Address Line 3 must contain only alphabets, numbers and spaces.';
+      return permanentAddressRegex.test(trimmed) ? '' : 'Please enter a valid Permanent Address Line 3.';
     case 'jobTitle':
       return /^[A-Za-z ]+$/.test(trimmed) ? '' : 'Designation must contain letters and spaces only.';
     case 'presentAddressLine1':

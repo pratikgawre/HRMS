@@ -6,29 +6,21 @@ import { apiRequest } from '../utils/api.js';
 import { getSessionValue, setSessionValue } from '../utils/appSession.js';
 import { getUsers } from '../utils/user-management.js';
 
-const headerSearchValidationMessage = 'Please use letters and spaces only.';
-const headerSearchCharacterPattern = /[^A-Za-z\s]/;
-const managerHeaderSearchValidationMessage = 'Please use letters, numbers, spaces, apostrophes, or hyphens only.';
-const managerHeaderSearchPattern = /^[A-Za-z0-9\s'-]*$/;
-const managerHeaderSearchCharacterPattern = /[^A-Za-z0-9\s'-]/;
+const headerSearchValidationMessage = 'Please enter a valid employee name or ID.';
+const headerSearchPattern = /^(?:[A-Za-z]+(?:[ '-][A-Za-z]+)*|(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9-]+)$/;
 
-function sanitizeHeaderSearchQuery(value, role = '') {
-  return role === 'projectManager'
-    ? String(value || '').replace(/[^A-Za-z0-9\s'-]+/g, '')
-    : String(value || '').replace(/[^A-Za-z\s]+/g, '');
+function sanitizeHeaderSearchQuery(value) {
+  return String(value || '').replace(/[^A-Za-z0-9\s'-]+/g, '');
 }
 
-function isValidHeaderSearchQuery(value, role = '') {
+function isValidHeaderSearchQuery(value) {
   const normalized = String(value || '').trim();
   if (!normalized) return true;
-  return role === 'projectManager'
-    ? managerHeaderSearchPattern.test(normalized)
-    : /^[A-Za-z\s]*$/.test(normalized);
+  return headerSearchPattern.test(normalized);
 }
 
-function isInvalidHeaderSearchInsertion(value, role = '') {
-  const pattern = role === 'projectManager' ? managerHeaderSearchCharacterPattern : headerSearchCharacterPattern;
-  return pattern.test(String(value || ''));
+function isInvalidHeaderSearchInsertion(value) {
+  return /[^A-Za-z0-9\s'-]/.test(String(value || ''));
 }
 
 function Header({ role, onMenuClick }) {
@@ -67,54 +59,33 @@ function Header({ role, onMenuClick }) {
   }[role] || '/employee';
 
   const searchRoutes = getSearchRoutes(role);
-  const currentSearchValidationMessage = role === 'projectManager'
-    ? managerHeaderSearchValidationMessage
-    : headerSearchValidationMessage;
   const handleSearchChange = (event) => {
     const nextRawValue = String(event.target.value || '');
-    const nextValue = sanitizeHeaderSearchQuery(nextRawValue, role);
+    const nextValue = sanitizeHeaderSearchQuery(nextRawValue);
     const attemptedInvalid = nextRawValue !== nextValue;
 
     setSearchQuery(nextValue);
 
     if (!nextValue.trim()) {
-      setSearchError(attemptedInvalid ? currentSearchValidationMessage : '');
+      setSearchError(attemptedInvalid ? headerSearchValidationMessage : '');
       return;
     }
 
-    setSearchError(attemptedInvalid || !isValidHeaderSearchQuery(nextValue, role) ? currentSearchValidationMessage : '');
+    setSearchError(attemptedInvalid || !isValidHeaderSearchQuery(nextValue) ? headerSearchValidationMessage : '');
   };
   const handleSearchBeforeInput = (event) => {
-    if (event.data && isInvalidHeaderSearchInsertion(event.data, role)) {
+    if (event.data && isInvalidHeaderSearchInsertion(event.data)) {
       event.preventDefault();
-      setSearchError(currentSearchValidationMessage);
+      setSearchError(headerSearchValidationMessage);
     }
   };
   const handleSearchPaste = (event) => {
     const pastedValue = event.clipboardData?.getData('text') || '';
-    if (isInvalidHeaderSearchInsertion(pastedValue, role)) {
+    if (isInvalidHeaderSearchInsertion(pastedValue)) {
       event.preventDefault();
-      setSearchError(currentSearchValidationMessage);
+      setSearchError(headerSearchValidationMessage);
     }
   };
-
-  // Close notification panel when clicking outside
-  useEffect(() => {
-    if (!showNotifications) {
-      return;
-    }
-
-    const handleClickOutside = (event) => {
-      if (notificationWrapRef.current && !notificationWrapRef.current.contains(event.target)) {
-        setShowNotifications(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showNotifications]);
 
   useEffect(() => {
     const syncEmployeeIdentity = ({ syncSessionPhoto = false } = {}) => {
@@ -196,15 +167,15 @@ function Header({ role, onMenuClick }) {
   }, [showNotifications]);
   const runSearch = () => {
     const rawValue = String(searchQuery || '');
-    const normalizedQuery = sanitizeHeaderSearchQuery(rawValue, role).trim().toLowerCase();
+    const normalizedQuery = sanitizeHeaderSearchQuery(rawValue).trim().toLowerCase();
 
     if (!normalizedQuery) {
-      setSearchError(rawValue.trim() ? currentSearchValidationMessage : '');
+      setSearchError(rawValue.trim() ? headerSearchValidationMessage : '');
       return;
     }
 
-    if (!isValidHeaderSearchQuery(rawValue, role)) {
-      setSearchError(currentSearchValidationMessage);
+    if (!isValidHeaderSearchQuery(rawValue)) {
+      setSearchError(headerSearchValidationMessage);
       return;
     }
 
