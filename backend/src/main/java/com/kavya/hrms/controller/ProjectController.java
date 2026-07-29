@@ -177,8 +177,8 @@ public class ProjectController {
 
     if (manager.isBlank()) {
       errors.put("manager", "Manager is required.");
-    } else if (!isValidProjectText(manager)) {
-      errors.put("manager", "Use letters, numbers, spaces, and basic punctuation only.");
+    } else if (!manager.matches("[A-Za-z]+(?:[\\s.'-][A-Za-z]+)*")) {
+      errors.put("manager", "Please enter a valid Manager name using alphabets only.");
     }
 
     if (managerId.isBlank()) {
@@ -203,8 +203,10 @@ public class ProjectController {
       errors.put("description", "Use letters, numbers, spaces, and basic punctuation only.");
     }
 
-    if (!milestone.isBlank() && !isValidProjectText(milestone)) {
-      errors.put("milestone", "Use letters, numbers, spaces, and basic punctuation only.");
+    if (milestone.isBlank()) {
+      errors.put("milestone", "This field is required.");
+    } else if (!isValidProjectText(milestone)) {
+      errors.put("milestone", "Please enter a valid Milestone.");
     }
 
     if (!startDate.isBlank() && !isValidIsoDate(startDate)) {
@@ -225,7 +227,9 @@ public class ProjectController {
       }
     }
 
-    if (!progress.isBlank()) {
+    if (progress.isBlank()) {
+      errors.put("progress", "This field is required.");
+    } else {
       try {
         int parsedProgress = Integer.parseInt(progress.replace("%", ""));
         if (parsedProgress < 0 || parsedProgress > 100) {

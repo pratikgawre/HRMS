@@ -88,6 +88,9 @@ function Assets() {
   const [searchError, setSearchError] = useState('');
   const [assetView, setAssetView] = useState('all');
   const [selectedAsset, setSelectedAsset] = useState(null);
+  const [replacementTarget, setReplacementTarget] = useState(null);
+  const [isReplacementSubmitting, setIsReplacementSubmitting] = useState(false);
+  const [replacementSubmitError, setReplacementSubmitError] = useState('');
   const [assignedEmployeeQuery, setAssignedEmployeeQuery] = useState('');
   const [isEmployeePickerOpen, setIsEmployeePickerOpen] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState('');
@@ -491,7 +494,55 @@ function Assets() {
       return;
     }
 
-    updateAsset(assetId, { status: 'Replacement Requested' });
+    const asset = assets.find((item) => item.id === assetId);
+    if (asset) {
+      setAssetMessage('');
+      setReplacementSubmitError('');
+      setReplacementTarget(asset);
+    }
+  };
+
+  const submitTeamReplacementRequest = async ({ asset, reason, description, screenshot }) => {
+    if (!isTeamScopedRole || !asset || isReplacementSubmitting) {
+      return;
+    }
+
+    setIsReplacementSubmitting(true);
+    setAssetMessage('');
+    setReplacementSubmitError('');
+    try {
+      await apiRequest('/asset-requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          employeeId: currentEmployee.employeeId || currentEmployee.id || '',
+          employeeName: currentEmployee.employeeName || currentEmployee.employee || currentEmployee.name || '',
+          assetId: asset.id,
+          assetCode: asset.assetCode || asset.id,
+          assetName: asset.assetName,
+          requestType: 'replacement',
+          description: [reason, description].filter(Boolean).join(' - '),
+          screenshot: screenshot || '',
+          status: 'Pending',
+        }),
+        timeoutMs: 60000,
+      });
+      const savedAsset = await apiRequest(`/assets/${encodeURIComponent(asset.id)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'Replacement Requested' }),
+      }).catch(() => ({ ...asset, status: 'Replacement Requested' }));
+      const normalizedAsset = normalizeAssetRows([{ ...asset, ...savedAsset }], employees)[0] || {
+        ...asset,
+        status: 'Replacement Requested',
+      };
+      setAssets((current) => current.map((item) => (item.id === asset.id ? normalizedAsset : item)));
+      setReplacementTarget(null);
+      setAssetMessage(`Replacement request for ${asset.assetName} submitted successfully.`);
+      window.dispatchEvent(new Event('kavyaAssetRequestsChanged'));
+    } catch (error) {
+      setReplacementSubmitError(error?.message || 'Replacement request could not be submitted. Please try again.');
+    } finally {
+      setIsReplacementSubmitting(false);
+    }
   };
 
   const markReturned = (assetId) => {
@@ -1171,6 +1222,20 @@ function Assets() {
           </>
         )}
       </div>
+      {replacementTarget && (
+        <ReplacementRequestModal
+          asset={replacementTarget}
+          onClose={() => {
+            if (!isReplacementSubmitting) {
+              setReplacementTarget(null);
+              setReplacementSubmitError('');
+            }
+          }}
+          onSubmit={submitTeamReplacementRequest}
+          isSubmitting={isReplacementSubmitting}
+          submitError={replacementSubmitError}
+        />
+      )}
     </>
   );
 }

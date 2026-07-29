@@ -63,14 +63,15 @@ function TeamAttendanceToast({ toast, onClose }) {
 
 const attendanceEmployeeSearchRegex = /^[A-Za-z0-9]+(?:[ _'-][A-Za-z0-9]+)*$/;
 
-function validateAttendanceEmployeeSearch(value) {
+function validateAttendanceEmployeeSearch(value, role = '') {
   const normalizedValue = String(value || '').trim();
 
   if (!normalizedValue) {
     return '';
   }
 
-  if (!attendanceEmployeeSearchRegex.test(normalizedValue)) {
+  if (!attendanceEmployeeSearchRegex.test(normalizedValue)
+      || (role === 'projectManager' && !/[A-Za-z]/.test(normalizedValue))) {
     return 'Please enter a valid employee name or ID.';
   }
 
@@ -568,7 +569,7 @@ function TeamAttendance() {
   const handleAttendanceSearchChange = (event) => {
     const nextValue = event.target.value;
     setSearchText(nextValue);
-    setSearchError(validateAttendanceEmployeeSearch(nextValue));
+    setSearchError(validateAttendanceEmployeeSearch(nextValue, role));
   };
 
   const handleAttendanceSearchKeyDown = (event) => {
@@ -577,7 +578,7 @@ function TeamAttendance() {
     }
 
     event.preventDefault();
-    setSearchError(validateAttendanceEmployeeSearch(searchText));
+    setSearchError(validateAttendanceEmployeeSearch(searchText, role));
   };
   function openRecommendDialog(row) {
     setEditingRow(row);
@@ -760,7 +761,9 @@ function TeamAttendance() {
                   type="search"
                   value={searchText}
                   onChange={handleAttendanceSearchChange}
+                  onBlur={() => setSearchError(validateAttendanceEmployeeSearch(searchText, role))}
                   onKeyDown={handleAttendanceSearchKeyDown}
+                  className={searchError ? 'is-invalid' : ''}
                   placeholder="Search employee name or ID"
                   aria-label="Search employee name or ID"
                   aria-invalid={Boolean(searchError)}

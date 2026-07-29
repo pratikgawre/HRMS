@@ -17,6 +17,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -215,6 +216,35 @@ public class AssetController {
     notificationService.notifyRoles(
         NotificationAudience.operationalRecipients(accessRole),
         "Asset updated",
+        buildAssetMessage(saved, "updated"),
+        "asset",
+        saved.getId(),
+        accessRole,
+        "System",
+        userId);
+    return normalizeAssetResponse(saved, employees);
+  }
+
+  @PatchMapping("/{id}/status")
+  public Asset updateStatus(
+      @PathVariable String id,
+      @RequestBody Map<String, String> payload,
+      @RequestHeader(value = "X-Kavya-Access-Role", required = false) String accessRole,
+      @RequestHeader(value = "X-Kavya-User-Id", required = false) String userId) {
+    String safeId = Objects.requireNonNull(id, "asset id must not be null");
+    String status = normalize(payload == null ? null : payload.get("status"));
+    if (!List.of("Assigned", "Available", "Repair Needed", "Replacement Requested", "Pending Return").contains(status)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please select a valid asset status.");
+    }
+
+    Asset current = assetRepository.findById(safeId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found."));
+    current.setStatus(status);
+    List<Employee> employees = employeeRepository.findAll();
+    Asset saved = assetRepository.save(current);
+    notificationService.notifyRoles(
+        NotificationAudience.operationalRecipients(accessRole),
+        "Asset status updated",
         buildAssetMessage(saved, "updated"),
         "asset",
         saved.getId(),

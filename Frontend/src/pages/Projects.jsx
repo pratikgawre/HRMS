@@ -56,6 +56,10 @@ const PROJECT_DETAILS_ID = 'project-selected-details';
 const PROJECT_INLINE_DETAILS_ID = 'project-inline-details';
 const PROJECT_DELETE_UNDO_MS = 6000;
 const projectSearchRegex = /^[A-Za-z0-9]+(?:[ _-][A-Za-z0-9]+)*$/;
+const projectNameRegex = /^(?=.*[A-Za-z])[A-Za-z0-9][A-Za-z0-9\s,.'&()/-]*$/;
+const managerNameRegex = /^[A-Za-z]+(?:[\s.'-][A-Za-z]+)*$/;
+const managerIdRegex = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/;
+const milestoneRegex = /^(?=.*[A-Za-z0-9])[A-Za-z0-9][A-Za-z0-9\s,.'&()/-]*$/;
 
 function validateProjectSearch(value) {
   const normalizedValue = String(value || '').trim();
@@ -90,6 +94,7 @@ function Projects() {
   const [editingProjectId, setEditingProjectId] = useState('');
   const [message, setMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [projectFormErrors, setProjectFormErrors] = useState({});
   const [projectForm, setProjectForm] = useState(createEmptyProjectForm(managerName, managerId));
   const [teamFilter, setTeamFilter] = useState('All');
   const [teamSearch, setTeamSearch] = useState('');
@@ -147,6 +152,28 @@ function Projects() {
 
     event.preventDefault();
     setSearchError(validateProjectSearch(searchTerm));
+  };
+
+  const handleProjectFieldChange = (field, value) => {
+    updateProjectForm(setProjectForm, field, value);
+    setProjectFormErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      const fieldError = validateProjectFieldValue(field, value);
+      if (fieldError) next[field] = fieldError;
+      else delete next[field];
+      return next;
+    });
+  };
+
+  const validateProjectField = (field) => {
+    const fieldError = validateProjectFieldValue(field, projectForm[field]);
+    setProjectFormErrors((current) => {
+      const next = { ...current };
+      if (fieldError) next[field] = fieldError;
+      else delete next[field];
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -446,6 +473,7 @@ function Projects() {
   function openCreateProject() {
     setEditingProjectId('');
     setProjectForm(createEmptyProjectForm(managerName, managerId));
+    setProjectFormErrors({});
     setSelectedTeamMembers([]);
     setIsTeamDraftDirty(false);
     setMessage('');
@@ -486,6 +514,7 @@ function Projects() {
     setSelectedProjectId(project.id);
     setEditingProjectId(project.id);
     setProjectForm(projectToForm(project, managerName, managerId));
+    setProjectFormErrors({});
     setSelectedTeamMembers(Array.isArray(project.teamMembers) ? project.teamMembers : []);
     setIsTeamDraftDirty(false);
     setMessage('');
@@ -602,6 +631,7 @@ function Projects() {
   function resetProjectForm() {
     setEditingProjectId('');
     setProjectForm(createEmptyProjectForm(managerName, managerId));
+    setProjectFormErrors({});
     setSelectedTeamMembers([]);
     setIsTeamDraftDirty(false);
     setMessage('');
@@ -611,10 +641,12 @@ function Projects() {
   async function handleProjectSubmit(event) {
     event.preventDefault();
 
-    const name = projectForm.name.trim();
-    if (!name) {
-      setMessage('Please add a project name first.');
-      showProjectToast('Please add a project name first.', 'error');
+    const nextErrors = validateProjectForm(projectForm);
+    if (Object.keys(nextErrors).length > 0) {
+      setProjectFormErrors(nextErrors);
+      const firstError = Object.values(nextErrors)[0];
+      setMessage(firstError);
+      showProjectToast(firstError, 'error');
       return;
     }
 
@@ -650,6 +682,7 @@ function Projects() {
       setSelectedProjectId(normalized.id);
       setEditingProjectId('');
       setProjectForm(createEmptyProjectForm(managerName, managerId));
+      setProjectFormErrors({});
       setSelectedTeamMembers([]);
       setIsTeamDraftDirty(false);
       setActiveTab('list');
@@ -1053,15 +1086,18 @@ function Projects() {
                 <div className="settings-grid project-form-grid">
                   <label>
                     <span>Project Name</span>
-                    <input value={projectForm.name} onChange={(event) => updateProjectForm(setProjectForm, 'name', event.target.value)} placeholder="e.g. Employee Self Service" />
+                    <input className={projectFormErrors.name ? 'support-invalid' : ''} value={projectForm.name} onChange={(event) => handleProjectFieldChange('name', event.target.value)} onBlur={() => validateProjectField('name')} aria-invalid={Boolean(projectFormErrors.name)} placeholder="e.g. Employee Self Service" />
+                    {projectFormErrors.name && <small className="field-error" role="alert">{projectFormErrors.name}</small>}
                   </label>
                   <label>
                     <span>Manager</span>
-                    <input value={projectForm.manager} onChange={(event) => updateProjectForm(setProjectForm, 'manager', event.target.value)} placeholder="Project owner" />
+                    <input className={projectFormErrors.manager ? 'support-invalid' : ''} value={projectForm.manager} onChange={(event) => handleProjectFieldChange('manager', event.target.value)} onBlur={() => validateProjectField('manager')} aria-invalid={Boolean(projectFormErrors.manager)} placeholder="Project owner" />
+                    {projectFormErrors.manager && <small className="field-error" role="alert">{projectFormErrors.manager}</small>}
                   </label>
                   <label>
                     <span>Manager ID</span>
-                    <input value={projectForm.managerId} onChange={(event) => updateProjectForm(setProjectForm, 'managerId', event.target.value)} placeholder="Employee ID" />
+                    <input className={projectFormErrors.managerId ? 'support-invalid' : ''} value={projectForm.managerId} onChange={(event) => handleProjectFieldChange('managerId', event.target.value)} onBlur={() => validateProjectField('managerId')} aria-invalid={Boolean(projectFormErrors.managerId)} placeholder="Employee ID" />
+                    {projectFormErrors.managerId && <small className="field-error" role="alert">{projectFormErrors.managerId}</small>}
                   </label>
                   <label>
                     <span>Team Leader</span>
@@ -1109,11 +1145,13 @@ function Projects() {
                   </label>
                   <label>
                     <span>Progress</span>
-                    <input value={projectForm.progress} onChange={(event) => updateProjectForm(setProjectForm, 'progress', event.target.value)} placeholder="0, 25, 72" />
+                    <input inputMode="numeric" className={projectFormErrors.progress ? 'support-invalid' : ''} value={projectForm.progress} onChange={(event) => handleProjectFieldChange('progress', event.target.value)} onBlur={() => validateProjectField('progress')} aria-invalid={Boolean(projectFormErrors.progress)} placeholder="0, 25, 72" />
+                    {projectFormErrors.progress && <small className="field-error" role="alert">{projectFormErrors.progress}</small>}
                   </label>
                   <label>
                     <span>Milestone</span>
-                    <input value={projectForm.milestone} onChange={(event) => updateProjectForm(setProjectForm, 'milestone', event.target.value)} placeholder="e.g. Security review" />
+                    <input className={projectFormErrors.milestone ? 'support-invalid' : ''} value={projectForm.milestone} onChange={(event) => handleProjectFieldChange('milestone', event.target.value)} onBlur={() => validateProjectField('milestone')} aria-invalid={Boolean(projectFormErrors.milestone)} placeholder="e.g. Security review" />
+                    {projectFormErrors.milestone && <small className="field-error" role="alert">{projectFormErrors.milestone}</small>}
                   </label>
                   <label className="full-width">
                     <span>Description</span>
@@ -1504,6 +1542,46 @@ function ProjectUndoToast({ projectName, onUndo }) {
 }
 
 export default Projects;
+
+function validateProjectFieldValue(field, value) {
+  const normalized = String(value || '').trim();
+
+  if (!normalized) {
+    return 'This field is required.';
+  }
+
+  if (field === 'name' && !projectNameRegex.test(normalized)) {
+    return 'Please enter a valid Project Name.';
+  }
+  if (field === 'manager' && !managerNameRegex.test(normalized)) {
+    return 'Please enter a valid Manager name using alphabets only.';
+  }
+  if (field === 'managerId' && !managerIdRegex.test(normalized)) {
+    return 'Manager ID may contain letters, numbers, and hyphens only.';
+  }
+  if (field === 'progress') {
+    if (!/^\d{1,3}%?$/.test(normalized)) {
+      return 'Progress must contain numbers only.';
+    }
+    const progress = Number(normalized.replace('%', ''));
+    if (progress < 0 || progress > 100) {
+      return 'Progress must be between 0 and 100.';
+    }
+  }
+  if (field === 'milestone' && !milestoneRegex.test(normalized)) {
+    return 'Please enter a valid Milestone.';
+  }
+
+  return '';
+}
+
+function validateProjectForm(form) {
+  return ['name', 'manager', 'managerId', 'progress', 'milestone'].reduce((errors, field) => {
+    const error = validateProjectFieldValue(field, form?.[field]);
+    if (error) errors[field] = error;
+    return errors;
+  }, {});
+}
 
 function updateProjectForm(setter, field, value) {
   setter((current) => ({ ...current, [field]: value }));
