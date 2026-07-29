@@ -7,6 +7,7 @@ import { getSessionValue, setSessionValue } from '../utils/appSession.js';
 import { getUsers } from '../utils/user-management.js';
 
 const headerSearchValidationMessage = 'Please use letters and spaces only.';
+const headerSearchCharacterPattern = /[^A-Za-z\s]/;
 
 function sanitizeHeaderSearchQuery(value) {
   return String(value || '').replace(/[^A-Za-z\s]+/g, '');
@@ -14,6 +15,10 @@ function sanitizeHeaderSearchQuery(value) {
 
 function isValidHeaderSearchQuery(value) {
   return /^[A-Za-z\s]*$/.test(String(value || ''));
+}
+
+function isInvalidHeaderSearchInsertion(value) {
+  return headerSearchCharacterPattern.test(String(value || ''));
 }
 
 function Header({ role, onMenuClick }) {
@@ -65,6 +70,19 @@ function Header({ role, onMenuClick }) {
     }
 
     setSearchError(attemptedInvalid || !isValidHeaderSearchQuery(nextValue) ? headerSearchValidationMessage : '');
+  };
+  const handleSearchBeforeInput = (event) => {
+    if (event.data && isInvalidHeaderSearchInsertion(event.data)) {
+      event.preventDefault();
+      setSearchError(headerSearchValidationMessage);
+    }
+  };
+  const handleSearchPaste = (event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidHeaderSearchInsertion(pastedValue)) {
+      event.preventDefault();
+      setSearchError(headerSearchValidationMessage);
+    }
   };
 
   // Close notification panel when clicking outside
@@ -283,6 +301,8 @@ function Header({ role, onMenuClick }) {
             type="text"
             value={searchQuery}
             onChange={handleSearchChange}
+            onBeforeInput={handleSearchBeforeInput}
+            onPaste={handleSearchPaste}
             onKeyDown={(event) => {
               if (event.key === 'Enter') runSearch();
             }}

@@ -19,6 +19,7 @@ import {
 
 const USER_DELETE_UNDO_MS = 6000;
 const userSearchValidationMessage = 'Please use letters and numbers only.';
+const userSearchCharacterPattern = /[^A-Za-z0-9\s]/;
 
 function sanitizeUserSearchQuery(value) {
   return String(value || '').replace(/[^A-Za-z0-9\s]+/g, '');
@@ -26,6 +27,10 @@ function sanitizeUserSearchQuery(value) {
 
 function isValidUserSearchQuery(value) {
   return /^[A-Za-z0-9\s]*$/.test(String(value || ''));
+}
+
+function isInvalidUserSearchInsertion(value) {
+  return userSearchCharacterPattern.test(String(value || ''));
 }
 
 
@@ -138,6 +143,19 @@ function UserManagement() {
     }
 
     setSearchError(attemptedInvalid || !isValidUserSearchQuery(nextValue) ? userSearchValidationMessage : '');
+  };
+  const handleSearchBeforeInput = (event) => {
+    if (event.data && isInvalidUserSearchInsertion(event.data)) {
+      event.preventDefault();
+      setSearchError(userSearchValidationMessage);
+    }
+  };
+  const handleSearchPaste = (event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidUserSearchInsertion(pastedValue)) {
+      event.preventDefault();
+      setSearchError(userSearchValidationMessage);
+    }
   };
 
   useEffect(() => {
@@ -393,6 +411,8 @@ function UserManagement() {
               type="text"
               value={search}
               onChange={handleSearchChange}
+              onBeforeInput={handleSearchBeforeInput}
+              onPaste={handleSearchPaste}
               placeholder="Search user, employee ID, email, role"
               inputMode="text"
               aria-invalid={Boolean(searchError)}
@@ -523,6 +543,19 @@ function UserModal({ form, setForm, employees, users, isEditing, isSavingUser, t
       designation: '',
     }));
   };
+  const handleEmployeeSearchBeforeInput = (event) => {
+    if (event.data && isInvalidUserSearchInsertion(event.data)) {
+      event.preventDefault();
+      setEmployeeSearchError(userSearchValidationMessage);
+    }
+  };
+  const handleEmployeeSearchPaste = (event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidUserSearchInsertion(pastedValue)) {
+      event.preventDefault();
+      setEmployeeSearchError(userSearchValidationMessage);
+    }
+  };
   const matches = useMemo(() => {
     const query = employeeSearch.trim().toLowerCase();
     if (isEditing || hasSelectedEmployee || !query) {
@@ -577,6 +610,8 @@ function UserModal({ form, setForm, employees, users, isEditing, isSavingUser, t
               readOnly={isEditing}
               value={isEditing ? form.employeeName : employeeSearch}
               onChange={handleEmployeeSearchChange}
+              onBeforeInput={handleEmployeeSearchBeforeInput}
+              onPaste={handleEmployeeSearchPaste}
               placeholder="Type employee ID or name"
               inputMode="text"
               aria-invalid={Boolean(employeeSearchError)}

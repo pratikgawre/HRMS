@@ -17,6 +17,9 @@ import { getVisibleTeamEmployeeIds, normalizeProjects } from './attendancePageUt
 const ADMIN_ASSET_CACHE_KEY = 'kavyaAssetsAdminCache';
 const ADMIN_EMPLOYEE_CACHE_KEY = 'kavyaAssetsAdminEmployeesCache';
 const assetSearchValidationMessage = 'Please use letters and numbers only.';
+const assetSearchCharacterPattern = /[^A-Za-z0-9\s]/;
+const assetTextValidationMessage = 'Please use letters and numbers only.';
+const assetTextCharacterPattern = /[^A-Za-z0-9\s]/;
 
 function sanitizeAssetSearchQuery(value) {
   return String(value || '').replace(/[^A-Za-z0-9\s]+/g, '');
@@ -24,6 +27,21 @@ function sanitizeAssetSearchQuery(value) {
 
 function isValidAssetSearchQuery(value) {
   return /^[A-Za-z0-9\s]*$/.test(String(value || ''));
+}
+
+function isInvalidAssetSearchInsertion(value) {
+  return assetSearchCharacterPattern.test(String(value || ''));
+}
+
+function sanitizeAssetTextInput(value) {
+  return String(value || '')
+    .replace(/[^A-Za-z0-9\s]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trimStart();
+}
+
+function isInvalidAssetTextInsertion(value) {
+  return assetTextCharacterPattern.test(String(value || ''));
 }
 
 function Assets() {
@@ -83,6 +101,42 @@ function Assets() {
     }
 
     setSearchError(attemptedInvalid || !isValidAssetSearchQuery(nextValue) ? assetSearchValidationMessage : '');
+  };
+  const handleAssetSearchBeforeInput = (event) => {
+    if (event.data && isInvalidAssetSearchInsertion(event.data)) {
+      event.preventDefault();
+      setSearchError(assetSearchValidationMessage);
+    }
+  };
+  const handleAssetSearchPaste = (event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidAssetSearchInsertion(pastedValue)) {
+      event.preventDefault();
+      setSearchError(assetSearchValidationMessage);
+    }
+  };
+  const handleAssetTextFieldChange = (field, event) => {
+    const nextRawValue = String(event.target.value || '');
+    const nextValue = sanitizeAssetTextInput(nextRawValue);
+    const attemptedInvalid = nextRawValue !== nextValue;
+
+    updateAssetForm(field, nextValue);
+    if (attemptedInvalid) {
+      setAssetErrors((current) => ({ ...current, [field]: assetTextValidationMessage }));
+    }
+  };
+  const handleAssetTextBeforeInput = (field, event) => {
+    if (event.data && isInvalidAssetTextInsertion(event.data)) {
+      event.preventDefault();
+      setAssetErrors((current) => ({ ...current, [field]: assetTextValidationMessage }));
+    }
+  };
+  const handleAssetTextPaste = (field, event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidAssetTextInsertion(pastedValue)) {
+      event.preventDefault();
+      setAssetErrors((current) => ({ ...current, [field]: assetTextValidationMessage }));
+    }
   };
 
   useEffect(() => {
@@ -866,7 +920,9 @@ function Assets() {
               <span>Asset Name</span>
               <input
                 value={assetForm.assetName}
-                onChange={(event) => updateAssetForm('assetName', event.target.value)}
+                onChange={(event) => handleAssetTextFieldChange('assetName', event)}
+                onBeforeInput={(event) => handleAssetTextBeforeInput('assetName', event)}
+                onPaste={(event) => handleAssetTextPaste('assetName', event)}
                 placeholder="e.g. Dell Latitude 5440"
                 aria-invalid={Boolean(assetErrors.assetName)}
               />
@@ -876,7 +932,9 @@ function Assets() {
               <span>Category</span>
               <input
                 value={assetForm.category}
-                onChange={(event) => updateAssetForm('category', event.target.value)}
+                onChange={(event) => handleAssetTextFieldChange('category', event)}
+                onBeforeInput={(event) => handleAssetTextBeforeInput('category', event)}
+                onPaste={(event) => handleAssetTextPaste('category', event)}
                 placeholder="Laptop, Monitor, Phone..."
                 aria-invalid={Boolean(assetErrors.category)}
               />
@@ -914,9 +972,28 @@ function Assets() {
                   type="text"
                   value={assignedEmployeeQuery}
                   onChange={(event) => {
-                    setAssignedEmployeeQuery(event.target.value);
+                    const nextRawValue = String(event.target.value || '');
+                    const nextValue = sanitizeAssetTextInput(nextRawValue);
+                    const attemptedInvalid = nextRawValue !== nextValue;
+                    setAssignedEmployeeQuery(nextValue);
+                    if (attemptedInvalid) {
+                      setAssetErrors((current) => ({ ...current, assignedTo: assetTextValidationMessage }));
+                    }
                     updateAssetForm('assignedTo', '');
                     setIsEmployeePickerOpen(true);
+                  }}
+                  onBeforeInput={(event) => {
+                    if (event.data && isInvalidAssetTextInsertion(event.data)) {
+                      event.preventDefault();
+                      setAssetErrors((current) => ({ ...current, assignedTo: assetTextValidationMessage }));
+                    }
+                  }}
+                  onPaste={(event) => {
+                    const pastedValue = event.clipboardData?.getData('text') || '';
+                    if (isInvalidAssetTextInsertion(pastedValue)) {
+                      event.preventDefault();
+                      setAssetErrors((current) => ({ ...current, assignedTo: assetTextValidationMessage }));
+                    }
                   }}
                   onFocus={() => setIsEmployeePickerOpen(true)}
                   onBlur={() => window.setTimeout(() => setIsEmployeePickerOpen(false), 120)}
@@ -945,15 +1022,32 @@ function Assets() {
                     No matching employees found.
                   </div>
                 )}
+                {assetErrors.assignedTo && <small className="field-error">{assetErrors.assignedTo}</small>}
               </div>
             </label>
             <label>
               <span>Condition</span>
-              <input value={assetForm.condition} onChange={(event) => updateAssetForm('condition', event.target.value)} placeholder="Good, New, Damaged..." />
+              <input
+                value={assetForm.condition}
+                onChange={(event) => handleAssetTextFieldChange('condition', event)}
+                onBeforeInput={(event) => handleAssetTextBeforeInput('condition', event)}
+                onPaste={(event) => handleAssetTextPaste('condition', event)}
+                placeholder="Good, New, Damaged..."
+                aria-invalid={Boolean(assetErrors.condition)}
+              />
+              {assetErrors.condition && <small className="field-error">{assetErrors.condition}</small>}
             </label>
             <label>
               <span>Location</span>
-              <input value={assetForm.location} onChange={(event) => updateAssetForm('location', event.target.value)} placeholder="Store, Office, Remote..." />
+              <input
+                value={assetForm.location}
+                onChange={(event) => handleAssetTextFieldChange('location', event)}
+                onBeforeInput={(event) => handleAssetTextBeforeInput('location', event)}
+                onPaste={(event) => handleAssetTextPaste('location', event)}
+                placeholder="Store, Office, Remote..."
+                aria-invalid={Boolean(assetErrors.location)}
+              />
+              {assetErrors.location && <small className="field-error">{assetErrors.location}</small>}
             </label>
             <div className="notification-actions profile-form-actions asset-create-actions">
               <button type="button" onClick={() => {
@@ -987,6 +1081,8 @@ function Assets() {
               type="search"
               value={searchText}
               onChange={handleAssetSearchChange}
+              onBeforeInput={handleAssetSearchBeforeInput}
+              onPaste={handleAssetSearchPaste}
               placeholder="Search by asset name or employee ID..."
               inputMode="text"
               aria-invalid={Boolean(searchError)}
