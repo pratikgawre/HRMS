@@ -17,6 +17,11 @@ import { getVisibleTeamEmployeeIds, normalizeProjects } from './attendancePageUt
 const ADMIN_ASSET_CACHE_KEY = 'kavyaAssetsAdminCache';
 const ADMIN_EMPLOYEE_CACHE_KEY = 'kavyaAssetsAdminEmployeesCache';
 const assetSearchValidationMessage = 'Please use letters and numbers only.';
+const assetSearchCharacterPattern = /[^A-Za-z0-9\s]/;
+const assetTextValidationMessage = 'Please use letters and numbers only.';
+const assetTextCharacterPattern = /[^A-Za-z0-9\s]/;
+const assetNameValidationMessage = 'Please use letters and spaces only.';
+const assetNameCharacterPattern = /[^A-Za-z\s]/;
 
 function sanitizeAssetSearchQuery(value) {
   return String(value || '').replace(/[^A-Za-z0-9\s]+/g, '');
@@ -24,6 +29,41 @@ function sanitizeAssetSearchQuery(value) {
 
 function isValidAssetSearchQuery(value) {
   return /^[A-Za-z0-9\s]*$/.test(String(value || ''));
+}
+
+function isInvalidAssetSearchInsertion(value) {
+  return assetSearchCharacterPattern.test(String(value || ''));
+}
+
+function sanitizeAssetTextInput(value) {
+  return String(value || '')
+    .replace(/[^A-Za-z0-9\s]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trimStart();
+}
+
+function isInvalidAssetTextInsertion(value) {
+  return assetTextCharacterPattern.test(String(value || ''));
+}
+
+function isValidAssetTextValue(value) {
+  return /^[A-Za-z0-9\s]*$/.test(String(value || ''));
+}
+
+function sanitizeAssetNameInput(value) {
+  return String(value || '')
+    .replace(/[^A-Za-z\s]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trimStart();
+}
+
+function isInvalidAssetNameInsertion(value) {
+  return assetNameCharacterPattern.test(String(value || ''));
+}
+
+function isValidAssetNameValue(value) {
+  const trimmedValue = String(value || '').trim();
+  return /^[A-Za-z\s]+$/.test(trimmedValue) && /[A-Za-z]/.test(trimmedValue);
 }
 
 function Assets() {
@@ -48,6 +88,9 @@ function Assets() {
   const [searchError, setSearchError] = useState('');
   const [assetView, setAssetView] = useState('all');
   const [selectedAsset, setSelectedAsset] = useState(null);
+  const [replacementTarget, setReplacementTarget] = useState(null);
+  const [isReplacementSubmitting, setIsReplacementSubmitting] = useState(false);
+  const [replacementSubmitError, setReplacementSubmitError] = useState('');
   const [assignedEmployeeQuery, setAssignedEmployeeQuery] = useState('');
   const [isEmployeePickerOpen, setIsEmployeePickerOpen] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState('');
@@ -84,6 +127,70 @@ function Assets() {
 
     setSearchError(attemptedInvalid || !isValidAssetSearchQuery(nextValue) ? assetSearchValidationMessage : '');
   };
+  const handleAssetSearchBeforeInput = (event) => {
+    if (event.data && isInvalidAssetSearchInsertion(event.data)) {
+      event.preventDefault();
+      setSearchError(assetSearchValidationMessage);
+    }
+  };
+  const handleAssetSearchPaste = (event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidAssetSearchInsertion(pastedValue)) {
+      event.preventDefault();
+      setSearchError(assetSearchValidationMessage);
+    }
+  };
+  const handleAssetTextFieldChange = (field, event) => {
+    const nextRawValue = String(event.target.value || '');
+    const nextValue = sanitizeAssetTextInput(nextRawValue);
+    const attemptedInvalid = nextRawValue !== nextValue;
+
+    updateAssetForm(field, nextValue);
+    if (attemptedInvalid) {
+      setAssetErrors((current) => ({ ...current, [field]: assetTextValidationMessage }));
+    }
+  };
+  const handleAssetTextBeforeInput = (field, event) => {
+    if (event.data && isInvalidAssetTextInsertion(event.data)) {
+      event.preventDefault();
+      setAssetErrors((current) => ({ ...current, [field]: assetTextValidationMessage }));
+    }
+  };
+  const handleAssetTextPaste = (field, event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidAssetTextInsertion(pastedValue)) {
+      event.preventDefault();
+      setAssetErrors((current) => ({ ...current, [field]: assetTextValidationMessage }));
+    }
+  };
+  const handleAssetNameChange = (event) => {
+    const nextRawValue = String(event.target.value || '');
+    const nextValue = sanitizeAssetNameInput(nextRawValue);
+    const attemptedInvalid = nextRawValue !== nextValue;
+
+    updateAssetForm('assetName', nextValue);
+    if (attemptedInvalid) {
+      setAssetErrors((current) => ({ ...current, assetName: assetNameValidationMessage }));
+    }
+  };
+  const handleAssetNameBeforeInput = (event) => {
+    if (event.data && isInvalidAssetNameInsertion(event.data)) {
+      event.preventDefault();
+      setAssetErrors((current) => ({ ...current, assetName: assetNameValidationMessage }));
+    }
+  };
+  const handleAssetNamePaste = (event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidAssetNameInsertion(pastedValue)) {
+      event.preventDefault();
+      setAssetErrors((current) => ({ ...current, assetName: assetNameValidationMessage }));
+    }
+  };
+  const assetNameHasValidationError = Boolean(assetErrors.assetName || (assetForm.assetName && !isValidAssetNameValue(assetForm.assetName)));
+  const categoryHasValidationError = Boolean(assetErrors.category || (assetForm.category && !isValidAssetTextValue(assetForm.category)));
+  const assignedToHasValidationError = Boolean(assetErrors.assignedTo || (assignedEmployeeQuery && !isValidAssetTextValue(assignedEmployeeQuery)));
+  const conditionHasValidationError = Boolean(assetErrors.condition || (assetForm.condition && !isValidAssetTextValue(assetForm.condition)));
+  const locationHasValidationError = Boolean(assetErrors.location || (assetForm.location && !isValidAssetTextValue(assetForm.location)));
 
   useEffect(() => {
     let active = true;
@@ -387,7 +494,55 @@ function Assets() {
       return;
     }
 
-    updateAsset(assetId, { status: 'Replacement Requested' });
+    const asset = assets.find((item) => item.id === assetId);
+    if (asset) {
+      setAssetMessage('');
+      setReplacementSubmitError('');
+      setReplacementTarget(asset);
+    }
+  };
+
+  const submitTeamReplacementRequest = async ({ asset, reason, description, screenshot }) => {
+    if (!isTeamScopedRole || !asset || isReplacementSubmitting) {
+      return;
+    }
+
+    setIsReplacementSubmitting(true);
+    setAssetMessage('');
+    setReplacementSubmitError('');
+    try {
+      await apiRequest('/asset-requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          employeeId: currentEmployee.employeeId || currentEmployee.id || '',
+          employeeName: currentEmployee.employeeName || currentEmployee.employee || currentEmployee.name || '',
+          assetId: asset.id,
+          assetCode: asset.assetCode || asset.id,
+          assetName: asset.assetName,
+          requestType: 'replacement',
+          description: [reason, description].filter(Boolean).join(' - '),
+          screenshot: screenshot || '',
+          status: 'Pending',
+        }),
+        timeoutMs: 60000,
+      });
+      const savedAsset = await apiRequest(`/assets/${encodeURIComponent(asset.id)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'Replacement Requested' }),
+      }).catch(() => ({ ...asset, status: 'Replacement Requested' }));
+      const normalizedAsset = normalizeAssetRows([{ ...asset, ...savedAsset }], employees)[0] || {
+        ...asset,
+        status: 'Replacement Requested',
+      };
+      setAssets((current) => current.map((item) => (item.id === asset.id ? normalizedAsset : item)));
+      setReplacementTarget(null);
+      setAssetMessage(`Replacement request for ${asset.assetName} submitted successfully.`);
+      window.dispatchEvent(new Event('kavyaAssetRequestsChanged'));
+    } catch (error) {
+      setReplacementSubmitError(error?.message || 'Replacement request could not be submitted. Please try again.');
+    } finally {
+      setIsReplacementSubmitting(false);
+    }
   };
 
   const markReturned = (assetId) => {
@@ -439,7 +594,7 @@ function Assets() {
     }
     if (field === 'assetName') {
       const trimmedName = String(value || '').trim();
-      if (!trimmedName || /[A-Za-z]/.test(trimmedName)) {
+      if (!trimmedName || isValidAssetNameValue(trimmedName)) {
         setAssetErrors((current) => ({ ...current, assetName: '' }));
       }
     }
@@ -490,7 +645,7 @@ function Assets() {
       return;
     }
 
-    if (!/[A-Za-z]/.test(name)) {
+    if (!isValidAssetNameValue(name)) {
       setAssetErrors((current) => ({ ...current, assetName: 'Enter a valid Asset Name.' }));
       return;
     }
@@ -866,21 +1021,25 @@ function Assets() {
               <span>Asset Name</span>
               <input
                 value={assetForm.assetName}
-                onChange={(event) => updateAssetForm('assetName', event.target.value)}
+                onChange={handleAssetNameChange}
+                onBeforeInput={handleAssetNameBeforeInput}
+                onPaste={handleAssetNamePaste}
                 placeholder="e.g. Dell Latitude 5440"
-                aria-invalid={Boolean(assetErrors.assetName)}
+                aria-invalid={assetNameHasValidationError}
               />
-              {assetErrors.assetName && <small className="field-error">{assetErrors.assetName}</small>}
+              {assetNameHasValidationError && <small className="field-error">{assetErrors.assetName || assetNameValidationMessage}</small>}
             </label>
             <label>
               <span>Category</span>
               <input
                 value={assetForm.category}
-                onChange={(event) => updateAssetForm('category', event.target.value)}
+                onChange={(event) => handleAssetTextFieldChange('category', event)}
+                onBeforeInput={(event) => handleAssetTextBeforeInput('category', event)}
+                onPaste={(event) => handleAssetTextPaste('category', event)}
                 placeholder="Laptop, Monitor, Phone..."
-                aria-invalid={Boolean(assetErrors.category)}
+                aria-invalid={categoryHasValidationError}
               />
-              {assetErrors.category && <small className="field-error">{assetErrors.category}</small>}
+              {categoryHasValidationError && <small className="field-error">{assetErrors.category || assetTextValidationMessage}</small>}
             </label>
             <label>
               <span>Current Date</span>
@@ -914,13 +1073,33 @@ function Assets() {
                   type="text"
                   value={assignedEmployeeQuery}
                   onChange={(event) => {
-                    setAssignedEmployeeQuery(event.target.value);
+                    const nextRawValue = String(event.target.value || '');
+                    const nextValue = sanitizeAssetTextInput(nextRawValue);
+                    const attemptedInvalid = nextRawValue !== nextValue;
+                    setAssignedEmployeeQuery(nextValue);
+                    if (attemptedInvalid) {
+                      setAssetErrors((current) => ({ ...current, assignedTo: assetTextValidationMessage }));
+                    }
                     updateAssetForm('assignedTo', '');
                     setIsEmployeePickerOpen(true);
+                  }}
+                  onBeforeInput={(event) => {
+                    if (event.data && isInvalidAssetTextInsertion(event.data)) {
+                      event.preventDefault();
+                      setAssetErrors((current) => ({ ...current, assignedTo: assetTextValidationMessage }));
+                    }
+                  }}
+                  onPaste={(event) => {
+                    const pastedValue = event.clipboardData?.getData('text') || '';
+                    if (isInvalidAssetTextInsertion(pastedValue)) {
+                      event.preventDefault();
+                      setAssetErrors((current) => ({ ...current, assignedTo: assetTextValidationMessage }));
+                    }
                   }}
                   onFocus={() => setIsEmployeePickerOpen(true)}
                   onBlur={() => window.setTimeout(() => setIsEmployeePickerOpen(false), 120)}
                   placeholder="Search employee name or ID"
+                  aria-invalid={assignedToHasValidationError}
                 />
                 {isEmployeePickerOpen && filteredEmployeeOptions.length > 0 && (
                   <div className="asset-picker-menu" role="listbox" aria-label="Employee search results">
@@ -945,15 +1124,32 @@ function Assets() {
                     No matching employees found.
                   </div>
                 )}
+                {assignedToHasValidationError && <small className="field-error">{assetErrors.assignedTo || assetTextValidationMessage}</small>}
               </div>
             </label>
             <label>
               <span>Condition</span>
-              <input value={assetForm.condition} onChange={(event) => updateAssetForm('condition', event.target.value)} placeholder="Good, New, Damaged..." />
+              <input
+                value={assetForm.condition}
+                onChange={(event) => handleAssetTextFieldChange('condition', event)}
+                onBeforeInput={(event) => handleAssetTextBeforeInput('condition', event)}
+                onPaste={(event) => handleAssetTextPaste('condition', event)}
+                placeholder="Good, New, Damaged..."
+                aria-invalid={conditionHasValidationError}
+              />
+              {conditionHasValidationError && <small className="field-error">{assetErrors.condition || assetTextValidationMessage}</small>}
             </label>
             <label>
               <span>Location</span>
-              <input value={assetForm.location} onChange={(event) => updateAssetForm('location', event.target.value)} placeholder="Store, Office, Remote..." />
+              <input
+                value={assetForm.location}
+                onChange={(event) => handleAssetTextFieldChange('location', event)}
+                onBeforeInput={(event) => handleAssetTextBeforeInput('location', event)}
+                onPaste={(event) => handleAssetTextPaste('location', event)}
+                placeholder="Store, Office, Remote..."
+                aria-invalid={locationHasValidationError}
+              />
+              {locationHasValidationError && <small className="field-error">{assetErrors.location || assetTextValidationMessage}</small>}
             </label>
             <div className="notification-actions profile-form-actions asset-create-actions">
               <button type="button" onClick={() => {
@@ -987,6 +1183,8 @@ function Assets() {
               type="search"
               value={searchText}
               onChange={handleAssetSearchChange}
+              onBeforeInput={handleAssetSearchBeforeInput}
+              onPaste={handleAssetSearchPaste}
               placeholder="Search by asset name or employee ID..."
               inputMode="text"
               aria-invalid={Boolean(searchError)}
@@ -1024,6 +1222,20 @@ function Assets() {
           </>
         )}
       </div>
+      {replacementTarget && (
+        <ReplacementRequestModal
+          asset={replacementTarget}
+          onClose={() => {
+            if (!isReplacementSubmitting) {
+              setReplacementTarget(null);
+              setReplacementSubmitError('');
+            }
+          }}
+          onSubmit={submitTeamReplacementRequest}
+          isSubmitting={isReplacementSubmitting}
+          submitError={replacementSubmitError}
+        />
+      )}
     </>
   );
 }

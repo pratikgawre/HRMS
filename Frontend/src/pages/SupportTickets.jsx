@@ -279,6 +279,7 @@ function SupportTickets() {
           status: 'Pending',
           screenshotDataUrl,
         }),
+        timeoutMs: 60000,
       });
 
       setTickets((current) => [normalizeTicket(created), ...current]);
@@ -298,7 +299,7 @@ function SupportTickets() {
         setErrors(err.fieldErrors);
         setErrorMessage('');
       } else {
-        setErrorMessage(`Failed to save support ticket: ${err.message}`);
+        setErrorMessage(`Support ticket could not be saved: ${err.message}`);
       }
     } finally {
       setIsSubmitting(false);

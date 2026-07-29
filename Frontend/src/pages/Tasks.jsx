@@ -315,6 +315,7 @@ function Tasks() {
     const saved = await apiRequest(`/tasks/${normalizedTask.id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
+      timeoutMs: 60000,
     });
     return normalizeTaskRow(saved || normalizedTask);
   };
@@ -552,6 +553,7 @@ function Tasks() {
           await apiRequest('/tasks', {
             method: 'POST',
             body: JSON.stringify(payload),
+            timeoutMs: 60000,
           });
         }
         await refreshTaskBoard();
@@ -598,6 +600,7 @@ function Tasks() {
         await apiRequest('/tasks', {
           method: 'POST',
           body: JSON.stringify(payload),
+          timeoutMs: 60000,
         });
       }
       await refreshTaskBoard();
@@ -642,6 +645,7 @@ function Tasks() {
       const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: nextTask.status, summary: form.summary || '' }),
+        timeoutMs: 60000,
       });
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
@@ -1019,6 +1023,7 @@ function EmployeeTasksView() {
       const saved = await apiRequest(`/tasks/${selectedTask.id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: nextTask.status, summary: form.summary || '' }),
+        timeoutMs: 60000,
       });
       const normalized = normalizeTaskRow(saved || nextTask);
       setTaskRows((current) => current.map((task) => (task.id === normalized.id ? normalized : task)));
@@ -1214,7 +1219,7 @@ function TaskAssignmentModal({
           <button type="button" onClick={onClose} aria-label="Close task modal"><i className="ri-close-line" aria-hidden="true" /></button>
         </div>
 
-        <form className="salary-form" onSubmit={handleSubmit}>
+        <form className="salary-form" onSubmit={handleSubmit} noValidate>
           {teamLeadMode ? (
             <>
               <label className="field">
@@ -1247,7 +1252,18 @@ function TaskAssignmentModal({
                         required
                         className={taskFormErrors.title ? 'support-invalid' : ''}
                         value={form.title}
-                        onChange={(event) => setForm((current) => ({ ...current, title: sanitizeModuleField(event.target.value) }))}
+                        onChange={handleTitleChange}
+                        onBlur={() => {
+                          const title = String(form.title || '').trim();
+                          setTaskFormErrors((current) => {
+                            const next = { ...current };
+                            if (!title) next.title = 'Please enter a module name.';
+                            else if (!TASK_MODULE_ALLOWED_PATTERN.test(title)) next.title = TASK_MODULE_INVALID_MESSAGE;
+                            else delete next.title;
+                            return next;
+                          });
+                        }}
+                        aria-invalid={Boolean(taskFormErrors.title)}
                         placeholder="Enter module name"
                       />
                       {taskFormErrors.title ? <small className="field-error" role="alert">{taskFormErrors.title}</small> : null}
@@ -1282,7 +1298,25 @@ function TaskAssignmentModal({
             <>
               <label className="field">
                 <span>Module</span>
-                <input required value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: sanitizeModuleField(event.target.value) }))} placeholder="Enter module name" />
+                <input
+                  required
+                  className={taskFormErrors.title ? 'support-invalid' : ''}
+                  value={form.title}
+                  onChange={handleTitleChange}
+                  onBlur={() => {
+                    const title = String(form.title || '').trim();
+                    setTaskFormErrors((current) => {
+                      const next = { ...current };
+                      if (!title) next.title = 'Please enter a module name.';
+                      else if (!TASK_MODULE_ALLOWED_PATTERN.test(title)) next.title = TASK_MODULE_INVALID_MESSAGE;
+                      else delete next.title;
+                      return next;
+                    });
+                  }}
+                  aria-invalid={Boolean(taskFormErrors.title)}
+                  placeholder="Enter module name"
+                />
+                {taskFormErrors.title ? <small className="field-error" role="alert">{taskFormErrors.title}</small> : null}
               </label>
               <label className="field">
                 <span>Assign</span>

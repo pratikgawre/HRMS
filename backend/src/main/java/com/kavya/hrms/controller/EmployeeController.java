@@ -488,6 +488,7 @@ public class EmployeeController {
 
     validateRequiredName(employee.getDisplayName(), "Display Name is required.", "Display Name must contain only alphabets.");
     validateOptionalText(employee.getJobTitle(), NAME_PATTERN, "Enter a valid Job Title.");
+    validateRequiredText(employee.getDepartment(), NAME_PATTERN, "Department is required.", "Please enter a valid Department.");
     validateRequiredName(employee.getFirstName(), "First Name is required.", "First Name must contain only alphabets.");
     validateRequiredName(employee.getMiddleName(), "Middle Name is required.", "Middle Name must contain only alphabets.");
     validateRequiredName(employee.getLastName(), "Last Name is required.", "Last Name must contain only alphabets.");

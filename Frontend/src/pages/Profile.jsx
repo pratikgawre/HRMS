@@ -73,6 +73,8 @@ function Profile() {
   const location = useLocation();
   const identity = getCurrentEmployeeIdentity();
   const accessRole = getSessionValue('kavyaAccessRole') || 'Employee';
+  const sessionRole = getSessionValue('kavyaRole') || 'employee';
+  const isTeamLeadOrManagerProfile = sessionRole === 'teamLead' || sessionRole === 'projectManager';
   const normalizedAccessRole = normalizeAccessRole(accessRole);
   const canManagePackageAmount = normalizedAccessRole === 'Super Admin' || normalizedAccessRole === 'HR Manager';
   const [employees, setEmployees] = useState(() => getProfileEmployees());
@@ -265,6 +267,9 @@ function Profile() {
     setForm((current) => ({ ...current, [field]: value }));
     if (PROFILE_PERSONAL_FIELDS.includes(field)) {
       setProfileErrors((current) => {
+        if (isTeamLeadOrManagerProfile && field === 'displayName') {
+          return applyProfileFieldValidation(current, field, value);
+        }
         if (!current[field]) {
           return current;
         }
@@ -808,7 +813,15 @@ function Profile() {
               </label>
               <label>
                 <span>Department</span>
-                <input value={form.department} onChange={(event) => updateField('department', event.target.value)} />
+                <input
+                  value={form.department}
+                  onChange={(event) => updateField('department', event.target.value)}
+                  onBlur={() => setProfileErrors((current) => applyProfileFieldValidation(current, 'department', form.department))}
+                  aria-invalid={Boolean(profileErrors.department)}
+                  aria-describedby={profileErrors.department ? 'profile-department-error' : undefined}
+                  className={`form-control${profileErrors.department ? ' is-invalid' : ''}`}
+                />
+                {profileErrors.department && <span id="profile-department-error" className="field-error">{profileErrors.department}</span>}
               </label>
               <label>
                 <span>Gender</span>
@@ -1422,6 +1435,7 @@ function createProfileForm(employee) {
 const PROFILE_PERSONAL_FIELDS = [
   'displayName',
   'jobTitle',
+  'department',
   'dateOfBirth',
   'nationality',
   'workingLocation',
@@ -1448,6 +1462,7 @@ function getYesterdayLocalDate() {
 
 const profileDisplayNameRegex = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
 const profileJobTitleRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
+const profileDepartmentRegex = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
 const profileNationalityRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
 const profileWorkingLocationRegex = /^[A-Za-z]+(?:[ -][A-Za-z]+)*$/;
 const profileQualificationRegex = /^(?=.*[A-Za-z])[A-Za-z0-9 .()+/-]+$/;
@@ -1459,6 +1474,7 @@ function validateProfilePersonalDetails(form) {
   const nextErrors = {};
   const displayName = String(form.displayName || '').trim();
   const jobTitle = String(form.jobTitle || '').trim();
+  const department = String(form.department || '').trim();
   const dateOfBirth = String(form.dateOfBirth || '').trim();
   const nationality = String(form.nationality || '').trim();
   const workingLocation = String(form.workingLocation || '').trim();
@@ -1475,6 +1491,12 @@ function validateProfilePersonalDetails(form) {
     nextErrors.jobTitle = 'Job Title is required.';
   } else if (!profileJobTitleRegex.test(jobTitle)) {
     nextErrors.jobTitle = 'Enter a valid Job Title.';
+  }
+
+  if (!department) {
+    nextErrors.department = 'Department is required.';
+  } else if (!profileDepartmentRegex.test(department)) {
+    nextErrors.department = 'Please enter a valid Department.';
   }
 
   if (!dateOfBirth) {

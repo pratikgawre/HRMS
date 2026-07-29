@@ -7,13 +7,28 @@ import { getSessionValue, setSessionValue } from '../utils/appSession.js';
 import { getUsers } from '../utils/user-management.js';
 
 const headerSearchValidationMessage = 'Please use letters and spaces only.';
+const headerSearchCharacterPattern = /[^A-Za-z\s]/;
 
-function sanitizeHeaderSearchQuery(value) {
-  return String(value || '').replace(/[^A-Za-z\s]+/g, '');
+function sanitizeHeaderSearchQuery(value, role = '') {
+  return role === 'projectManager'
+    ? String(value || '').replace(/[^A-Za-z0-9\s'-]+/g, '')
+    : String(value || '').replace(/[^A-Za-z\s]+/g, '');
 }
 
-function isValidHeaderSearchQuery(value) {
-  return /^[A-Za-z\s]*$/.test(String(value || ''));
+function isValidHeaderSearchQuery(value, role = '') {
+  const normalized = String(value || '').trim();
+  if (!normalized) return true;
+  return role === 'projectManager'
+    ? managerHeaderSearchPattern.test(normalized)
+    : /^[A-Za-z\s]*$/.test(normalized);
+}
+
+function isInvalidHeaderSearchInsertion(value) {
+  return headerSearchCharacterPattern.test(String(value || ''));
+}
+
+function isInvalidHeaderSearchInsertion(value) {
+  return headerSearchCharacterPattern.test(String(value || ''));
 }
 
 function Header({ role, onMenuClick }) {
@@ -52,19 +67,48 @@ function Header({ role, onMenuClick }) {
   }[role] || '/employee';
 
   const searchRoutes = getSearchRoutes(role);
+  const currentSearchValidationMessage = role === 'projectManager'
+    ? managerHeaderSearchValidationMessage
+    : headerSearchValidationMessage;
   const handleSearchChange = (event) => {
     const nextRawValue = String(event.target.value || '');
-    const nextValue = sanitizeHeaderSearchQuery(nextRawValue);
+    const nextValue = sanitizeHeaderSearchQuery(nextRawValue, role);
     const attemptedInvalid = nextRawValue !== nextValue;
 
     setSearchQuery(nextValue);
 
     if (!nextValue.trim()) {
-      setSearchError(attemptedInvalid ? headerSearchValidationMessage : '');
+      setSearchError(attemptedInvalid ? currentSearchValidationMessage : '');
       return;
     }
 
-    setSearchError(attemptedInvalid || !isValidHeaderSearchQuery(nextValue) ? headerSearchValidationMessage : '');
+   setSearchError(attemptedInvalid || !isValidHeaderSearchQuery(nextValue, role) ? currentSearchValidationMessage : '');
+  };
+  const handleSearchBeforeInput = (event) => {
+    if (event.data && isInvalidHeaderSearchInsertion(event.data)) {
+      event.preventDefault();
+      setSearchError(headerSearchValidationMessage);
+    }
+  };
+  const handleSearchPaste = (event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidHeaderSearchInsertion(pastedValue)) {
+      event.preventDefault();
+      setSearchError(headerSearchValidationMessage);
+    }
+  };
+  const handleSearchBeforeInput = (event) => {
+    if (event.data && isInvalidHeaderSearchInsertion(event.data)) {
+      event.preventDefault();
+      setSearchError(headerSearchValidationMessage);
+    }
+  };
+  const handleSearchPaste = (event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidHeaderSearchInsertion(pastedValue)) {
+      event.preventDefault();
+      setSearchError(headerSearchValidationMessage);
+    }
   };
 
   // Close notification panel when clicking outside
@@ -165,15 +209,15 @@ function Header({ role, onMenuClick }) {
   }, [showNotifications]);
   const runSearch = () => {
     const rawValue = String(searchQuery || '');
-    const normalizedQuery = sanitizeHeaderSearchQuery(rawValue).trim().toLowerCase();
+    const normalizedQuery = sanitizeHeaderSearchQuery(rawValue, role).trim().toLowerCase();
 
     if (!normalizedQuery) {
-      setSearchError(rawValue.trim() ? headerSearchValidationMessage : '');
+      setSearchError(rawValue.trim() ? currentSearchValidationMessage : '');
       return;
     }
 
-    if (!isValidHeaderSearchQuery(rawValue)) {
-      setSearchError(headerSearchValidationMessage);
+    if (!isValidHeaderSearchQuery(rawValue, role)) {
+      setSearchError(currentSearchValidationMessage);
       return;
     }
 
@@ -283,12 +327,13 @@ function Header({ role, onMenuClick }) {
             type="text"
             value={searchQuery}
             onChange={handleSearchChange}
+            onBeforeInput={handleSearchBeforeInput}
+            onPaste={handleSearchPaste}
             onKeyDown={(event) => {
               if (event.key === 'Enter') runSearch();
             }}
             placeholder="Employee, leave, policy..."
             inputMode="text"
-            pattern="[A-Za-z\\s]*"
             aria-invalid={Boolean(searchError)}
             aria-describedby={searchError ? 'header-search-error' : undefined}
           />

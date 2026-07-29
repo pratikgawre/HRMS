@@ -24,7 +24,7 @@ const CONFIG = {
   },
 };
 
-function AssetRequestModal({ type, asset, onClose, onSubmit }) {
+function AssetRequestModal({ type, asset, onClose, onSubmit, isSubmitting = false, submitError = '' }) {
   const config = CONFIG[type];
   const [draft, setDraft] = useState(() => buildInitialDraft(type, asset));
   const [errors, setErrors] = useState({});
@@ -63,6 +63,9 @@ function AssetRequestModal({ type, asset, onClose, onSubmit }) {
 
   const handleSubmit = (event) => {
     event.preventDefault();
+    if (isSubmitting) {
+      return;
+    }
     const validation = validateDraft(type, draft);
     if (!validation.isValid) {
       setErrors(validation.errors);
@@ -192,10 +195,11 @@ function AssetRequestModal({ type, asset, onClose, onSubmit }) {
           )}
 
           <div className="salary-form-actions">
-            <button className="payroll-secondary" type="button" onClick={onClose}>Cancel</button>
-            <button className="payroll-primary" type="submit" disabled={!canSubmit}>
+            {submitError && <small className="field-error full" role="alert">{submitError}</small>}
+            <button className="payroll-secondary" type="button" onClick={onClose} disabled={isSubmitting}>Cancel</button>
+            <button className="payroll-primary" type="submit" disabled={!canSubmit || isSubmitting}>
               <i className={config.icon} aria-hidden="true" />
-              {config.submitLabel}
+              {isSubmitting ? 'Submitting...' : config.submitLabel}
             </button>
           </div>
         </form>
