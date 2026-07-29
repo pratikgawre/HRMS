@@ -20,6 +20,8 @@ const assetSearchValidationMessage = 'Please use letters and numbers only.';
 const assetSearchCharacterPattern = /[^A-Za-z0-9\s]/;
 const assetTextValidationMessage = 'Please use letters and numbers only.';
 const assetTextCharacterPattern = /[^A-Za-z0-9\s]/;
+const assetNameValidationMessage = 'Please use letters and spaces only.';
+const assetNameCharacterPattern = /[^A-Za-z\s]/;
 
 function sanitizeAssetSearchQuery(value) {
   return String(value || '').replace(/[^A-Za-z0-9\s]+/g, '');
@@ -46,6 +48,22 @@ function isInvalidAssetTextInsertion(value) {
 
 function isValidAssetTextValue(value) {
   return /^[A-Za-z0-9\s]*$/.test(String(value || ''));
+}
+
+function sanitizeAssetNameInput(value) {
+  return String(value || '')
+    .replace(/[^A-Za-z\s]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trimStart();
+}
+
+function isInvalidAssetNameInsertion(value) {
+  return assetNameCharacterPattern.test(String(value || ''));
+}
+
+function isValidAssetNameValue(value) {
+  const trimmedValue = String(value || '').trim();
+  return /^[A-Za-z\s]+$/.test(trimmedValue) && /[A-Za-z]/.test(trimmedValue);
 }
 
 function Assets() {
@@ -142,7 +160,30 @@ function Assets() {
       setAssetErrors((current) => ({ ...current, [field]: assetTextValidationMessage }));
     }
   };
-  const assetNameHasValidationError = Boolean(assetErrors.assetName || (assetForm.assetName && !isValidAssetTextValue(assetForm.assetName)));
+  const handleAssetNameChange = (event) => {
+    const nextRawValue = String(event.target.value || '');
+    const nextValue = sanitizeAssetNameInput(nextRawValue);
+    const attemptedInvalid = nextRawValue !== nextValue;
+
+    updateAssetForm('assetName', nextValue);
+    if (attemptedInvalid) {
+      setAssetErrors((current) => ({ ...current, assetName: assetNameValidationMessage }));
+    }
+  };
+  const handleAssetNameBeforeInput = (event) => {
+    if (event.data && isInvalidAssetNameInsertion(event.data)) {
+      event.preventDefault();
+      setAssetErrors((current) => ({ ...current, assetName: assetNameValidationMessage }));
+    }
+  };
+  const handleAssetNamePaste = (event) => {
+    const pastedValue = event.clipboardData?.getData('text') || '';
+    if (isInvalidAssetNameInsertion(pastedValue)) {
+      event.preventDefault();
+      setAssetErrors((current) => ({ ...current, assetName: assetNameValidationMessage }));
+    }
+  };
+  const assetNameHasValidationError = Boolean(assetErrors.assetName || (assetForm.assetName && !isValidAssetNameValue(assetForm.assetName)));
   const categoryHasValidationError = Boolean(assetErrors.category || (assetForm.category && !isValidAssetTextValue(assetForm.category)));
   const assignedToHasValidationError = Boolean(assetErrors.assignedTo || (assignedEmployeeQuery && !isValidAssetTextValue(assignedEmployeeQuery)));
   const conditionHasValidationError = Boolean(assetErrors.condition || (assetForm.condition && !isValidAssetTextValue(assetForm.condition)));
@@ -502,7 +543,7 @@ function Assets() {
     }
     if (field === 'assetName') {
       const trimmedName = String(value || '').trim();
-      if (!trimmedName || /[A-Za-z]/.test(trimmedName)) {
+      if (!trimmedName || isValidAssetNameValue(trimmedName)) {
         setAssetErrors((current) => ({ ...current, assetName: '' }));
       }
     }
@@ -553,7 +594,7 @@ function Assets() {
       return;
     }
 
-    if (!/[A-Za-z]/.test(name)) {
+    if (!isValidAssetNameValue(name)) {
       setAssetErrors((current) => ({ ...current, assetName: 'Enter a valid Asset Name.' }));
       return;
     }
@@ -929,13 +970,13 @@ function Assets() {
               <span>Asset Name</span>
               <input
                 value={assetForm.assetName}
-                onChange={(event) => handleAssetTextFieldChange('assetName', event)}
-                onBeforeInput={(event) => handleAssetTextBeforeInput('assetName', event)}
-                onPaste={(event) => handleAssetTextPaste('assetName', event)}
+                onChange={handleAssetNameChange}
+                onBeforeInput={handleAssetNameBeforeInput}
+                onPaste={handleAssetNamePaste}
                 placeholder="e.g. Dell Latitude 5440"
                 aria-invalid={assetNameHasValidationError}
               />
-              {assetNameHasValidationError && <small className="field-error">{assetErrors.assetName || assetTextValidationMessage}</small>}
+              {assetNameHasValidationError && <small className="field-error">{assetErrors.assetName || assetNameValidationMessage}</small>}
             </label>
             <label>
               <span>Category</span>
