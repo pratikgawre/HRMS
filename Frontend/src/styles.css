@@ -3557,6 +3557,45 @@ button.attendance-summary-card.is-clickable:focus-visible {
   box-shadow: 0 8px 18px rgba(27, 54, 64, 0.04);
 }
 
+.user-search-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon input"
+    "icon error";
+  align-items: start;
+  gap: 0.1rem 0.55rem;
+}
+
+.user-search-field > i {
+  grid-area: icon;
+  margin-top: 0.1rem;
+}
+
+.user-search-field input {
+  grid-area: input;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.user-search-field.is-invalid {
+  border-color: rgba(180, 35, 60, 0.24);
+  box-shadow: 0 10px 20px rgba(180, 35, 60, 0.08);
+}
+
+.user-search-field.is-invalid > i,
+.user-search-field.is-invalid input {
+  color: #9d2338;
+}
+
+.user-search-error {
+  grid-area: error;
+  margin-top: 0;
+}
+
 .leave-search-field {
   position: relative;
   min-width: 0;

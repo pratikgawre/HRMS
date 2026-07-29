@@ -52,6 +52,20 @@ function Header({ role, onMenuClick }) {
   }[role] || '/employee';
 
   const searchRoutes = getSearchRoutes(role);
+  const handleSearchChange = (event) => {
+    const nextRawValue = String(event.target.value || '');
+    const nextValue = sanitizeHeaderSearchQuery(nextRawValue);
+    const attemptedInvalid = nextRawValue !== nextValue;
+
+    setSearchQuery(nextValue);
+
+    if (!nextValue.trim()) {
+      setSearchError(attemptedInvalid ? headerSearchValidationMessage : '');
+      return;
+    }
+
+    setSearchError(attemptedInvalid || !isValidHeaderSearchQuery(nextValue) ? headerSearchValidationMessage : '');
+  };
 
   // Close notification panel when clicking outside
   useEffect(() => {
@@ -150,8 +164,18 @@ function Header({ role, onMenuClick }) {
     };
   }, [showNotifications]);
   const runSearch = () => {
-    const normalized = searchQuery.trim().toLowerCase();
-    if (!normalized) return;
+    const rawValue = String(searchQuery || '');
+    const normalizedQuery = sanitizeHeaderSearchQuery(rawValue).trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      setSearchError(rawValue.trim() ? headerSearchValidationMessage : '');
+      return;
+    }
+
+    if (!isValidHeaderSearchQuery(rawValue)) {
+      setSearchError(headerSearchValidationMessage);
+      return;
+    }
 
     const directMatch = searchRoutes.reduce((bestMatch, entry, index) => {
       const matchedLabel = normalizeSearchQuery(entry.label);
@@ -253,16 +277,22 @@ function Header({ role, onMenuClick }) {
         </div>
       </div>
       <div className="topbar-actions">
-        <label className="search-pill">
+        <label className={`search-pill${searchError ? ' is-invalid' : ''}`}>
           <i className="ri-search-line" aria-hidden="true" />
           <input
+            type="text"
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            onChange={handleSearchChange}
             onKeyDown={(event) => {
               if (event.key === 'Enter') runSearch();
             }}
             placeholder="Employee, leave, policy..."
+            inputMode="text"
+            pattern="[A-Za-z\\s]*"
+            aria-invalid={Boolean(searchError)}
+            aria-describedby={searchError ? 'header-search-error' : undefined}
           />
+          {searchError && <span id="header-search-error" className="search-pill-error" role="alert">{searchError}</span>}
         </label>
         <div className="date-chip">
           <i className="ri-calendar-line" aria-hidden="true" />

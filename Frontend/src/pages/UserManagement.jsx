@@ -18,6 +18,15 @@ import {
 } from '../utils/user-management.js';
 
 const USER_DELETE_UNDO_MS = 6000;
+const userSearchValidationMessage = 'Please use letters and numbers only.';
+
+function sanitizeUserSearchQuery(value) {
+  return String(value || '').replace(/[^A-Za-z0-9\s]+/g, '');
+}
+
+function isValidUserSearchQuery(value) {
+  return /^[A-Za-z0-9\s]*$/.test(String(value || ''));
+}
 
 
 function UserManagement() {
@@ -34,6 +43,7 @@ function UserManagement() {
   const [undoUser, setUndoUser] = useState(null);
   const [form, setForm] = useState(getEmptyUserForm());
   const [message, setMessage] = useState('');
+  const [searchError, setSearchError] = useState('');
   const [isSavingUser, setIsSavingUser] = useState(false);
   const isLoadingRef = useRef(false);
 
@@ -43,6 +53,7 @@ function UserManagement() {
     const nextRole = params.get('role');
 
     setSearch('');
+    setSearchError('');
     setRoleFilter(nextRole || 'All Roles');
     setStatusFilter(nextStatus || 'All Status');
 
@@ -113,6 +124,21 @@ function UserManagement() {
       window.removeEventListener('focus', handleWindowFocus);
     };
   }, []);
+
+  const handleSearchChange = (event) => {
+    const nextRawValue = String(event.target.value || '');
+    const nextValue = sanitizeUserSearchQuery(nextRawValue);
+    const attemptedInvalid = nextRawValue !== nextValue;
+
+    setSearch(nextValue);
+
+    if (!nextValue.trim()) {
+      setSearchError(attemptedInvalid ? userSearchValidationMessage : '');
+      return;
+    }
+
+    setSearchError(attemptedInvalid || !isValidUserSearchQuery(nextValue) ? userSearchValidationMessage : '');
+  };
 
   useEffect(() => {
     if (!undoUser) {
@@ -361,9 +387,18 @@ function UserManagement() {
 
       <Section title="System Users" id="system-users">
         <div className="page-toolbar">
-          <label className="toolbar-search">
+          <label className={`toolbar-search user-search-field${searchError ? ' is-invalid' : ''}`}>
             <i className="ri-search-line" aria-hidden="true" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search user, employee ID, email, role" />
+            <input
+              type="text"
+              value={search}
+              onChange={handleSearchChange}
+              placeholder="Search user, employee ID, email, role"
+              inputMode="text"
+              aria-invalid={Boolean(searchError)}
+              aria-describedby={searchError ? 'user-search-error' : undefined}
+            />
+            {searchError && <small id="user-search-error" className="field-error user-search-error" role="alert">{searchError}</small>}
           </label>
           <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} aria-label="Filter by role">
             <option>All Roles</option>
@@ -467,8 +502,27 @@ async function syncEmployeeAccessRole(employees, setEmployees, employeeId, acces
 
 function UserModal({ form, setForm, employees, users, isEditing, isSavingUser, title, onClose, onSubmit }) {
   const [employeeSearch, setEmployeeSearch] = useState(form.employeeName);
+  const [employeeSearchError, setEmployeeSearchError] = useState('');
   const [hasSelectedEmployee, setHasSelectedEmployee] = useState(Boolean(form.employeeId));
   const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const handleEmployeeSearchChange = (event) => {
+    const nextRawValue = String(event.target.value || '');
+    const nextValue = sanitizeUserSearchQuery(nextRawValue);
+    const attemptedInvalid = nextRawValue !== nextValue;
+
+    setEmployeeSearch(nextValue);
+    setHasSelectedEmployee(false);
+    setEmployeeSearchError(nextValue.trim() ? (attemptedInvalid || !isValidUserSearchQuery(nextValue) ? userSearchValidationMessage : '') : (attemptedInvalid ? userSearchValidationMessage : ''));
+    setForm((current) => ({
+      ...current,
+      employeeId: '',
+      employeeName: '',
+      email: '',
+      employeePhone: '',
+      department: '',
+      designation: '',
+    }));
+  };
   const matches = useMemo(() => {
     const query = employeeSearch.trim().toLowerCase();
     if (isEditing || hasSelectedEmployee || !query) {
@@ -494,6 +548,7 @@ function UserModal({ form, setForm, employees, users, isEditing, isSavingUser, t
 
   const selectEmployee = (employee) => {
     setEmployeeSearch(employee.displayName || employee.name);
+    setEmployeeSearchError('');
     setHasSelectedEmployee(true);
     setForm((current) => ({
       ...current,
@@ -521,21 +576,13 @@ function UserModal({ form, setForm, employees, users, isEditing, isSavingUser, t
               required
               readOnly={isEditing}
               value={isEditing ? form.employeeName : employeeSearch}
-              onChange={(event) => {
-                setEmployeeSearch(event.target.value);
-                setHasSelectedEmployee(false);
-                setForm((current) => ({
-                  ...current,
-                  employeeId: '',
-                  employeeName: '',
-                  email: '',
-                  employeePhone: '',
-                  department: '',
-                  designation: '',
-                }));
-              }}
+              onChange={handleEmployeeSearchChange}
               placeholder="Type employee ID or name"
+              inputMode="text"
+              aria-invalid={Boolean(employeeSearchError)}
+              aria-describedby={employeeSearchError ? 'employee-search-error' : undefined}
             />
+            {employeeSearchError && <small id="employee-search-error" className="field-error user-search-error" role="alert">{employeeSearchError}</small>}
             {matches.length > 0 && (
               <div className="employee-suggestion-list">
                 {matches.map((employee) => (

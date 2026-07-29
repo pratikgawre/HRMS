@@ -16,6 +16,15 @@ import { getVisibleTeamEmployeeIds, normalizeProjects } from './attendancePageUt
 
 const ADMIN_ASSET_CACHE_KEY = 'kavyaAssetsAdminCache';
 const ADMIN_EMPLOYEE_CACHE_KEY = 'kavyaAssetsAdminEmployeesCache';
+const assetSearchValidationMessage = 'Please use letters and numbers only.';
+
+function sanitizeAssetSearchQuery(value) {
+  return String(value || '').replace(/[^A-Za-z0-9\s]+/g, '');
+}
+
+function isValidAssetSearchQuery(value) {
+  return /^[A-Za-z0-9\s]*$/.test(String(value || ''));
+}
 
 function Assets() {
   const navigate = useNavigate();
@@ -36,6 +45,7 @@ function Assets() {
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
   const [searchText, setSearchText] = useState('');
+  const [searchError, setSearchError] = useState('');
   const [assetView, setAssetView] = useState('all');
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [assignedEmployeeQuery, setAssignedEmployeeQuery] = useState('');
@@ -60,6 +70,20 @@ function Assets() {
   const normalizeAssetStatus = (value) => String(value || '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
   const isRepairStatus = (status) => ['repair needed', 'under repair'].includes(normalizeAssetStatus(status));
   const isReturnStatus = (status) => ['pending return', 'return requested'].includes(normalizeAssetStatus(status));
+  const handleAssetSearchChange = (event) => {
+    const nextRawValue = String(event.target.value || '');
+    const nextValue = sanitizeAssetSearchQuery(nextRawValue);
+    const attemptedInvalid = nextRawValue !== nextValue;
+
+    setSearchText(nextValue);
+
+    if (!nextValue.trim()) {
+      setSearchError(attemptedInvalid ? assetSearchValidationMessage : '');
+      return;
+    }
+
+    setSearchError(attemptedInvalid || !isValidAssetSearchQuery(nextValue) ? assetSearchValidationMessage : '');
+  };
 
   useEffect(() => {
     let active = true;
@@ -962,9 +986,13 @@ function Assets() {
             <input
               type="search"
               value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
+              onChange={handleAssetSearchChange}
               placeholder="Search by asset name or employee ID..."
+              inputMode="text"
+              aria-invalid={Boolean(searchError)}
+              aria-describedby={searchError ? 'asset-search-error' : undefined}
             />
+            {searchError && <small id="asset-search-error" className="asset-search-error" role="alert">{searchError}</small>}
           </label>
         </div>
         {!isLoading && !loadError && assets.length === 0 ? (
