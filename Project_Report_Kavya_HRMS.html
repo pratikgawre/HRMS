@@ -1,0 +1,1403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kavya HRMS Project Report</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #5c667a;
+      --soft: #f4f7fb;
+      --line: #dce3ee;
+      --brand: #123a63;
+      --accent: #0f8b8d;
+      --gold: #c58a21;
+      --ok: #1f7a4d;
+      --warn: #a96800;
+      --danger: #b42318;
+      --white: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--white);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @page {
+      size: A4;
+      margin: 18mm 15mm;
+    }
+
+    .page {
+      page-break-after: always;
+    }
+
+    .page:last-child {
+      page-break-after: auto;
+    }
+
+    .cover {
+      min-height: 257mm;
+      padding: 34mm 20mm 22mm;
+      color: var(--white);
+      background:
+        linear-gradient(145deg, rgba(18, 58, 99, 0.95), rgba(15, 139, 141, 0.88)),
+        linear-gradient(90deg, #123a63, #0f8b8d);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cover::after {
+      content: "";
+      position: absolute;
+      right: -55mm;
+      bottom: -45mm;
+      width: 140mm;
+      height: 140mm;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transform: rotate(22deg);
+    }
+
+    .cover-kicker {
+      display: inline-block;
+      padding: 7px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.46);
+      font-size: 11px;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+    }
+
+    .cover h1 {
+      margin: 28mm 0 6mm;
+      max-width: 160mm;
+      font-size: 42px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .cover h2 {
+      margin: 0;
+      max-width: 150mm;
+      font-size: 17px;
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    .cover-meta {
+      position: absolute;
+      left: 20mm;
+      right: 20mm;
+      bottom: 23mm;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      z-index: 1;
+    }
+
+    .cover-meta div {
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.32);
+    }
+
+    .cover-meta span {
+      display: block;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .cover-meta strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 13px;
+    }
+
+    main {
+      padding: 0;
+    }
+
+    section {
+      page-break-inside: avoid;
+      margin-bottom: 22px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      color: var(--brand);
+      letter-spacing: 0;
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      padding-bottom: 9px;
+      border-bottom: 2px solid var(--brand);
+      font-size: 24px;
+    }
+
+    h2 {
+      margin: 22px 0 10px;
+      font-size: 18px;
+    }
+
+    h3 {
+      margin: 15px 0 7px;
+      font-size: 14px;
+    }
+
+    p {
+      margin: 0 0 9px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .doc-page {
+      padding: 0;
+    }
+
+    .toc ol {
+      columns: 2;
+      column-gap: 28px;
+      padding-left: 20px;
+    }
+
+    .toc li {
+      margin: 0 0 7px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin: 12px 0 18px;
+    }
+
+    .metric {
+      min-height: 75px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      background: #fbfdff;
+      border-radius: 6px;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 5px;
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 1.22;
+    }
+
+    .note {
+      padding: 12px 14px;
+      border: 1px solid #b9d9da;
+      border-left: 4px solid var(--accent);
+      background: #f0fbfb;
+      border-radius: 6px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 9px 0 16px;
+      page-break-inside: avoid;
+    }
+
+    th,
+    td {
+      padding: 8px 9px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      color: var(--white);
+      background: var(--brand);
+      font-weight: 700;
+    }
+
+    tbody tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    .tag {
+      display: inline-block;
+      margin: 0 4px 4px 0;
+      padding: 3px 7px;
+      color: var(--brand);
+      background: #edf5fb;
+      border: 1px solid #cfe0ee;
+      border-radius: 12px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .flow {
+      margin: 11px 0 16px;
+      padding: 14px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      color: #1f2937;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .panel {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fbfdff;
+      page-break-inside: avoid;
+    }
+
+    .panel h3 {
+      margin-top: 0;
+    }
+
+    ul {
+      margin: 6px 0 14px 19px;
+      padding: 0;
+    }
+
+    li {
+      margin-bottom: 5px;
+    }
+
+    .status-ok {
+      color: var(--ok);
+      font-weight: 700;
+    }
+
+    .status-warn {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    code {
+      padding: 1px 4px;
+      background: #eef2f7;
+      border-radius: 4px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div class="cover page">
+    <span class="cover-kicker">Professional Project Report</span>
+    <h1>Kavya HRMS<br>Human Resource Management System</h1>
+    <h2>End-to-end project documentation covering architecture, modules, role-based flow, API structure, business rules, deployment readiness, and future enhancement scope.</h2>
+    <div class="cover-meta">
+      <div>
+        <span>Prepared For</span>
+        <strong>Kavya HR 360</strong>
+      </div>
+      <div>
+        <span>Prepared On</span>
+        <strong>29 July 2026</strong>
+      </div>
+      <div>
+        <span>Project Type</span>
+        <strong>React + Spring Boot HRMS</strong>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <section class="page doc-page toc">
+      <h1>Table Of Contents</h1>
+      <ol>
+        <li>Executive Summary</li>
+        <li>Project Identification</li>
+        <li>Business Objective And Scope</li>
+        <li>Technology Stack</li>
+        <li>Repository Structure</li>
+        <li>System Architecture</li>
+        <li>User Roles And Access Matrix</li>
+        <li>Application Flow</li>
+        <li>Module-Wise Functional Description</li>
+        <li>Backend API Catalogue</li>
+        <li>Database Design</li>
+        <li>Business Rules</li>
+        <li>Security And Session Management</li>
+        <li>Configuration And Deployment</li>
+        <li>Testing Coverage</li>
+        <li>Risks, Recommendations, And Future Scope</li>
+        <li>Conclusion</li>
+      </ol>
+      <div class="note">
+        This report was prepared from the local source code under <code>React Project</code>. It reflects the observed implementation, folder structure, routing, APIs, models, services, and configuration files available in the project workspace.
+      </div>
+    </section>
+
+    <section class="page doc-page">
+      <h1>1. Executive Summary</h1>
+      <p>Kavya HRMS is a full-stack Human Resource Management System designed to centralize daily HR operations, workforce administration, attendance, leave, payroll, projects, tasks, asset tracking, announcements, support tickets, interviews, and user management. The system provides role-based dashboards for Super Admin, HR Manager, Project Manager, Team Lead, and Employee users.</p>
+      <p>The frontend is implemented as a React 18 single-page application using Vite, React Router, Bootstrap, and Remix Icon. The backend is implemented with Spring Boot, MongoDB, WebSocket support, mail integration, session handling, and REST APIs. The project is suitable for internal enterprise HR operations and can be positioned as an MNC-style internal HR 360 platform.</p>
+
+      <div class="summary-grid">
+        <div class="metric">
+          <span>Frontend</span>
+          <strong>React 18 + Vite</strong>
+        </div>
+        <div class="metric">
+          <span>Backend</span>
+          <strong>Spring Boot 4.1</strong>
+        </div>
+        <div class="metric">
+          <span>Database</span>
+          <strong>MongoDB</strong>
+        </div>
+        <div class="metric">
+          <span>Primary Domain</span>
+          <strong>HR Operations</strong>
+        </div>
+      </div>
+
+      <h2>Key Capabilities</h2>
+      <ul>
+        <li>Role-based dashboards and navigation for all major HR personas.</li>
+        <li>Employee master data management with profile photo upload support.</li>
+        <li>Attendance recording, team attendance view, and 9 PM Asia/Kolkata auto-checkout process.</li>
+        <li>Leave request, approval, recommendation, and leave balance summary workflows.</li>
+        <li>Payroll generation from employee, attendance, and leave data with paid payslip controls.</li>
+        <li>Project and task assignment workflows with attachment handling.</li>
+        <li>Asset inventory, asset assignment, return, and employee asset request workflows.</li>
+        <li>Announcements, notifications, support tickets, scheduled interviews, and settings management.</li>
+      </ul>
+
+      <h2>Executive Conclusion</h2>
+      <p>The application has a mature operational scope and a clear full-stack architecture. It already includes core enterprise workflows, backend persistence, seed data, API tests, runtime configuration, and deployment files. Recommended next steps are production hardening, secret management, formal RBAC enforcement at backend level, CI/CD, observability, and replacing any remaining local fallback data with API-only flows for enterprise-grade consistency.</p>
+    </section>
+
+    <section class="page doc-page">
+      <h1>2. Project Identification</h1>
+      <table>
+        <tbody>
+          <tr>
+            <th>Attribute</th>
+            <th>Details</th>
+          </tr>
+          <tr>
+            <td>Project Name</td>
+            <td>Kavya HRMS / Kavya HR 360</td>
+          </tr>
+          <tr>
+            <td>Application Type</td>
+            <td>Full-stack HRMS web application</td>
+          </tr>
+          <tr>
+            <td>Frontend Package</td>
+            <td><code>kavya-hrms</code>, version <code>1.0.0</code></td>
+          </tr>
+          <tr>
+            <td>Backend Artifact</td>
+            <td><code>com.kavya:hrms-backend:0.0.1-SNAPSHOT</code></td>
+          </tr>
+          <tr>
+            <td>Backend Description</td>
+            <td>Kavya HRMS Spring Boot Backend</td>
+          </tr>
+          <tr>
+            <td>Default Frontend Port</td>
+            <td><code>5173</code> through Vite development server</td>
+          </tr>
+          <tr>
+            <td>Default Backend Port</td>
+            <td><code>8080</code> through <code>SERVER_PORT</code> configuration fallback</td>
+          </tr>
+          <tr>
+            <td>Default Database</td>
+            <td><code>mongodb://localhost:27017/hrmsdb</code></td>
+          </tr>
+          <tr>
+            <td>Prepared Date</td>
+            <td>29 July 2026</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h1>3. Business Objective And Scope</h1>
+      <h2>Objective</h2>
+      <p>The objective of Kavya HRMS is to provide a centralized platform that reduces manual HR work, improves employee service delivery, and gives managers real-time visibility into teams, attendance, leave, payroll, tasks, assets, and communication.</p>
+
+      <h2>In Scope</h2>
+      <ul>
+        <li>Authentication, session validation, password reset, and forced password change flows.</li>
+        <li>Employee lifecycle data, profile records, HR user records, and access roles.</li>
+        <li>Attendance self-service and team attendance management.</li>
+        <li>Leave request creation, review, approval, and leave summary calculation.</li>
+        <li>Payroll generation, mark-paid workflow, payslip generation eligibility, and payroll records.</li>
+        <li>Project assignment, project teams, task assignment, task status updates, and attachments.</li>
+        <li>Asset inventory, assignment, return, employee asset requests, and request status changes.</li>
+        <li>Announcements, notifications, support tickets, interviews, settings, and seeded defaults.</li>
+      </ul>
+
+      <h2>Out Of Scope For Current Implementation</h2>
+      <ul>
+        <li>External identity provider integration such as SSO, SAML, or OAuth.</li>
+        <li>Advanced statutory payroll engine with country-wise tax slabs and compliance filings.</li>
+        <li>Centralized audit log UI in the current visible routing structure, although an audit model exists.</li>
+        <li>Production CI/CD, monitoring dashboards, and infrastructure-as-code are not fully present in the local repository.</li>
+      </ul>
+    </section>
+
+    <section class="page doc-page">
+      <h1>4. Technology Stack</h1>
+      <table>
+        <tbody>
+          <tr>
+            <th>Layer</th>
+            <th>Technology</th>
+            <th>Usage</th>
+          </tr>
+          <tr>
+            <td>Frontend Framework</td>
+            <td>React 18.3.1</td>
+            <td>Component-based UI for dashboards, pages, forms, tables, and workflow screens.</td>
+          </tr>
+          <tr>
+            <td>Build Tool</td>
+            <td>Vite 8.0.16</td>
+            <td>Frontend development server, build, proxy configuration, and production bundle generation.</td>
+          </tr>
+          <tr>
+            <td>Routing</td>
+            <td>React Router DOM 6.28.1</td>
+            <td>HashRouter-based route handling with protected role routes.</td>
+          </tr>
+          <tr>
+            <td>UI Foundation</td>
+            <td>Bootstrap 5.3.3, Remix Icon 4.6.0</td>
+            <td>Responsive layout, component styling, and iconography.</td>
+          </tr>
+          <tr>
+            <td>Backend Framework</td>
+            <td>Spring Boot 4.1.0</td>
+            <td>REST API, service layer, interceptors, scheduled services, and application lifecycle.</td>
+          </tr>
+          <tr>
+            <td>Database</td>
+            <td>MongoDB with Spring Data MongoDB</td>
+            <td>Document storage for employees, users, sessions, attendance, leaves, payroll, tasks, projects, assets, and settings.</td>
+          </tr>
+          <tr>
+            <td>Security Utilities</td>
+            <td>Spring Security Crypto</td>
+            <td>Password and security-related backend utility dependency.</td>
+          </tr>
+          <tr>
+            <td>Communication</td>
+            <td>Spring Mail, SendGrid configuration, WebSocket</td>
+            <td>Email notifications, credential/reset emails, interview notifications, and settings broadcast support.</td>
+          </tr>
+          <tr>
+            <td>Backend Tests</td>
+            <td>Spring Boot Starter Test</td>
+            <td>Controller and service test coverage.</td>
+          </tr>
+          <tr>
+            <td>Deployment</td>
+            <td>Netlify frontend config, backend Dockerfile</td>
+            <td>Frontend static deployment and containerized backend build path.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h1>5. Repository Structure</h1>
+      <div class="flow">React Project/
+  Frontend/
+    src/
+      App.jsx
+      main.jsx
+      styles.css
+      components/
+      layouts/
+      pages/
+      routes/
+      utils/
+      data/
+    package.json
+    vite.config.js
+  backend/
+    src/main/java/com/kavya/hrms/
+      config/
+      controller/
+      dto/
+      model/
+      repository/
+      service/
+      websocket/
+      HrmsBackendApplication.java
+    src/main/resources/application.properties
+    src/test/java/com/kavya/hrms/
+    pom.xml
+    Dockerfile
+  PROJECT_FLOW.md
+  netlify.toml</div>
+
+      <p>The structure follows a conventional full-stack separation. The frontend owns routing, layouts, pages, browser-side session state, API utility wrappers, and fallback caches. The backend owns persistent data models, repositories, controllers, services, interceptors, scheduled tasks, and configuration.</p>
+    </section>
+
+    <section class="page doc-page">
+      <h1>6. System Architecture</h1>
+      <p>Kavya HRMS uses a layered architecture. The browser loads the React SPA. Authenticated users move through role-specific protected routes and call backend APIs through a centralized frontend API client. Spring Boot receives requests, validates session tokens using Authorization bearer tokens or cookies, applies forced password change checks, executes controller/service logic, and persists documents in MongoDB.</p>
+
+      <div class="flow">User Browser
+  |
+  v
+React SPA - HashRouter, ProtectedRoute, DashboardLayout
+  |
+  v
+Central API Client - headers, timeout, error normalization
+  |
+  v
+Spring Boot REST Controllers - /api/*
+  |
+  v
+Interceptors - session validation, forced password change
+  |
+  v
+Service Layer - payroll, leave, email, notification, attendance jobs
+  |
+  v
+Spring Data Repositories
+  |
+  v
+MongoDB Collections + Upload Storage</div>
+
+      <h2>Frontend Architecture</h2>
+      <ul>
+        <li><code>App.jsx</code> defines role dashboards, public routes, protected route groups, and session bootstrap.</li>
+        <li><code>ProtectedRoute.jsx</code> checks local session state, required password change state, and allowed role mapping.</li>
+        <li><code>DashboardLayout.jsx</code> provides the common shell with sidebar, header, content area, login toast, and periodic access refresh.</li>
+        <li><code>Sidebar.jsx</code> provides persona-specific menus for admin, HR, team lead, project manager, and employee users.</li>
+        <li><code>api.js</code> centralizes API requests, timeout handling, auth headers, role headers, employee headers, and payload normalization.</li>
+      </ul>
+
+      <h2>Backend Architecture</h2>
+      <ul>
+        <li>Controllers expose REST resources for domain modules.</li>
+        <li>Repositories provide MongoDB CRUD and query operations.</li>
+        <li>Services encapsulate business logic such as payroll generation, payroll validation, leave summary, notifications, email, and attendance auto-checkout.</li>
+        <li>Config classes manage CORS, static upload serving, Mongo indexes, session interceptors, mail settings, and seed data.</li>
+        <li>WebSocket classes support live settings broadcast capabilities.</li>
+      </ul>
+    </section>
+
+    <section class="page doc-page">
+      <h1>7. User Roles And Access Matrix</h1>
+      <table>
+        <tbody>
+          <tr>
+            <th>Access Role</th>
+            <th>App Role</th>
+            <th>Default Dashboard</th>
+            <th>Key Permissions / Modules</th>
+          </tr>
+          <tr>
+            <td>Super Admin</td>
+            <td><code>admin</code></td>
+            <td><code>/admin/dashboard</code></td>
+            <td>Users, employees, attendance, leave, payroll, announcements, settings, projects, tasks, assets, support.</td>
+          </tr>
+          <tr>
+            <td>HR Manager</td>
+            <td><code>hr</code></td>
+            <td><code>/hr/dashboard</code></td>
+            <td>Employees, users, attendance, leave approval, payroll, announcements, assets, projects, tasks, scheduled interviews, support, settings.</td>
+          </tr>
+          <tr>
+            <td>Project Manager</td>
+            <td><code>projectManager</code></td>
+            <td><code>/project-manager/dashboard</code></td>
+            <td>Projects, team view, tasks, team attendance, leave review, self attendance, self payroll, assets, support.</td>
+          </tr>
+          <tr>
+            <td>Team Lead</td>
+            <td><code>teamLead</code></td>
+            <td><code>/team-lead/dashboard</code></td>
+            <td>Team dashboard, team attendance, task assignment, leave review, self attendance, payslip, assets, support.</td>
+          </tr>
+          <tr>
+            <td>Employee</td>
+            <td><code>employee</code></td>
+            <td><code>/employee/dashboard</code></td>
+            <td>Self attendance, leave request, payslip, profile, asset requests, tasks, announcements, support.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Seed Login Accounts</h2>
+      <table>
+        <tbody>
+          <tr>
+            <th>Role</th>
+            <th>Email</th>
+            <th>Employee Identity</th>
+            <th>Default Password</th>
+          </tr>
+          <tr>
+            <td>Super Admin</td>
+            <td><code>admin@gmail.com</code></td>
+            <td><code>ADMIN-001</code>, Admin Kavya</td>
+            <td><code>admin123</code></td>
+          </tr>
+          <tr>
+            <td>HR Manager</td>
+            <td><code>hr@gmail.com</code></td>
+            <td><code>HR-001</code>, Meera Nair</td>
+            <td><code>hr123</code></td>
+          </tr>
+          <tr>
+            <td>Team Lead</td>
+            <td><code>teamlead@gmail.com</code></td>
+            <td><code>KV003</code>, Kabir Khan</td>
+            <td><code>teamlead123</code></td>
+          </tr>
+          <tr>
+            <td>Project Manager</td>
+            <td><code>manager@gmail.com</code> / <code>projectmanager@gmail.com</code></td>
+            <td><code>KV004</code>, Isha Patel</td>
+            <td><code>manager123</code></td>
+          </tr>
+          <tr>
+            <td>Employee</td>
+            <td><code>employee@gmail.com</code></td>
+            <td><code>KV001</code>, Aarav Sharma</td>
+            <td><code>employee123</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted">For production, seeded demo credentials should be disabled or rotated and passwords should be stored only as secure hashes.</p>
+    </section>
+
+    <section class="page doc-page">
+      <h1>8. Application Flow</h1>
+      <h2>End-To-End User Flow</h2>
+      <div class="flow">1. User opens the Kavya HRMS frontend.
+2. React application initializes through Vite bundle and HashRouter.
+3. Public route shows login, forgot-password, or change-password page.
+4. User submits credentials.
+5. Frontend calls POST /api/auth/login.
+6. Backend validates user and creates a session token.
+7. Token and user profile details are saved in session storage/local state.
+8. User is redirected to the dashboard mapped to the resolved role.
+9. Protected routes validate local session and allowed role.
+10. DashboardLayout loads sidebar/header and refreshes users/employees periodically.
+11. Module pages call REST APIs through apiRequest.
+12. Backend verifies session, runs business logic, persists data, and returns JSON.
+13. UI renders latest rows, summary cards, modals, toasts, validation messages, or error messages.
+14. Logout or session expiry clears token and redirects user to login.</div>
+
+      <h2>Authentication And Session Flow</h2>
+      <div class="flow">Login Page
+  -> authenticateUser()
+  -> POST /api/auth/login
+  -> AuthController
+  -> AppUserRepository + AuthSessionRepository
+  -> LoginResponse with token, role, employee identity
+  -> startSession()
+  -> Role dashboard redirect
+  -> ProtectedRoute checks session on every protected route</div>
+
+      <h2>Role Routing Flow</h2>
+      <table>
+        <tbody>
+          <tr>
+            <th>Role</th>
+            <th>Route Group</th>
+            <th>Main Landing Route</th>
+          </tr>
+          <tr>
+            <td>Admin</td>
+            <td><code>/admin/*</code></td>
+            <td><code>/admin/dashboard</code></td>
+          </tr>
+          <tr>
+            <td>HR</td>
+            <td><code>/hr/*</code></td>
+            <td><code>/hr/dashboard</code></td>
+          </tr>
+          <tr>
+            <td>Team Lead</td>
+            <td><code>/team-lead/*</code></td>
+            <td><code>/team-lead/dashboard</code></td>
+          </tr>
+          <tr>
+            <td>Project Manager</td>
+            <td><code>/project-manager/*</code></td>
+            <td><code>/project-manager/dashboard</code></td>
+          </tr>
+          <tr>
+            <td>Employee</td>
+            <td><code>/employee/*</code></td>
+            <td><code>/employee/dashboard</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Data Flow</h2>
+      <div class="flow">UI Form / Action
+  -> Component state validation
+  -> apiRequest(path, options)
+  -> Headers: Authorization, X-Kavya-Access-Role, X-Kavya-User-Id, X-Kavya-Employee-Id
+  -> Spring controller
+  -> Service rules
+  -> Repository save/query
+  -> MongoDB document
+  -> JSON response
+  -> UI refresh / cache update / toast / error display</div>
+    </section>
+
+    <section class="page doc-page">
+      <h1>9. Module-Wise Functional Description</h1>
+      <table>
+        <tbody>
+          <tr>
+            <th>Module</th>
+            <th>Primary Users</th>
+            <th>Functional Summary</th>
+          </tr>
+          <tr>
+            <td>Dashboard</td>
+            <td>All roles</td>
+            <td>Role-specific summaries for HR, admin, employee, team lead, and project manager personas. Uses dashboard, employee, attendance, leave, announcement, project, task, and settings APIs.</td>
+          </tr>
+          <tr>
+            <td>Authentication</td>
+            <td>All users</td>
+            <td>Login, session validation, session touch, logout, forgot password, reset password, and forced first-login password change support.</td>
+          </tr>
+          <tr>
+            <td>Employees</td>
+            <td>Admin, HR</td>
+            <td>Employee listing, profile data entry, edit, delete, duplicate handling, profile photo upload/removal, and sync with user records.</td>
+          </tr>
+          <tr>
+            <td>User Management</td>
+            <td>Admin, HR</td>
+            <td>User account listing, creation through bulk sync, role assignment, status management, and account deletion.</td>
+          </tr>
+          <tr>
+            <td>Attendance</td>
+            <td>Employees, HR, Team Lead, Project Manager, Admin</td>
+            <td>Self attendance, team attendance, attendance record creation, employee-specific attendance lookup, attendance status, and backend auto-checkout.</td>
+          </tr>
+          <tr>
+            <td>Leave Management</td>
+            <td>Employees, Team Lead, Project Manager, HR, Admin</td>
+            <td>Leave request creation, recommendation, approval, rejection, status notes, and current employee leave summary.</td>
+          </tr>
+          <tr>
+            <td>Payroll</td>
+            <td>Admin, HR, self-service users</td>
+            <td>Payroll record listing, monthly generation, paid marking, payslip generation after payment, employee-specific payroll, and salary calculation based on attendance and leave.</td>
+          </tr>
+          <tr>
+            <td>Projects</td>
+            <td>Admin, HR, Project Manager, Team Lead</td>
+            <td>Project CRUD, team lead mapping, project members, milestones, progress, and team-lead-specific project lookup.</td>
+          </tr>
+          <tr>
+            <td>Tasks</td>
+            <td>Admin, HR, Project Manager, Team Lead, Employee</td>
+            <td>Task creation, assignment, status updates, assignee/assigner filters, project mapping, attachment upload, and delete workflow.</td>
+          </tr>
+          <tr>
+            <td>My Team</td>
+            <td>Team Lead, Project Manager</td>
+            <td>Team member overview, project-team visibility, team tasks, attendance summary, and member-level drill-down context.</td>
+          </tr>
+          <tr>
+            <td>Assets</td>
+            <td>Admin, HR, Project Manager, Team Lead, Employee</td>
+            <td>Asset inventory, page data, my assets, assignment records, return process, employee asset requests, and request approval/status changes.</td>
+          </tr>
+          <tr>
+            <td>Announcements</td>
+            <td>Admin, HR, all viewers</td>
+            <td>Announcement create, update, delete, bulk seed, category, priority, status, and role-oriented viewing.</td>
+          </tr>
+          <tr>
+            <td>Notifications</td>
+            <td>All roles</td>
+            <td>Header notifications with unread state, mark-read, clear, and role/user filtering.</td>
+          </tr>
+          <tr>
+            <td>Support</td>
+            <td>All roles</td>
+            <td>Support ticket creation, screenshot/upload data, ticket detail view, assignment, status, and resolution workflow.</td>
+          </tr>
+          <tr>
+            <td>Scheduled Interviews</td>
+            <td>HR, Admin</td>
+            <td>Candidate interview scheduling, resume details, interview round/mode, status, today view, and share-with-admin operation.</td>
+          </tr>
+          <tr>
+            <td>Settings</td>
+            <td>Admin, HR with limited matrix</td>
+            <td>Company name, timezone, working hours, week off, payroll cutoff, departments, designations, holidays, leave types, role permissions, and payroll settings.</td>
+          </tr>
+          <tr>
+            <td>Profile</td>
+            <td>All roles</td>
+            <td>User and employee profile view/edit context using employee and user APIs.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="page doc-page">
+      <h1>10. Backend API Catalogue</h1>
+      <table>
+        <tbody>
+          <tr>
+            <th>Area</th>
+            <th>Base Endpoint</th>
+            <th>Supported Operations Observed</th>
+          </tr>
+          <tr>
+            <td>Authentication</td>
+            <td><code>/api/auth</code></td>
+            <td>Login, forgot password, reset password, change password, session validate, session touch, session delete.</td>
+          </tr>
+          <tr>
+            <td>Users</td>
+            <td><code>/api/users</code></td>
+            <td>List users, delete user, bulk save/sync.</td>
+          </tr>
+          <tr>
+            <td>Employees</td>
+            <td><code>/api/employees</code></td>
+            <td>List, create, bulk save, update, delete, upload profile photo, remove profile photo.</td>
+          </tr>
+          <tr>
+            <td>Attendance</td>
+            <td><code>/api/attendance</code></td>
+            <td>List, team payload, employee lookup, create/update record, bulk save.</td>
+          </tr>
+          <tr>
+            <td>Leave</td>
+            <td><code>/api/leaves</code></td>
+            <td>List, create, bulk save, update status/details, current employee leave summary.</td>
+          </tr>
+          <tr>
+            <td>Payroll</td>
+            <td><code>/api/payroll</code></td>
+            <td>List, employee payroll, month/year payroll, generate, create record, mark paid, payslip, bulk save.</td>
+          </tr>
+          <tr>
+            <td>Projects</td>
+            <td><code>/api/projects</code></td>
+            <td>List, team-lead projects, create, bulk save, update, delete.</td>
+          </tr>
+          <tr>
+            <td>Team Lead</td>
+            <td><code>/api/team-lead</code></td>
+            <td>Team lead project lookup.</td>
+          </tr>
+          <tr>
+            <td>Tasks</td>
+            <td><code>/api/tasks</code></td>
+            <td>List, filter assigned-to, assigned-by, owner, assignee-name, create, bulk save, update, status patch, attachment upload, delete.</td>
+          </tr>
+          <tr>
+            <td>Assets</td>
+            <td><code>/api/assets</code></td>
+            <td>List, page data, my assets, create, bulk save, update, delete.</td>
+          </tr>
+          <tr>
+            <td>Asset Assignments</td>
+            <td><code>/api/asset-assignments</code></td>
+            <td>List, create assignment, return asset, delete assignment.</td>
+          </tr>
+          <tr>
+            <td>Asset Requests</td>
+            <td><code>/api/asset-requests</code></td>
+            <td>List, create request, update request status.</td>
+          </tr>
+          <tr>
+            <td>Announcements</td>
+            <td><code>/api/announcements</code></td>
+            <td>List, create, bulk save, update, delete.</td>
+          </tr>
+          <tr>
+            <td>Notifications</td>
+            <td><code>/api/notifications</code></td>
+            <td>List by role/user, mark read, delete one, delete all by user.</td>
+          </tr>
+          <tr>
+            <td>Support</td>
+            <td><code>/api/support</code></td>
+            <td>List, detail, create JSON/multipart ticket, status update.</td>
+          </tr>
+          <tr>
+            <td>Interviews</td>
+            <td><code>/api/interviews</code></td>
+            <td>List, detail, create, update, delete, share with admin, today view.</td>
+          </tr>
+          <tr>
+            <td>Dashboard</td>
+            <td><code>/api/dashboard</code></td>
+            <td>Admin summary, employee summary, monthly attendance, today's interviews.</td>
+          </tr>
+          <tr>
+            <td>Settings</td>
+            <td><code>/api/settings</code></td>
+            <td>Read and update default system settings.</td>
+          </tr>
+          <tr>
+            <td>Health / Root</td>
+            <td><code>/</code>, <code>/health</code></td>
+            <td>Basic deployment status and health responses.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="page doc-page">
+      <h1>11. Database Design</h1>
+      <p>The backend uses MongoDB document collections through Spring Data repositories. The model package indicates the following major collections and entities.</p>
+      <table>
+        <tbody>
+          <tr>
+            <th>Collection / Entity</th>
+            <th>Purpose</th>
+            <th>Representative Fields</th>
+          </tr>
+          <tr>
+            <td><code>app_users</code></td>
+            <td>Application login users and access identity.</td>
+            <td>userId, email, password/passwordHash, role, employeeId, status, reset token, mustChangePassword, systemUserIdentityKey.</td>
+          </tr>
+          <tr>
+            <td><code>auth_sessions</code></td>
+            <td>Active authentication sessions.</td>
+            <td>token, userId, email, role, employeeId, lastLogin, createdAt, lastSeenAt.</td>
+          </tr>
+          <tr>
+            <td><code>employees</code></td>
+            <td>Employee master data and HR profile.</td>
+            <td>employeeId, name, contact, joining, managerId, department, jobTitle, accessRole, IDs, address, bank, packageAmount, credential email flags.</td>
+          </tr>
+          <tr>
+            <td><code>attendance_records</code></td>
+            <td>Daily attendance records.</td>
+            <td>employeeId, date, checkIn, checkOut, workedHours, totalHours, status, remarks.</td>
+          </tr>
+          <tr>
+            <td><code>leave_requests</code></td>
+            <td>Employee leave applications and approvals.</td>
+            <td>employeeId, leave type, dates, days, status, recommendation details, final action details.</td>
+          </tr>
+          <tr>
+            <td><code>payroll_records</code></td>
+            <td>Monthly payroll results and payslip data.</td>
+            <td>employeeId, month, year, earnings, deductions, netSalary, payableDays, lopDays, bank, tax identifiers, status, paidDate.</td>
+          </tr>
+          <tr>
+            <td><code>projects</code></td>
+            <td>Project and team mapping.</td>
+            <td>name, manager, teamLeadId, teamLeadName, teamMembers, milestones, dates, progress, status.</td>
+          </tr>
+          <tr>
+            <td><code>tasks</code></td>
+            <td>Task assignment and tracking.</td>
+            <td>title, assignee, assigner, priority, dueDate, status, projectId, attachments.</td>
+          </tr>
+          <tr>
+            <td><code>assets</code></td>
+            <td>Asset inventory.</td>
+            <td>assetCode, assetName, category, brand, serialNo, purchaseDate, assignment dates, status, employee assignment, condition, location.</td>
+          </tr>
+          <tr>
+            <td><code>asset_assignments</code></td>
+            <td>Asset dispatch and return history.</td>
+            <td>assetId, assetCode, employeeId, assignedDate, dueDate, returnDate, condition, status, dispatchedBy.</td>
+          </tr>
+          <tr>
+            <td><code>asset_requests</code></td>
+            <td>Employee asset service requests.</td>
+            <td>employeeId, assetId, requestType, description, screenshot, status, resolution, handledBy.</td>
+          </tr>
+          <tr>
+            <td><code>announcements</code></td>
+            <td>Company communication.</td>
+            <td>title, body, category, priority, postedAt, postedBy, ownerRole, status.</td>
+          </tr>
+          <tr>
+            <td><code>support_tickets</code></td>
+            <td>Internal support requests.</td>
+            <td>ticketId, employee, category, priority, status, screenshot metadata, assignedTo, resolution.</td>
+          </tr>
+          <tr>
+            <td><code>interviews</code></td>
+            <td>Interview scheduling and tracking.</td>
+            <td>candidate details, position, CTC, resume data, schedule, interviewer, status, sharedWithAdmin.</td>
+          </tr>
+          <tr>
+            <td><code>system_settings</code></td>
+            <td>Company configuration and policy settings.</td>
+            <td>companyName, timezone, workingHours, weekOff, payrollCutoff, departments, designations, holidays, leaveTypes, permissionMatrix, payrollSettings.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Indexes</h2>
+      <ul>
+        <li><code>app_users.systemUserIdentityKey</code> is configured as a unique sparse index.</li>
+        <li>Asset indexes exist for asset code, assigned employee, and status.</li>
+        <li>Asset assignment indexes exist for employee/date, asset/date, and asset code/date lookups.</li>
+        <li>Asset request indexes exist for employee/date and asset/date lookups.</li>
+      </ul>
+    </section>
+
+    <section class="page doc-page">
+      <h1>12. Business Rules</h1>
+      <div class="two-col">
+        <div class="panel">
+          <h3>Attendance</h3>
+          <ul>
+            <li>Open attendance records are finalized automatically at 9:00 PM Asia/Kolkata.</li>
+            <li>Records from previous dates without checkout are also finalized.</li>
+            <li>Worked minutes decide status: 8 hours or more means Present, 4 to 8 hours means Half Day, below 4 hours means Absent.</li>
+            <li>Leave-marked attendance is excluded from auto-checkout.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Leave</h3>
+          <ul>
+            <li>Default leave types are Casual Leave 12, Sick Leave 10, Earned Leave 18, and Work From Home 0.</li>
+            <li>Current leave summary resolves employee identity from request headers or user mapping.</li>
+            <li>Only approved leave requests count as taken leave.</li>
+            <li>Remaining balance is total allotted minus approved taken days, never below zero.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3>Payroll Generation</h3>
+          <ul>
+            <li>Payroll generation runs for selected month and year for all active employees.</li>
+            <li>Annual packages of 300000 or more are converted to monthly gross by dividing by 12.</li>
+            <li>Attendance and approved leave are summarized before payroll calculation.</li>
+            <li>Absent and half-day deductions are based on per-day salary.</li>
+            <li>PF is calculated when PF/UAN exists, using 12 percent of 50 percent of monthly gross.</li>
+            <li>Gratuity and professional tax are included in deduction summary.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Payroll Validation</h3>
+          <ul>
+            <li>Already paid records cannot be marked paid again.</li>
+            <li>Future payroll periods cannot be marked paid.</li>
+            <li>Current month mark-paid is disabled after day 15.</li>
+            <li>Payslip generation is allowed only for paid records with positive net salary.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3>Session</h3>
+          <ul>
+            <li>Session token is accepted from Authorization bearer token or <code>kavyaAuthToken</code> cookie.</li>
+            <li>Session expires after 1 hour from the latest seen timestamp.</li>
+            <li>Expired or missing sessions return 401 and clear the auth cookie.</li>
+            <li>Public auth endpoints include login, forgot password, reset password, and session delete.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Settings</h3>
+          <ul>
+            <li>Default company settings use Asia/Kolkata timezone.</li>
+            <li>Default working hours are 09:00 AM to 06:00 PM.</li>
+            <li>Default week off is Sunday.</li>
+            <li>Default payroll cutoff is the 25th of every month.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="page doc-page">
+      <h1>13. Security And Session Management</h1>
+      <h2>Implemented Controls</h2>
+      <ul>
+        <li>Protected frontend routes enforce role-level access before rendering pages.</li>
+        <li>Backend interceptors enforce authenticated session validation across <code>/api/**</code>.</li>
+        <li>Forced password change interceptor is registered for API routes.</li>
+        <li>API requests include Authorization bearer token, user ID, employee ID, and access role headers.</li>
+        <li>CORS is restricted to configurable origin patterns, defaulting to localhost development patterns.</li>
+        <li>Uploaded resources are served through a dedicated <code>/uploads/**</code> resource handler.</li>
+        <li>API client normalizes errors and clears stale session state on unauthorized backend responses.</li>
+      </ul>
+
+      <h2>Security Recommendations</h2>
+      <table>
+        <tbody>
+          <tr>
+            <th>Area</th>
+            <th>Recommendation</th>
+            <th>Priority</th>
+          </tr>
+          <tr>
+            <td>Password Storage</td>
+            <td>Ensure all persisted passwords use strong one-way hashing and remove plaintext fallback/password fields in production.</td>
+            <td><span class="status-warn">High</span></td>
+          </tr>
+          <tr>
+            <td>RBAC</td>
+            <td>Mirror frontend permission checks on backend endpoints so users cannot bypass access through direct API calls.</td>
+            <td><span class="status-warn">High</span></td>
+          </tr>
+          <tr>
+            <td>Secrets</td>
+            <td>Store SMTP, SendGrid, database, and deployment secrets only in environment variables or a secret manager.</td>
+            <td><span class="status-warn">High</span></td>
+          </tr>
+          <tr>
+            <td>Audit</td>
+            <td>Use the existing AuditLog model to capture sensitive changes such as payroll, role, employee, and settings updates.</td>
+            <td>Medium</td>
+          </tr>
+          <tr>
+            <td>Session</td>
+            <td>Consider refresh-token rotation, device/session management UI, and stricter cookie security in production HTTPS.</td>
+            <td>Medium</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="page doc-page">
+      <h1>14. Configuration And Deployment</h1>
+      <h2>Local Development</h2>
+      <table>
+        <tbody>
+          <tr>
+            <th>Component</th>
+            <th>Command / Configuration</th>
+          </tr>
+          <tr>
+            <td>Backend</td>
+            <td><code>cd backend</code> then <code>mvn spring-boot:run</code></td>
+          </tr>
+          <tr>
+            <td>Frontend</td>
+            <td><code>cd Frontend</code> then <code>npm run dev</code></td>
+          </tr>
+          <tr>
+            <td>Backend URL Override</td>
+            <td><code>VITE_BACKEND_URL=http://localhost:8081</code> when backend runs on a non-default port.</td>
+          </tr>
+          <tr>
+            <td>MongoDB</td>
+            <td>Default local URI: <code>mongodb://localhost:27017/hrmsdb</code></td>
+          </tr>
+          <tr>
+            <td>Uploads</td>
+            <td>Served from local <code>uploads</code> directory through <code>/uploads/**</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Frontend Build And Hosting</h2>
+      <ul>
+        <li>Vite production build command: <code>npm run build</code>.</li>
+        <li>Netlify configuration uses <code>Frontend</code> as base, <code>dist</code> as publish directory, and routes all paths to <code>/index.html</code>.</li>
+        <li>Vite dev server runs at <code>127.0.0.1:5173</code> and proxies <code>/api</code> and <code>/uploads</code> to the backend.</li>
+      </ul>
+
+      <h2>Backend Container</h2>
+      <ul>
+        <li>Multi-stage Docker build uses Maven with Eclipse Temurin 17 to package the backend JAR.</li>
+        <li>Runtime image uses Eclipse Temurin 17 JRE.</li>
+        <li>Dockerfile exposes port <code>10000</code> and starts <code>java -jar app.jar</code>.</li>
+        <li>Production should align platform port variables with Spring <code>SERVER_PORT</code> configuration.</li>
+      </ul>
+
+      <h2>Mail Configuration</h2>
+      <ul>
+        <li>SMTP is controlled through environment variables such as <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USERNAME</code>, <code>SMTP_PASSWORD</code>, and <code>SMTP_FROM</code>.</li>
+        <li>SendGrid is configurable through <code>SENDGRID_API_KEY</code>, sender variables, API URL, and timeout variables.</li>
+        <li>Email features include password reset, employee welcome/credential emails, and interview notification emails.</li>
+      </ul>
+    </section>
+
+    <section class="page doc-page">
+      <h1>15. Testing Coverage</h1>
+      <p>The repository includes backend tests and frontend rule/credential scripts. The backend tests focus on controllers and business services.</p>
+      <table>
+        <tbody>
+          <tr>
+            <th>Test Area</th>
+            <th>Files Observed</th>
+          </tr>
+          <tr>
+            <td>Authentication</td>
+            <td><code>AuthControllerTest.java</code></td>
+          </tr>
+          <tr>
+            <td>Employees</td>
+            <td><code>EmployeeControllerTest.java</code></td>
+          </tr>
+          <tr>
+            <td>Projects</td>
+            <td><code>ProjectControllerTest.java</code></td>
+          </tr>
+          <tr>
+            <td>Tasks</td>
+            <td><code>TaskControllerTest.java</code></td>
+          </tr>
+          <tr>
+            <td>Support</td>
+            <td><code>SupportControllerTest.java</code></td>
+          </tr>
+          <tr>
+            <td>Interviews</td>
+            <td><code>InterviewControllerTest.java</code>, <code>InterviewNotificationEmailServiceTest.java</code></td>
+          </tr>
+          <tr>
+            <td>Settings</td>
+            <td><code>SystemSettingsControllerTest.java</code></td>
+          </tr>
+          <tr>
+            <td>Payroll</td>
+            <td><code>PayrollValidationServiceTest.java</code>, <code>Frontend/test-payroll-rules.js</code></td>
+          </tr>
+          <tr>
+            <td>Credentials</td>
+            <td><code>Frontend/test-credentials.js</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Recommended QA Expansion</h2>
+      <ul>
+        <li>Add frontend component/integration tests for login, role redirects, employee CRUD, leave approval, payroll generation, and asset request flows.</li>
+        <li>Add backend authorization tests per role for each sensitive endpoint.</li>
+        <li>Add file upload tests for task attachments, support screenshots, and profile photos.</li>
+        <li>Add payroll generation service tests covering absent, half-day, approved leave, no attendance, PF/no PF, and future-month validations.</li>
+        <li>Add end-to-end smoke tests for all five roles.</li>
+      </ul>
+    </section>
+
+    <section class="page doc-page">
+      <h1>16. Risks, Recommendations, And Future Scope</h1>
+      <table>
+        <tbody>
+          <tr>
+            <th>Category</th>
+            <th>Observation</th>
+            <th>Recommendation</th>
+          </tr>
+          <tr>
+            <td>Security</td>
+            <td>Demo credentials and local fallback authentication are convenient for development.</td>
+            <td>Disable demo fallback in production builds and require secure backend-only authentication.</td>
+          </tr>
+          <tr>
+            <td>Authorization</td>
+            <td>Frontend role routing is strong for UX, but enterprise systems need backend-enforced role permissions.</td>
+            <td>Add centralized backend RBAC annotations/services across controllers.</td>
+          </tr>
+          <tr>
+            <td>Payroll</td>
+            <td>Payroll rules are operational but simplified.</td>
+            <td>Add configurable earning/deduction components, statutory tax rules, audit approval, and payroll lock periods.</td>
+          </tr>
+          <tr>
+            <td>Deployment</td>
+            <td>Frontend Netlify and backend Docker are present, but full infrastructure pipeline is not present.</td>
+            <td>Add CI/CD, environment separation, health checks, and release rollback process.</td>
+          </tr>
+          <tr>
+            <td>Observability</td>
+            <td>Application logs exist through Spring logging, but central monitoring is not visible in the repo.</td>
+            <td>Add structured logs, metrics, tracing, error tracking, and alerting for production readiness.</td>
+          </tr>
+          <tr>
+            <td>Data Governance</td>
+            <td>HRMS stores sensitive employee, identity, payroll, and document data.</td>
+            <td>Add data retention policy, audit trail UI, export controls, backup/restore procedure, and access review.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Future Scope</h2>
+      <ul>
+        <li>Single sign-on with Microsoft Entra ID, Google Workspace, or SAML provider.</li>
+        <li>Multi-level approval chains for payroll, leaves, assets, and employee changes.</li>
+        <li>Advanced analytics for attrition, attendance trends, project staffing, and payroll forecasting.</li>
+        <li>Employee document vault with verification workflow.</li>
+        <li>Mobile-first employee self-service experience.</li>
+        <li>Manager scorecards and performance review cycles.</li>
+        <li>Compliance reports, audit exports, and maker-checker approvals for sensitive records.</li>
+      </ul>
+    </section>
+
+    <section class="page doc-page">
+      <h1>17. Conclusion</h1>
+      <p>Kavya HRMS is a comprehensive HR operations platform with a meaningful enterprise scope. It includes a modern React frontend, Spring Boot backend, MongoDB persistence, role-based flows, operational modules, payroll and attendance business logic, file upload support, mail integration, seeded defaults, and a deployable structure.</p>
+      <p>The project is well positioned as an internal MNC-style HR 360 application. With additional production hardening around security, backend authorization, audit logs, CI/CD, monitoring, and statutory payroll compliance, it can evolve into a robust enterprise-grade HRMS platform.</p>
+
+      <h2>Final Project Flow Snapshot</h2>
+      <div class="flow">Employee / HR / Manager / Admin
+  -> Login
+  -> Session token generated
+  -> Role dashboard
+  -> Sidebar module selection
+  -> Module page loads data through API
+  -> Spring Boot validates session
+  -> Service executes business rule
+  -> MongoDB stores or returns records
+  -> UI refreshes with latest operational state</div>
+
+      <div class="footer-note">
+        Prepared as a professional project report for Kavya HRMS, based on source review of frontend, backend, configuration, services, routes, models, and API mappings available on 29 July 2026.
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -8,6 +8,9 @@ import { getUsers } from '../utils/user-management.js';
 
 const headerSearchValidationMessage = 'Please use letters and spaces only.';
 const headerSearchCharacterPattern = /[^A-Za-z\s]/;
+const managerHeaderSearchValidationMessage = 'Please use letters, numbers, spaces, apostrophes, or hyphens only.';
+const managerHeaderSearchPattern = /^[A-Za-z0-9\s'-]*$/;
+const managerHeaderSearchCharacterPattern = /[^A-Za-z0-9\s'-]/;
 
 function sanitizeHeaderSearchQuery(value, role = '') {
   return role === 'projectManager'
@@ -23,12 +26,9 @@ function isValidHeaderSearchQuery(value, role = '') {
     : /^[A-Za-z\s]*$/.test(normalized);
 }
 
-function isInvalidHeaderSearchInsertion(value) {
-  return headerSearchCharacterPattern.test(String(value || ''));
-}
-
-function isInvalidHeaderSearchInsertion(value) {
-  return headerSearchCharacterPattern.test(String(value || ''));
+function isInvalidHeaderSearchInsertion(value, role = '') {
+  const pattern = role === 'projectManager' ? managerHeaderSearchCharacterPattern : headerSearchCharacterPattern;
+  return pattern.test(String(value || ''));
 }
 
 function Header({ role, onMenuClick }) {
@@ -82,32 +82,19 @@ function Header({ role, onMenuClick }) {
       return;
     }
 
-   setSearchError(attemptedInvalid || !isValidHeaderSearchQuery(nextValue, role) ? currentSearchValidationMessage : '');
+    setSearchError(attemptedInvalid || !isValidHeaderSearchQuery(nextValue, role) ? currentSearchValidationMessage : '');
   };
   const handleSearchBeforeInput = (event) => {
-    if (event.data && isInvalidHeaderSearchInsertion(event.data)) {
+    if (event.data && isInvalidHeaderSearchInsertion(event.data, role)) {
       event.preventDefault();
-      setSearchError(headerSearchValidationMessage);
+      setSearchError(currentSearchValidationMessage);
     }
   };
   const handleSearchPaste = (event) => {
     const pastedValue = event.clipboardData?.getData('text') || '';
-    if (isInvalidHeaderSearchInsertion(pastedValue)) {
+    if (isInvalidHeaderSearchInsertion(pastedValue, role)) {
       event.preventDefault();
-      setSearchError(headerSearchValidationMessage);
-    }
-  };
-  const handleSearchBeforeInput = (event) => {
-    if (event.data && isInvalidHeaderSearchInsertion(event.data)) {
-      event.preventDefault();
-      setSearchError(headerSearchValidationMessage);
-    }
-  };
-  const handleSearchPaste = (event) => {
-    const pastedValue = event.clipboardData?.getData('text') || '';
-    if (isInvalidHeaderSearchInsertion(pastedValue)) {
-      event.preventDefault();
-      setSearchError(headerSearchValidationMessage);
+      setSearchError(currentSearchValidationMessage);
     }
   };
 
