@@ -1979,6 +1979,33 @@ button.attendance-summary-card.is-clickable:focus-visible {
 .search-pill {
   flex: 1 1 260px;
   max-width: 340px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon input"
+    "icon error";
+  align-items: start;
+  column-gap: 0.55rem;
+  row-gap: 0.1rem;
+  padding-block: 0.55rem 0.5rem;
+  padding-right: 0.95rem;
+}
+
+.search-pill.is-invalid {
+  border-color: rgba(180, 35, 60, 0.24);
+  background:
+    linear-gradient(180deg, rgba(255, 248, 249, 0.98), rgba(255, 255, 255, 0.95));
+  box-shadow: 0 10px 20px rgba(180, 35, 60, 0.08);
+}
+
+.search-pill.is-invalid > i,
+.search-pill.is-invalid input {
+  color: #9d2338;
+}
+
+.search-pill > i {
+  grid-area: icon;
+  margin-top: 0.15rem;
 }
 
 .search-pill-group {
@@ -2023,6 +2050,17 @@ button.attendance-summary-card.is-clickable:focus-visible {
   border: 0;
   outline: 0;
   background: transparent;
+  line-height: 1.25;
+}
+
+.search-pill-error {
+  grid-area: error;
+  padding-left: 0.05rem;
+  color: #b4233c;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
 }
 
 .notification {

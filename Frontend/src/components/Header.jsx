@@ -6,6 +6,16 @@ import { apiRequest } from '../utils/api.js';
 import { getSessionValue, setSessionValue } from '../utils/appSession.js';
 import { getUsers } from '../utils/user-management.js';
 
+const headerSearchValidationMessage = 'Please use letters and spaces only.';
+
+function sanitizeHeaderSearchQuery(value) {
+  return String(value || '').replace(/[^A-Za-z\s]+/g, '');
+}
+
+function isValidHeaderSearchQuery(value) {
+  return /^[A-Za-z\s]*$/.test(String(value || ''));
+}
+
 function Header({ role, onMenuClick }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,7 +52,7 @@ function Header({ role, onMenuClick }) {
   }[role] || '/employee';
 
   const searchRoutes = getSearchRoutes(role);
-  const searchQueryIsValid = isValidEmployeeSearchQuery(searchQuery);
+
   // Close notification panel when clicking outside
   useEffect(() => {
     if (!showNotifications) {
@@ -143,19 +153,14 @@ function Header({ role, onMenuClick }) {
     const normalized = searchQuery.trim().toLowerCase();
     if (!normalized) return;
 
-    if (!searchQueryIsValid) {
-      setSearchError('Please enter a valid employee name or employee ID.');
-      return;
-    }
-
     const directMatch = searchRoutes.reduce((bestMatch, entry, index) => {
       const matchedLabel = normalizeSearchQuery(entry.label);
-      if (!matchedLabel || !matchedLabel.includes(normalized)) {
+      if (!matchedLabel || !matchedLabel.includes(normalizedQuery)) {
         return bestMatch;
       }
 
       const candidateScore = {
-        exact: normalized === matchedLabel ? 2 : 1,
+        exact: normalizedQuery === matchedLabel ? 2 : 1,
         length: matchedLabel.length,
         index,
       };
@@ -176,7 +181,8 @@ function Header({ role, onMenuClick }) {
       return candidateScore.index < score.index ? { entry, score: candidateScore } : bestMatch;
     }, null)?.entry;
     const targetPath = directMatch?.path || `${roleBasePath}/dashboard`;
-    navigate(`${targetPath}?search=${encodeURIComponent(normalized)}`);
+    setSearchError('');
+    navigate(`${targetPath}?search=${encodeURIComponent(normalizedQuery)}`);
   };
 
   const handleNotificationClick = async (id) => {
@@ -247,27 +253,17 @@ function Header({ role, onMenuClick }) {
         </div>
       </div>
       <div className="topbar-actions">
-        <div className="search-pill-group">
-          <label className="search-pill">
-            <i className="ri-search-line" aria-hidden="true" />
-            <input
-              value={searchQuery}
-              onChange={(event) => {
-                const nextValue = event.target.value;
-                setSearchQuery(nextValue);
-                if (isValidEmployeeSearchQuery(nextValue) || !nextValue.trim()) {
-                  setSearchError('');
-                }
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') runSearch();
-              }}
-              placeholder="Employee, leave, policy..."
-              aria-invalid={Boolean(searchError)}
-            />
-          </label>
-          {searchError && <p className="search-pill-error" role="alert">{searchError}</p>}
-        </div>
+        <label className="search-pill">
+          <i className="ri-search-line" aria-hidden="true" />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') runSearch();
+            }}
+            placeholder="Employee, leave, policy..."
+          />
+        </label>
         <div className="date-chip">
           <i className="ri-calendar-line" aria-hidden="true" />
           <span>{today}</span>
