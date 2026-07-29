@@ -1954,11 +1954,6 @@ function getEmployeeFieldError(key, value, { requireFilled = true, today = new D
       return permanentAddressRegex.test(trimmed) ? '' : 'Permanent Address Line 3 must contain only alphabets, numbers and spaces.';
     case 'jobTitle':
       return /^[A-Za-z ]+$/.test(trimmed) ? '' : 'Designation must contain letters and spaces only.';
-    case 'workingLocation':
-      return /^[A-Za-z\s,.-]+$/.test(trimmed) ? '' : 'Working Location must contain valid location characters only.';
-    case 'permanentAddressLine1':
-    case 'permanentAddressLine2':
-    case 'permanentAddressLine3':
     case 'presentAddressLine1':
     case 'presentAddressLine2':
     case 'presentAddressLine3':
@@ -1966,12 +1961,6 @@ function getEmployeeFieldError(key, value, { requireFilled = true, today = new D
     case 'permanentCityDistrict':
     case 'presentCityDistrict':
       return /^[A-Za-z\s.-]+$/.test(trimmed) ? '' : 'City/District must contain letters and spaces only.';
-    case 'firstName':
-    case 'middleName':
-    case 'lastName':
-    case 'nationality':
-    case 'highestQualification':
-      return /^[A-Za-z ]+$/.test(trimmed) ? '' : 'Use letters and spaces only.';
     case 'grade':
       return /^[A-Z]$/.test(trimmed) ? '' : 'Grade must be a single capital letter.';
     case 'mobileNo':
