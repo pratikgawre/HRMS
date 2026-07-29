@@ -44,6 +44,10 @@ function isInvalidAssetTextInsertion(value) {
   return assetTextCharacterPattern.test(String(value || ''));
 }
 
+function isValidAssetTextValue(value) {
+  return /^[A-Za-z0-9\s]*$/.test(String(value || ''));
+}
+
 function Assets() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -138,6 +142,11 @@ function Assets() {
       setAssetErrors((current) => ({ ...current, [field]: assetTextValidationMessage }));
     }
   };
+  const assetNameHasValidationError = Boolean(assetErrors.assetName || (assetForm.assetName && !isValidAssetTextValue(assetForm.assetName)));
+  const categoryHasValidationError = Boolean(assetErrors.category || (assetForm.category && !isValidAssetTextValue(assetForm.category)));
+  const assignedToHasValidationError = Boolean(assetErrors.assignedTo || (assignedEmployeeQuery && !isValidAssetTextValue(assignedEmployeeQuery)));
+  const conditionHasValidationError = Boolean(assetErrors.condition || (assetForm.condition && !isValidAssetTextValue(assetForm.condition)));
+  const locationHasValidationError = Boolean(assetErrors.location || (assetForm.location && !isValidAssetTextValue(assetForm.location)));
 
   useEffect(() => {
     let active = true;
@@ -924,9 +933,9 @@ function Assets() {
                 onBeforeInput={(event) => handleAssetTextBeforeInput('assetName', event)}
                 onPaste={(event) => handleAssetTextPaste('assetName', event)}
                 placeholder="e.g. Dell Latitude 5440"
-                aria-invalid={Boolean(assetErrors.assetName)}
+                aria-invalid={assetNameHasValidationError}
               />
-              {assetErrors.assetName && <small className="field-error">{assetErrors.assetName}</small>}
+              {assetNameHasValidationError && <small className="field-error">{assetErrors.assetName || assetTextValidationMessage}</small>}
             </label>
             <label>
               <span>Category</span>
@@ -936,9 +945,9 @@ function Assets() {
                 onBeforeInput={(event) => handleAssetTextBeforeInput('category', event)}
                 onPaste={(event) => handleAssetTextPaste('category', event)}
                 placeholder="Laptop, Monitor, Phone..."
-                aria-invalid={Boolean(assetErrors.category)}
+                aria-invalid={categoryHasValidationError}
               />
-              {assetErrors.category && <small className="field-error">{assetErrors.category}</small>}
+              {categoryHasValidationError && <small className="field-error">{assetErrors.category || assetTextValidationMessage}</small>}
             </label>
             <label>
               <span>Current Date</span>
@@ -998,6 +1007,7 @@ function Assets() {
                   onFocus={() => setIsEmployeePickerOpen(true)}
                   onBlur={() => window.setTimeout(() => setIsEmployeePickerOpen(false), 120)}
                   placeholder="Search employee name or ID"
+                  aria-invalid={assignedToHasValidationError}
                 />
                 {isEmployeePickerOpen && filteredEmployeeOptions.length > 0 && (
                   <div className="asset-picker-menu" role="listbox" aria-label="Employee search results">
@@ -1022,7 +1032,7 @@ function Assets() {
                     No matching employees found.
                   </div>
                 )}
-                {assetErrors.assignedTo && <small className="field-error">{assetErrors.assignedTo}</small>}
+                {assignedToHasValidationError && <small className="field-error">{assetErrors.assignedTo || assetTextValidationMessage}</small>}
               </div>
             </label>
             <label>
@@ -1033,9 +1043,9 @@ function Assets() {
                 onBeforeInput={(event) => handleAssetTextBeforeInput('condition', event)}
                 onPaste={(event) => handleAssetTextPaste('condition', event)}
                 placeholder="Good, New, Damaged..."
-                aria-invalid={Boolean(assetErrors.condition)}
+                aria-invalid={conditionHasValidationError}
               />
-              {assetErrors.condition && <small className="field-error">{assetErrors.condition}</small>}
+              {conditionHasValidationError && <small className="field-error">{assetErrors.condition || assetTextValidationMessage}</small>}
             </label>
             <label>
               <span>Location</span>
@@ -1045,9 +1055,9 @@ function Assets() {
                 onBeforeInput={(event) => handleAssetTextBeforeInput('location', event)}
                 onPaste={(event) => handleAssetTextPaste('location', event)}
                 placeholder="Store, Office, Remote..."
-                aria-invalid={Boolean(assetErrors.location)}
+                aria-invalid={locationHasValidationError}
               />
-              {assetErrors.location && <small className="field-error">{assetErrors.location}</small>}
+              {locationHasValidationError && <small className="field-error">{assetErrors.location || assetTextValidationMessage}</small>}
             </label>
             <div className="notification-actions profile-form-actions asset-create-actions">
               <button type="button" onClick={() => {
