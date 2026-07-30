@@ -21,7 +21,7 @@ import org.springframework.web.util.HtmlUtils;
 @SuppressWarnings("all")
 public class EmployeeWelcomeEmailService {
   private static final Logger log = LoggerFactory.getLogger(EmployeeWelcomeEmailService.class);
-  private static final String LOGIN_URL = "https://kavyahrms360.netlify.app/";
+  private static final String LOGIN_URL = "https://kavyahr360.netlify.app/";
   private final SmtpSettings smtpSettings;
   private final SendGridMailClient sendGridMailClient;
 
