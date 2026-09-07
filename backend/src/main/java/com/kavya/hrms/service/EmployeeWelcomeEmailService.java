@@ -1,10 +1,9 @@
 package com.kavya.hrms.service;
 
-import com.kavya.hrms.model.Employee;
-import com.kavya.hrms.config.SmtpSettings;
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
 import java.util.Locale;
+
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -12,10 +11,14 @@ import org.springframework.core.env.Environment;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
-import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.HtmlUtils;
+
+import com.kavya.hrms.config.SmtpSettings;
+import com.kavya.hrms.model.Employee;
+
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 
 @Service
 @SuppressWarnings("all")
